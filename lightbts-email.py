@@ -23,8 +23,6 @@ parser.add_argument('--version', action='version', version='LightBTS ' + version
 
 args = parser.parse_args()
 
-print args
-
 if args.myaddress:
     myaddress = args.myaddress
 else:
@@ -40,11 +38,14 @@ else:
 msg = email.message_from_file(sys.stdin)
 maildir = mailbox.Maildir('btsmail')
 db = sqlite3.connect('bts.db')
+db.execute('PRAGMA foreign_key = on')
 
-db.execute('''CREATE TABLE IF NOT EXISTS bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, subject TEXT)''')
-db.execute('''CREATE TABLE IF NOT EXISTS messages (key TEXT PRIMARY KEY, msgid TEXT UNIQUE, bug INTEGER)''')
-db.execute('''CREATE INDEX IF NOT EXISTS msgid_index ON messages (msgid)''')
-db.execute('''CREATE TABLE IF NOT EXISTS recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address))''')
+db.execute('CREATE TABLE IF NOT EXISTS bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT)')
+db.execute('CREATE TABLE IF NOT EXISTS merges (a INTEGER, b INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))')
+db.execute('CREATE TABLE IF NOT EXISTS messages (msgid PRIMARY KEY, key TEXT, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, FOREIGN KEY(bug) REFERENCES bugs(id))')
+db.execute('CREATE INDEX IF NOT EXISTS msgid_index ON messages (msgid)')
+db.execute('CREATE TABLE IF NOT EXISTS recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))')
+db.execute('CREATE TABLE IF NOT EXISTS tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))')
 
 # Handle missing Message-Id
 
@@ -79,13 +80,13 @@ for i in matches:
 # Try finding one with a similar subject
 
 if not bug:
-	db.execute("SELECT id FROM bugs WHERE subject LIKE ?", (subject,))
+	db.execute("SELECT id FROM bugs WHERE title LIKE ?", ('%' + subject,))
 	for i in matches:
 	    if i[0]:
 		bug = i[0]
 
 if not bug:
-    bug = db.execute("INSERT INTO bugs (subject) VALUES (?)", (subject,)).lastrowid
+    bug = db.execute("INSERT INTO bugs (title) VALUES (?)", (subject,)).lastrowid
     new = True
 
 db.execute("UPDATE messages SET bug=? WHERE key=?", (bug, key))
