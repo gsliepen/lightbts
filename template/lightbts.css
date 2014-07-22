@@ -1,0 +1,51 @@
+header {
+	border-bottom: 1px solid black;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table, th, td {
+	border: 1px solid #548;
+}
+
+th {
+	text-align: left;
+}
+
+table#buglist {
+	width: 100%;
+}
+
+#buglist th {
+	background-color: #548;
+	color: white;
+}
+
+#buglist col.id { width: 6em; text-align: right; }
+#buglist col.status { width: 6em; }
+#buglist col.severity { width: 10em; }
+
+#buglist tr:nth-child(2) {
+	background-color: #caf;
+}
+
+#buglist td:first-child {
+	text-align: right;
+}
+
+.message {
+	border-top: 1px solid black;
+}
+
+.header {
+	background: #caf;
+}
+
+footer {
+	margin-top: 1em;
+	border-top: 1px solid black;
+	font-style: italic;
+	font-size: small;
+}
