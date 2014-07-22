@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>LightBTS</title>
+<link rel="stylesheet" type="text/css" href="${root}lightbts.css">
+</head>
+<body>
+<header>
+	<h1>LightBTS</h1>
+</header>
+<p>List of bugs:</p>
+<table id="buglist">
+	<colgroup>
+		<col class="id">
+		<col class="status">
+		<col class="severity">
+		<col class="title">
+	</colgroup>
+	<thead>
+		<tr>
+			<th>Bug#</th><th>Status</th><th>Severity</th><th>Title</th>
+		</tr>
+	</thead>
+	<tbody>
+	${buglist}
+	</tbody>
+</table>
+<footer>
+	<p>
+	${copyright}
+	</p>
+</footer>
+</body>
+</html>
+
