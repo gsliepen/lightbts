@@ -79,11 +79,7 @@ def do_search(args):
 
 def do_create(args):
     title = ' '.join(args.title)
-    #TODO: get full name
-    if os.environ['EMAIL']:
-        address = os.environ['EMAIL']
-    else:
-        address = getpass.getuser() + '@' + platform.node()
+    address = lightbts.get_local_email_address()
     print "Write the bug report here, press control-D on an empty line to stop:"
     text = sys.stdin.read();
     bug = lightbts.create(title, address, text);
@@ -95,11 +91,7 @@ def do_reply(args):
         print 'Could not find bug #' + str(bugno)
         return
 
-    #TODO: get full name
-    if os.environ['EMAIL']:
-        address = os.environ['EMAIL']
-    else:
-        address = getpass.getuser() + '@' + platform.node()
+    address = lightbts.get_local_email_address()
     print "Write the bug reply here, press control-D on an empty line to stop:"
     text = sys.stdin.read();
     lightbts.reply(bug, address, text);
