@@ -187,8 +187,8 @@ class message(object):
     def get_msg(self):
         global maildir
         if not self._msg:
-            maildir = mailbox.Maildir(os.path.join(maildir, str(self._bug)))
-            self._msg = email.Parser.Parser().parse(maildir.get_file(self._key))
+            bugmaildir = mailbox.Maildir(os.path.join(maildir, str(self._bug)))
+            self._msg = email.Parser.Parser().parse(bugmaildir.get_file(self._key))
         return self._msg;
 
     msg = property(get_msg)
