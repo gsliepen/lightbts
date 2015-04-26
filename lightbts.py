@@ -91,8 +91,10 @@ class bug(object):
         db.execute('DELETE FROM tags WHERE bug=? AND tag=?', (self._id, tag))
 
     def get_tags(self):
-        tags = db.execute('SELECT tag FROM tags WHERE bug=?', (self._id,))
-        return tags.fetchall()
+        result = []
+        for i in db.execute('SELECT tag FROM tags WHERE bug=?', (self._id,)):
+            result.append(i[0])
+        return result
 
     def clear_tags(self):
         db.execute('DELETE FROM tags WHERE bug=?', (self._id,))
