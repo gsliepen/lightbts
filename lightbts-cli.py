@@ -15,7 +15,7 @@ def do_list(args):
     for bug in lightbts.list_bugs(args):
         print "{:>6} {:6} {:9}  {:}".format(bug.id, lightbts.statusname(bug.status), lightbts.severityname(bug.severity), bug.title)
 
-def do_show_bug(bugno):
+def do_show_bug(bugno, verbose):
     bug = lightbts.get_bug(bugno)
     if not bug:
         print 'Could not find bug #' + str(bugno)
@@ -37,7 +37,17 @@ def do_show_bug(bugno):
     print
 
     for msg in bug.get_messages():
-        print msg.msgid
+        if(verbose):
+            print 'From: ' + msg.msg['From']
+            print 'To: ' + msg.msg['To']
+            print 'Subject: ' + msg.msg['Subject']
+            print 'Date: ' + msg.msg['Date']
+            print 'Message-Id: ' + msg.msg['Message-Id']
+            print
+            print msg.msg.get_payload();
+            print
+        else:
+            print msg.msgid
 
 def do_show_message(msgid):
     msg = lightbts.get_message(msgid)
@@ -67,11 +77,10 @@ def do_show_message(msgid):
     print msg.msg.get_payload();
 
 def do_show(args):
-    try:
-        return do_show_bug(int(args.id))
-    except:
+    if '@' in args.id:
         return do_show_message(args.id)
-
+    else:
+        return do_show_bug(int(args.id), args.verbose)
 
 def do_search(args):
     for bug in lightbts.search_bugs(args):
@@ -183,6 +192,7 @@ parser_list.add_argument('prop', help='bug property (status, severity, tag)', na
 parser_list.set_defaults(func=do_list)
 
 parser_show = subparser.add_parser('show', help='show bug or message details')
+parser_show.add_argument('-v', '--verbose', help='show full text of all messages associated to the bug', action='store_true')
 parser_show.add_argument('id', help='bug or message id')
 parser_show.set_defaults(func=do_show)
 
