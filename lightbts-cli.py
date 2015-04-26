@@ -32,7 +32,7 @@ def do_show_bug(bugno):
     print 'Severity: ' + lightbts.severityname(bug.severity)
     tags = bug.get_tags()
     if tags:
-        print 'Tags: ' + tags
+        print 'Tags: ' + ' '.join(tags)
 
     print
 
