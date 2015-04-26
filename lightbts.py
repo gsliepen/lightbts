@@ -9,6 +9,17 @@ import mailbox
 import sqlite3
 import ConfigParser
 
+try:
+    import pwd
+    have_pwd = True
+except ImportError:
+    have_pwd = False
+
+try:
+    import win32api
+    have_win32api = True
+except ImportError:
+    have_win32api = False
 
 version = '0.1'
 
