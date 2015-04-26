@@ -269,7 +269,7 @@ def get_bug_from_title(title):
     return None
 
 def get_message(msgid):
-    for i in db.execute('SELECT msgid, key, bug FROM messages WHERE msgid=?', (msgid,)):
+    for i in db.execute('SELECT msgid, key, bug FROM messages WHERE msgid=?', (email.utils.unquote(msgid),)):
         return message(i[0], i[1], int(i[2]))
     return None
 
@@ -377,17 +377,39 @@ def exit():
     config.remove_section('DEFAULT')
     config.write(open(os.path.join(basedir, 'lightbts.conf'), 'w'))
 
+def get_local_email_address():
+    if 'EMAIL' in os.environ:
+        address = os.environ['EMAIL']
+        if address.find(" <") >= 0:
+            return address
+    else:
+        address = getpass.getuser() + '@' + platform.node()
+
+    if 'FULLNAME' in os.environ:
+        fullname = os.environ['FULLNAME']
+    else:
+        if have_pwd:
+            fullname = pwd.getpwuid(os.getuid())[4].split(",")[0]
+        elif have_win32api:
+            fullname = win32api.GetUserName(3)
+
+    if fullname:
+        return fullname + ' <' + address + '>'
+    else:
+        return address
+
 def create_message(title, address, text):
     global db, mail
 
     msg = email.MIMEText.MIMEText(text)
-    msgid = email.utils.make_msgid('LightBTS')
 
     msg['Subject'] = title
-    msg['Message-Id'] = msgid
+    msg['Message-Id'] = email.utils.make_msgid('LightBTS')
     msg['From'] = address
     msg['To'] = 'LightBTS'
     msg['Date'] = email.utils.formatdate()
+
+    msgid = email.utils.unquote(msg['Message-Id'])
 
     # Save message to new
 
@@ -429,7 +451,7 @@ def import_email(msg):
 
     # Save message to new
 
-    msgid = msg['Message-Id']
+    msgid = email.utils.unquote(msg['Message-Id'])
     parent = msg['In-Reply-To']
     subject = msg['Subject']
     key = mail.add(msg)

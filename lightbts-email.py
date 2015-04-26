@@ -52,8 +52,7 @@ reply['In-Reply-To'] = id
 smtp = smtplib.SMTP('xar', 25)
 smtp.sendmail(reply['From'], reply['To'], reply.as_string())
 
-lightbts.record_msgid(msg.bugno, reply['Message-Id'])
-db.execute("INSERT INTO messages (msgid, bug) values (?,?)", (reply['Message-Id'], bug));
+lightbts.record_msgid(msg.bugno, email.utils.unquote(reply['Message-Id']))
 
 # Send a copy to the admin
 
