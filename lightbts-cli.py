@@ -21,8 +21,14 @@ def do_show_bug(bugno):
         print 'Could not find bug #' + str(bugno)
         return
 
+    found_versions = bug.get_found_versions()
+    fixed_versions = bug.get_fixed_versions()
     print 'Bug#' + str(bug.id) + ': ' + bug.title
     print 'Status: ' + lightbts.statusname(bug.status)
+    if found_versions:
+        print 'Found in: ' + ' '.join(found_versions)
+    if fixed_versions:
+        print 'Fixed in: ' + ' '.join(fixed_versions)
     print 'Severity: ' + lightbts.severityname(bug.severity)
     tags = bug.get_tags()
     if tags:
@@ -40,8 +46,14 @@ def do_show_message(msgid):
         return
 
     bug = lightbts.get_bug(msg.bug)
+    found_versions = bug.get_found_versions()
+    fixed_versions = bug.get_fixed_versions()
     print 'Bug#' + str(bug.id) + ': ' + bug.title
     print 'Status: ' + lightbts.statusname(bug.status)
+    if found_versions:
+        print 'Found in: ' + ' '.join(found_versions)
+    if fixed_versions:
+        print 'Fixed in: ' + ' '.join(fixed_versions)
     print 'Severity: ' + lightbts.severityname(bug.severity)
     tags = bug.get_tags()
     if tags:
@@ -103,16 +115,16 @@ def do_retitle(args):
     lightbts.get_bug(args.id).set_title(args.title)
 
 def do_found(args):
-    pass
+    lightbts.get_bug(args.id).found(args.version)
 
 def do_notfound(args):
-    pass
+    lightbts.get_bug(args.id).notfound(args.version)
 
 def do_fixed(args):
-    pass
+    lightbts.get_bug(args.id).fixed(args.version)
 
 def do_notfixed(args):
-    pass
+    lightbts.get_bug(args.id).notfixed(args.version)
 
 def do_severity(args):
     severity = severitynames.index(args.severity)
