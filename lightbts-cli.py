@@ -104,7 +104,7 @@ def do_reopen(args):
     lightbts.get_bug(args.id).reopen()
 
 def do_retitle(args):
-    lightbts.get_bug(args.id).set_title(args.title)
+    lightbts.get_bug(args.id).set_title(' '.join(args.title))
 
 def do_found(args):
     lightbts.get_bug(args.id).found(args.version)
