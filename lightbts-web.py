@@ -9,26 +9,12 @@ import string
 import urlparse
 
 version = '0.1'
-copyright = 'LightBTS ' + version + ', copyright Ⓒ 2014 Guus Sliepen'
+copyright = 'LightBTS ' + version + ', copyright (c) 2014-2015 Guus Sliepen'
 staticroot = '/'
 root = '/'
 
-statusnames = ['closed', 'open']
-severitynames = ['wishlist', 'minor', 'normal', 'important', 'serious', 'grave', 'critical']
-
-
 def init():
-        global maildir, db
-	maildir = mailbox.Maildir('btsmail')
-	db = sqlite3.connect('bts.db')
-	db.execute('PRAGMA foreign_key = on')
-
-	db.execute('CREATE TABLE IF NOT EXISTS bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT)')
-	db.execute('CREATE TABLE IF NOT EXISTS merges (a INTEGER, b INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))')
-	db.execute('CREATE TABLE IF NOT EXISTS messages (msgid PRIMARY KEY, key TEXT, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, FOREIGN KEY(bug) REFERENCES bugs(id))')
-	db.execute('CREATE INDEX IF NOT EXISTS msgid_index ON messages (msgid)')
-	db.execute('CREATE TABLE IF NOT EXISTS recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))')
-	db.execute('CREATE TABLE IF NOT EXISTS tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))')
+        lightbts.init(home)
 
         # Load templates
         global tmpl_main
@@ -48,35 +34,27 @@ def init():
             tmpl_message = string.Template(tmpl.read())
 
 def exit():
-	db.commit()
-	db.close()
+        lightbts.exit()
+        pass
 
 def do_bug(environ, start_response, query):
     init()
     id = query['bug']
-    bug = db.execute('SELECT status, severity, title FROM bugs WHERE id=?', (id,))
-    for i in bug:
-        status = statusnames[i[0]]
-        severity = severitynames[i[1]]
-        title = str(i[2])
-        break
-    else:
+    bug = lightbts.get_bug(id);
+
+    if not bug:
         start_response('404 NOT FOUND', [('Content-Type', 'text/plain; charset=utf-8')])
         return 'Bug ' + query['bug'] + ' does not exist.\n'
 
     start_response('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
-    maildir = mailbox.Maildir('btsmail/' + id)
+
     msglist = ''
-    msgs = db.execute('SELECT msgid, key FROM messages WHERE bug=?', (id,))
-    for i in msgs:
-        msg = email.Parser.Parser().parse(maildir.get_file(i[1]))
-        body = msg.get_payload()
-        if type(body) is list:
-            body = '\n'.join(body)
-        msglist += tmpl_message.substitute({'msgid': msg['Message-Id'], 'from': msg['From'], 'to': msg['To'], 'subject': msg['Subject'], 'date': msg['Date'], 'body': body})
-    page = tmpl_bug.substitute({'id': id, 'submitter': '', 'date': '', 'status': status, 'severity': severity, 'title': title, 'msglist': msglist, 'root': root, 'copyright': copyright})
+    for msg in bug.get_messages():
+        msglist += tmpl_message.substitute({'msgid': msg.msg['Message-Id'], 'from': msg.msg['From'], 'to': msg.msg['To'], 'subject': msg.msg['Subject'], 'date': msg.msg['Date'], 'body': msg.msg.get_payload()})
+
+    page = tmpl_bug.substitute({'id': bug.id, 'submitter': 'x', 'date': 'x', 'status': bug.statusname, 'severity': bug.severityname 'title': bug.title, 'msglist': msglist, 'root': root, 'copyright': copyright})
     exit()
-    return page
+    return str(page)
 
 def myapp(environ, start_response):
     query = dict(urlparse.parse_qsl(environ['QUERY_STRING']))
@@ -86,16 +64,18 @@ def myapp(environ, start_response):
     start_response('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
 
     init()
-    bugs = db.execute('SELECT id, status, severity, title FROM bugs')
     buglist = ''
-    for i in bugs:
-        buglist += tmpl_bugrow.substitute({'id': i[0], 'status': statusnames[i[1]], 'severity': severitynames[i[2]], 'title': i[3]})
+    class args(object):
+        prop=()
+    for bug in lightbts.list_bugs(args):
+        buglist += tmpl_bugrow.substitute({'id': bug._id, 'status': bug.statusname, 'severity': bug.severityname, 'title': bug.title})
     page = tmpl_main.substitute({'buglist': str(buglist), 'copyright': copyright, 'root': staticroot})
     exit()
 
     return page
 
 if __name__ == '__main__':
+        global home
 	# Initialize
 	syslog.syslog("LightBTS web starting")
 
@@ -106,9 +86,9 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 
 	if args.data:
-	    lightbts.init(args.data)
+	    home = args.data
 	else:
-	    lightbts.init(os.environ['HOME'])
+	    home = os.environ['HOME']
 
 	from flup.server.fcgi import WSGIServer
 	WSGIServer(myapp).run()
