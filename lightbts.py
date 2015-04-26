@@ -65,6 +65,11 @@ class bug(object):
 
     status = property(get_status, set_status)
 
+    def set_version_status(self, version, status):
+        db.execute('INSERT OR REPLACE INTO versions (bug, version, status) VALUES (?, ?, ?)', (self._id, version, status))
+
+    status = property(get_status, set_status)
+
     def get_title(self):
         return self._title
 
@@ -126,6 +131,30 @@ class bug(object):
 
     def reopen(self):
         self.set_status(1)
+
+    def fixed(self, version):
+        self.set_version_status(version, 0);
+
+    def notfixed(self, version):
+        db.execute('DELETE FROM versions WHERE bug=? AND version=? AND status=0', (self._id, version))
+
+    def found(self, version):
+        self.set_version_status(version, 1);
+
+    def notfound(self, version):
+        db.execute('DELETE FROM versions WHERE bug=? AND version=? AND status=1', (self._id, version))
+
+    def get_found_versions(self):
+        result = []
+        for i in db.execute('SELECT version FROM versions WHERE bug=? AND status=1', (self._id,)):
+            result.append(i[0])
+        return result
+
+    def get_fixed_versions(self):
+        result = []
+        for i in db.execute('SELECT version FROM versions WHERE bug=? AND status=0', (self._id,)):
+            result.append(i[0])
+        return result
 
     def get_messages(self):
         result = []
@@ -331,6 +360,9 @@ def init(dir=''):
     db.execute('CREATE INDEX IF NOT EXISTS recipients_bug_index ON recipients (bug)')
     db.execute('CREATE TABLE IF NOT EXISTS tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))')
     db.execute('CREATE INDEX IF NOT EXISTS tags_bug_index ON tags (bug)')
+    db.execute('CREATE TABLE IF NOT EXISTS versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))')
+    db.execute('CREATE INDEX IF NOT EXISTS versions_bug_index ON versions (bug)')
+    db.execute('CREATE INDEX IF NOT EXISTS versions_version_index ON versions (version)')
 
 def exit():
     global basedir, db, mail, config
