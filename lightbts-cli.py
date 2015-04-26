@@ -6,14 +6,12 @@ import sys
 
 import lightbts
 
-severitynames = ['wishlist', 'minor', 'normal', 'important', 'serious', 'grave', 'critical']
-
 def do_init(args):
     print 'LightBTS initialized.'
 
 def do_list(args):
     for bug in lightbts.list_bugs(args):
-        print "{:>6} {:6} {:9}  {:}".format(bug.id, lightbts.statusname(bug.status), lightbts.severityname(bug.severity), bug.title)
+        print "{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title)
 
 def do_show_bug(bugno, verbose):
     bug = lightbts.get_bug(bugno)
@@ -24,12 +22,12 @@ def do_show_bug(bugno, verbose):
     found_versions = bug.get_found_versions()
     fixed_versions = bug.get_fixed_versions()
     print 'Bug#' + str(bug.id) + ': ' + bug.title
-    print 'Status: ' + lightbts.statusname(bug.status)
+    print 'Status: ' + bug.statusname
     if found_versions:
         print 'Found in: ' + ' '.join(found_versions)
     if fixed_versions:
         print 'Fixed in: ' + ' '.join(fixed_versions)
-    print 'Severity: ' + lightbts.severityname(bug.severity)
+    print 'Severity: ' + bug.severityname
     tags = bug.get_tags()
     if tags:
         print 'Tags: ' + ' '.join(tags)
@@ -59,12 +57,12 @@ def do_show_message(msgid):
     found_versions = bug.get_found_versions()
     fixed_versions = bug.get_fixed_versions()
     print 'Bug#' + str(bug.id) + ': ' + bug.title
-    print 'Status: ' + lightbts.statusname(bug.status)
+    print 'Status: ' + bug.statusname
     if found_versions:
         print 'Found in: ' + ' '.join(found_versions)
     if fixed_versions:
         print 'Fixed in: ' + ' '.join(fixed_versions)
-    print 'Severity: ' + lightbts.severityname(bug.severity)
+    print 'Severity: ' + bug.severityname
     tags = bug.get_tags()
     if tags:
         print 'Tags: ' + tags
@@ -84,7 +82,7 @@ def do_show(args):
 
 def do_search(args):
     for bug in lightbts.search_bugs(args):
-        print "{:>6} {:6} {:9}  {:}".format(bug.id, lightbts.statusname(bug.status), lightbts.severityname(bug.severity), bug.title)
+        print "{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title)
 
 def do_create(args):
     title = ' '.join(args.title)
@@ -155,7 +153,7 @@ def do_notfixed(args):
     lightbts.get_bug(args.id).notfixed(args.version)
 
 def do_severity(args):
-    severity = severitynames.index(args.severity)
+    severity = lightbts.severityindex(args.severity)
     lightbts.db.execute('UPDATE bugs SET severity=? WHERE id=?', (severity, args.id))
 
 def do_merge(args):

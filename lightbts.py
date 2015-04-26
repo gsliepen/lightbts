@@ -70,16 +70,21 @@ class bug(object):
     def get_status(self):
         return self._status
 
+    def get_statusname(self):
+        return statusname(self._status)
+
     def set_status(self, status):
         db.execute('UPDATE bugs SET status=? WHERE id=?', (status, self._id))
         self._status = status
 
+    def set_statusname(self, name):
+        set_status(statusindex(name))
+
     status = property(get_status, set_status)
+    statusname = property(get_statusname, set_statusname)
 
     def set_version_status(self, version, status):
         db.execute('INSERT OR REPLACE INTO versions (bug, version, status) VALUES (?, ?, ?)', (self._id, version, status))
-
-    status = property(get_status, set_status)
 
     def get_title(self):
         return self._title
@@ -93,12 +98,19 @@ class bug(object):
     def get_severity(self):
         return self._severity
 
+    def get_severityname(self):
+        return severityname(self._severity)
+
     def set_severity(self, severity):
         code = severities.index(severity)
         db.execute('UPDATE bugs SET severity=? WHERE id=?', (code, self._id))
         self._severity = severity
 
+    def set_severityname(self, name):
+        set_severity(severityinex(name))
+
     severity = property(get_severity, set_severity)
+    severityname = property(get_severityname, set_severityname)
 
     def add_tag(self, tag):
         db.execute('INSERT OR IGNORE INTO tags (bug, tag) VALUES (?, ?)', (self._id, tag))
