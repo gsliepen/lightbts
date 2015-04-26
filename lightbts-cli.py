@@ -92,9 +92,17 @@ def do_create(args):
     print "Write the bug report here, press control-D on an empty line to stop:"
     text = sys.stdin.read();
     bug = lightbts.create(title, address, text);
+    if args.version:
+        bug.found(args.version)
+    if args.tag:
+        bug.add_tag(args.tag)
     print 'Thank you for reporting a bug, which has been assigned number ' + str(bug.id)
 
 def do_reply(args):
+    if args.close and args.reopen:
+        print 'Make up your mind!'
+        return
+
     bug = lightbts.get_bug(args.id)
     if not bug:
         print 'Could not find bug #' + str(bugno)
@@ -104,13 +112,32 @@ def do_reply(args):
     print "Write the bug reply here, press control-D on an empty line to stop:"
     text = sys.stdin.read();
     lightbts.reply(bug, address, text);
+    if args.version:
+        if args.close:
+            bug.fixed(args.version)
+        else:
+            bug.found(args.version)
+    if args.tag:
+        bug.add_tag(args.tag)
+    if args.close:
+        bug.close()
+    if args.reopen:
+        bug.reopen()
     print 'Thank you for reporting additional information for bug number ' + str(bug.id)
 
 def do_close(args):
     lightbts.get_bug(args.id).close()
+    if args.version:
+        bug.fixed(args.version)
+    if args.tag:
+        bug.add_tag(args.tag)
 
 def do_reopen(args):
     lightbts.get_bug(args.id).reopen()
+    if args.version:
+        bug.found(args.version)
+    if args.tag:
+        bug.add_tag(args.tag)
 
 def do_retitle(args):
     lightbts.get_bug(args.id).set_title(' '.join(args.title))
@@ -201,18 +228,28 @@ parser_search.add_argument('term', help='search term', nargs=argparse.REMAINDER)
 parser_search.set_defaults(func=do_search)
 
 parser_create = subparser.add_parser('create', help='create a new bug')
+parser_create.add_argument('-v', '--version', metavar='VERSION', help='mark the bug as found in the given version')
+parser_create.add_argument('-t', '--tag', metavar='TAG', help='set the given tag')
 parser_create.add_argument('title', help='bug title', nargs=argparse.REMAINDER)
 parser_create.set_defaults(func=do_create)
 
 parser_reply = subparser.add_parser('reply', help='reply to an existing bug')
+parser_reply.add_argument('-c', '--close', help='close the bug', action='store_true')
+parser_reply.add_argument('-r', '--reopen', help='reopen the bug', action='store_true')
+parser_reply.add_argument('-v', '--version', metavar='VERSION', help='mark the bug as found (fixed if the -c flag is used) in the given version')
+parser_reply.add_argument('-t', '--tag', metavar='TAG', help='set the given tag')
 parser_reply.add_argument('id', help='bug or message id')
 parser_reply.set_defaults(func=do_reply)
 
 parser_close = subparser.add_parser('close', help='close an existing bug')
+parser_close.add_argument('-v', '--version', metavar='VERSION', help='mark the bug as fixed in the given version')
+parser_close.add_argument('-t', '--tag', metavar='TAG', help='set the given tag')
 parser_close.add_argument('id', help='bug id')
 parser_close.set_defaults(func=do_close)
 
 parser_reopen = subparser.add_parser('reopen', help='reopen an existing bug')
+parser_reopen.add_argument('-v', '--version', metavar='VERSION', help='mark the bug as found in the given version')
+parser_reopen.add_argument('-t', '--tag', metavar='TAG', help='set the given tag')
 parser_reopen.add_argument('id', help='bug id')
 parser_reopen.set_defaults(func=do_reopen)
 
