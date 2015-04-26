@@ -6,6 +6,8 @@ import sys
 
 import lightbts
 
+severitynames = ['wishlist', 'minor', 'normal', 'important', 'serious', 'grave', 'critical']
+
 def do_init(args):
     print 'LightBTS initialized.'
 
