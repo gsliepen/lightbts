@@ -5,12 +5,8 @@ import os
 import platform
 import getpass
 import sys
-import email
-import mailbox
-import smtplib
-import sqlite3
 
-version = '0.1'
+import lightbts
 
 # Initialize
 
@@ -19,7 +15,7 @@ parser.add_argument('-a', '--admin', metavar='ADDRESS', help='admin email addres
 parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
 parser.add_argument('-f', '--from', metavar='ADDRESS', help='email address of this instance of LightBTS', dest='myaddress')
 parser.add_argument('-n', '--name', metavar='NAME', help='name for this instance of LightBTS', default='LightBTS')
-parser.add_argument('--version', action='version', version='LightBTS ' + version)
+parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.version)
 
 args = parser.parse_args()
 
@@ -31,83 +27,20 @@ else:
 admin = args.admin
 
 if args.data:
-    os.chdir(args.data)
+    lightbts.init(args.data)
 else:
-    os.chdir(os.environ['HOME'])
+    lightbts.init(os.environ['HOME'])
 
-msg = email.message_from_file(sys.stdin)
-maildir = mailbox.Maildir('btsmail')
-db = sqlite3.connect('bts.db')
-db.execute('PRAGMA foreign_key = on')
-
-db.execute('CREATE TABLE IF NOT EXISTS bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT)')
-db.execute('CREATE TABLE IF NOT EXISTS merges (a INTEGER, b INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))')
-db.execute('CREATE TABLE IF NOT EXISTS messages (msgid PRIMARY KEY, key TEXT, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, FOREIGN KEY(bug) REFERENCES bugs(id))')
-db.execute('CREATE INDEX IF NOT EXISTS msgid_index ON messages (msgid)')
-db.execute('CREATE TABLE IF NOT EXISTS recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))')
-db.execute('CREATE TABLE IF NOT EXISTS tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))')
-
-# Handle missing Message-Id
-
-if not msg['Message-Id']:
-	msg['Message-Id'] = email.utils.make_msgid('LightBTS')
-
-# Save message to new
-
-id = msg['Message-Id']
-parent = msg['In-Reply-To']
+result = lightbts.import(sys.stdin.read())
+msg = result[0]
+new = result[1]
 subject = msg['Subject']
-key = maildir.add(msg)
-
-# Store the message in the database
-
-try:
-    db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, id, 0));
-except sqlite3.IntegrityError:
-    print "Duplicate message!"
-    sys.exit(1)
-
-# Can we match the message to an existing bug?
-
-bug = 0
-new = False
-
-matches = db.execute("SELECT bug FROM messages WHERE msgid=?", (parent,))
-for i in matches:
-    if i[0]:
-        bug = i[0]
-
-# Try finding one with a similar subject
-
-if not bug:
-	db.execute("SELECT id FROM bugs WHERE title LIKE ?", ('%' + subject,))
-	for i in matches:
-	    if i[0]:
-		bug = i[0]
-
-if not bug:
-    bug = db.execute("INSERT INTO bugs (title) VALUES (?)", (subject,)).lastrowid
-    new = True
-
-db.execute("UPDATE messages SET bug=? WHERE key=?", (bug, key))
-
-db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", (bug, msg['From']))
-
-# Move the message to the apriopriate folder
-
-maildir.close()
-maildir = mailbox.Maildir('btsmail/' + str(bug))
-movefrom = 'btsmail/new/' + key
-moveto = 'btsmail/' + str(bug) + '/cur/' + key
-os.rename(movefrom, moveto)
-
-# Send a reply to the sender
 
 if new:
-    reply = email.MIMEText.MIMEText("Thank you for reporting a bug, which has been assigned number " + str(bug))
-    subject = 'Bug#' + str(bug) + ': ' + subject
+    reply = email.MIMEText.MIMEText("Thank you for reporting a bug, which has been assigned number " + str(msg.bugno))
+    subject = 'Bug#' + str(msg.bugno) + ': ' + subject
 else:
-    reply = email.MIMEText.MIMEText("Thank you for reporting additional information for bug number " + str(bug))
+    reply = email.MIMEText.MIMEText("Thank you for reporting additional information for bug number " + str(msg.bugno))
 
 reply['From'] = args.name + ' <' + myaddress + '>'
 reply['To'] = msg['From']
@@ -119,6 +52,7 @@ reply['In-Reply-To'] = id
 smtp = smtplib.SMTP('xar', 25)
 smtp.sendmail(reply['From'], reply['To'], reply.as_string())
 
+lightbts.record_msgid(msg.bugno, reply['Message-Id'])
 db.execute("INSERT INTO messages (msgid, bug) values (?,?)", (reply['Message-Id'], bug));
 
 # Send a copy to the admin

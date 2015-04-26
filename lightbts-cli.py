@@ -1,216 +1,104 @@
 #!/usr/bin/python
 
-import argparse
 import os
-import platform
-import getpass
+import argparse
 import sys
-import smtplib
-import sqlite3
-import email
-import mailbox
 
-version = '0.1'
-
-statusnames = ['closed', 'open']
-severitynames = ['wishlist', 'minor', 'normal', 'important', 'serious', 'grave', 'critical']
+import lightbts
 
 def do_init(args):
     print 'LightBTS initialized.'
 
 def do_list(args):
-    cmd = 'SELECT id, status, severity, title FROM bugs WHERE 1'
-    cmdargs = []
-    status = 1
-    severities = []
-    tags = []
-    for i in args.prop:
-        if i == 'all':
-            status = None
-        elif i in statusnames:
-            status = statusnames.index(i)
-        elif i in severitynames:
-            severities.append(severitynames.index(i))
-        else:
-            tags.append(i)
+    for bug in lightbts.list_bugs(args):
+        print "{:>6} {:6} {:9}  {:}".format(bug.id, lightbts.statusname(bug.status), lightbts.severityname(bug.severity), bug.title)
 
-    if status is not None:
-        cmd += ' AND status=?'
-        cmdargs.append(status)
-    
-    if severities:
-        cmd += ' AND (0'
-        for i in severities:
-            cmd += ' OR severity=?'
-            cmdargs.append(i)
-        cmd += ')'
-
-    if tags:
-        cmd += ' AND (0'
-        for i in tags:
-            cmd += ' OR EXISTS (SELECT 1 FROM tags WHERE bug=id AND tag=?)'
-            cmdargs.append(i)
-        cmd += ')'
-            
-    bugs = db.execute(cmd, tuple(cmdargs))
-    for i in bugs:
-        print "{:>6} {:6} {:9}  {:}".format(i[0], statusnames[i[1]], severitynames[i[2]], i[3])
-
-def do_show(args):
-    try:
-        bug = int(args.id)
-    except:
-        bug = 0
-    if str(bug) != args.id:
-        bug = 0
-        matches = db.execute('SELECT bug, key FROM messages WHERE msgid=?', (args.id,))
-        for i in matches:
-            if i[0]:
-                bug = i[0]
-                key = i[1]
-        if not bug:
-            print 'Could not find Message-Id ' + args.id
-            return
-    
-    matches = db.execute('SELECT status, severity, title FROM bugs WHERE id=?', (bug,))
-    for i in matches:
-        status = statusnames[i[0]]
-        severity = severitynames[i[1]]
-        title = i[2]
-        break
-    else:
-        print 'Could not find bug #' + str(bug)
+def do_show_bug(bugno):
+    bug = lightbts.get_bug(bugno)
+    if not bug:
+        print 'Could not find bug #' + str(bugno)
         return
 
-    print 'Bug#' + str(bug) + ': ' + title
-    print 'Status: ' + status
-    print 'Severity: ' + severity
-    tagtext = ''
-    tags = db.execute('SELECT tag FROM tags WHERE bug=?', (bug,))
-    for tag in tags:
-        if tagtext:
-            tagtext += ' ' + tag[0]
-        else:
-            tagtext += 'Tags: ' + tag[0]
-
-    if tagtext:
-        print tagtext
+    print 'Bug#' + str(bug.id) + ': ' + bug.title
+    print 'Status: ' + lightbts.statusname(bug.status)
+    print 'Severity: ' + lightbts.severityname(bug.severity)
+    tags = bug.get_tags()
+    if tags:
+        print 'Tags: ' + tags
 
     print
 
-    if str(bug) != args.id:
-        bugmails = mailbox.Maildir('btsmail/' + str(bug))
-        msg = bugmails.get_file(key)
-        if not msg:
-            print 'Email message not available.'
-        else:
-            print msg.read()
-    else:
-        matches = db.execute('SELECT msgid, key FROM messages WHERE bug=?', (bug,))
-        for i in matches:
-            print i[0]
+    for msg in bug.get_messages():
+        print msg.msgid
+
+def do_show_message(msgid):
+    msg = lightbts.get_message(msgid)
+    if not msg:
+        print 'Could not find message with id ' + msgid
+        return
+
+    bug = lightbts.get_bug(msg.bug)
+    print 'Bug#' + str(bug.id) + ': ' + bug.title
+    print 'Status: ' + lightbts.statusname(bug.status)
+    print 'Severity: ' + lightbts.severityname(bug.severity)
+    tags = bug.get_tags()
+    if tags:
+        print 'Tags: ' + tags
+    print
+    print 'From: ' + msg.msg['From']
+    print 'To: ' + msg.msg['To']
+    print 'Subject: ' + msg.msg['Subject']
+    print 'Date: ' + msg.msg['Date']
+    print
+    print msg.msg.get_payload();
+
+def do_show(args):
+    try:
+        return do_show_bug(int(args.id))
+    except:
+        return do_show_message(args.id)
 
 
 def do_search(args):
-    bugs = db.execute('SELECT id, status, severity, title FROM bugs WHERE title LIKE ?', ('%' + ' '.join(args.term) + '%',))
-    for i in bugs:
-        print "{:>6} {:6} {:9}  {:}".format(i[0], statusnames[i[1]], severitynames[i[2]], i[3])
+    for bug in lightbts.search_bugs(args):
+        print "{:>6} {:6} {:9}  {:}".format(bug.id, lightbts.statusname(bug.status), lightbts.severityname(bug.severity), bug.title)
 
 def do_create(args):
-    global db, maildir
-    print "Write the bug report here, press control-D on an empty line to stop:"
-    msg = email.MIMEText.MIMEText(sys.stdin.read())
     title = ' '.join(args.title)
-    id = email.utils.make_msgid('LightBTS')
-
-    msg['Subject'] = title
-    msg['Message-Id'] = id
     #TODO: get full name
     if os.environ['EMAIL']:
-        msg['From'] = os.environ['EMAIL']
+        address = os.environ['EMAIL']
     else:
-        msg['From'] = getpass.getuser() + '@' + platform.node()
-    msg['To'] = 'LightBTS'
-    msg['Date'] = email.utils.formatdate()
-    key = maildir.add(msg)
-    try:
-        db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, id, 0));
-    except sqlite3.IntegrityError:
-        print "Duplicate message!"
-        sys.exit(1)
-    bug = db.execute("INSERT INTO bugs (title) VALUES (?)", (title,)).lastrowid
-    db.execute("UPDATE messages SET bug=? WHERE key=?", (bug, key))
-    db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", (bug, msg['From']))
-    maildir.close()
-    maildir = mailbox.Maildir('btsmail/' + str(bug))
-    movefrom = 'btsmail/new/' + key
-    moveto = 'btsmail/' + str(bug) + '/cur/' + key
-    os.rename(movefrom, moveto)
-    print 'Thank you for reporting a bug, which has been assigned number ' + str(bug)
+        address = getpass.getuser() + '@' + platform.node()
+    print "Write the bug report here, press control-D on an empty line to stop:"
+    text = sys.stdin.read();
+    bug = lightbts.create(title, address, text);
+    print 'Thank you for reporting a bug, which has been assigned number ' + str(bug.id)
 
 def do_reply(args):
-    global db, maildir
-    try:
-        bug = int(args.id)
-    except:
-        bug = 0
-    if str(bug) != args.id:
-        bug = 0
-        matches = db.execute('SELECT bug, key FROM messages WHERE msgid=?', (args.id,))
-        for i in matches:
-            if i[0]:
-                bug = i[0]
-                key = i[1]
-        if not bug:
-            print 'Could not find bug with Message-Id ' + args.id
-            return
-    matches = db.execute('SELECT title FROM bugs WHERE id=?', (bug,))
-    for i in matches:
-        title = i[0]
-        break
-    else:
-        print 'Could not find bug #' + str(bug)
+    bug = lightbts.get_bug(args.id)
+    if not bug:
+        print 'Could not find bug #' + str(bugno)
         return
 
-    print 'Replying to bug ' + str(bug) + ' with title ' + title
-    print "Write the reply here, press control-D on an empty line to stop:"
-    msg = email.MIMEText.MIMEText(sys.stdin.read())
-    id = email.utils.make_msgid('LightBTS')
-
-    msg['Subject'] = 'Re: ' + title
-    msg['Message-Id'] = id
-    if str(bug) != args.id:
-        msg['In-Reply-To'] = args.id
     #TODO: get full name
     if os.environ['EMAIL']:
-        msg['From'] = os.environ['EMAIL']
+        address = os.environ['EMAIL']
     else:
-        msg['From'] = getpass.getuser() + '@' + platform.node()
-    msg['To'] = 'LightBTS'
-    msg['Date'] = email.utils.formatdate()
-    key = maildir.add(msg)
-    try:
-        db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, id, bug));
-    except sqlite3.IntegrityError:
-        print "Duplicate message!"
-        sys.exit(1)
-    db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", (bug, msg['From']))
-    maildir.close()
-    maildir = mailbox.Maildir('btsmail/' + str(bug))
-    movefrom = 'btsmail/new/' + key
-    moveto = 'btsmail/' + str(bug) + '/cur/' + key
-    os.rename(movefrom, moveto)
-    print 'Thank you for reporting additional information for bug number ' + str(bug)
+        address = getpass.getuser() + '@' + platform.node()
+    print "Write the bug reply here, press control-D on an empty line to stop:"
+    text = sys.stdin.read();
+    lightbts.reply(bug, address, text);
+    print 'Thank you for reporting additional information for bug number ' + str(bug.id)
 
 def do_close(args):
-    db.execute('UPDATE bugs SET status=0 WHERE id=?', (args.id,))
+    lightbts.get_bug(args.id).close()
 
 def do_reopen(args):
-    db.execute('UPDATE bugs SET status=1 WHERE id=?', (args.id,))
+    lightbts.get_bug(args.id).reopen()
 
 def do_retitle(args):
-    title = ' '.join(args.title)
-    db.execute('UPDATE bugs SET title=? WHERE id=?', (title, args.id))
+    lightbts.get_bug(args.id).set_title(args.title)
 
 def do_found(args):
     pass
@@ -226,21 +114,21 @@ def do_notfixed(args):
 
 def do_severity(args):
     severity = severitynames.index(args.severity)
-    db.execute('UPDATE bugs SET severity=? WHERE id=?', (severity, args.id))
+    lightbts.db.execute('UPDATE bugs SET severity=? WHERE id=?', (severity, args.id))
 
 def do_merge(args):
     a = min(args.id)
     for b in args.id:
         if a == b:
             continue
-        db.execute('INSERT OR IGNORE INTO merges (a, b) VALUES (?, ?)', (a, b))
+        lightbts.db.execute('INSERT OR IGNORE INTO merges (a, b) VALUES (?, ?)', (a, b))
 
 def do_unmerge(args):
     a = min(args.id)
     for b in args.id:
         if a == b:
             continue
-        db.execute('DELETE FROM merges WHERE a=? AND b=?', (a, b))
+        lightbts.db.execute('DELETE FROM merges WHERE a=? AND b=?', (a, b))
 
 def do_tags(args):
     add = True
@@ -253,31 +141,31 @@ def do_tags(args):
             tag = tag[1:]
         elif tag[0] == '=':
             add = True
-            db.execute('DELETE FROM tags WHERE bug=?', (args.id,))
+            lightbts.db.execute('DELETE FROM tags WHERE bug=?', (args.id,))
             tag = tag[1:]
         if tag:
             if add:
-                db.execute('INSERT OR IGNORE INTO tags (bug, tag) VALUES (?, ?)', (args.id, tag))
+                lightbts.db.execute('INSERT OR IGNORE INTO tags (bug, tag) VALUES (?, ?)', (args.id, tag))
             else:
-                db.execute('DELETE FROM tags WHERE bug=? AND tag=?', (args.id, tag))
+                lightbts.db.execute('DELETE FROM tags WHERE bug=? AND tag=?', (args.id, tag))
 
 def do_owner(args):
-    db.execute('UPDATE bugs SET owner=? WHERE id=?', (args.owner, args.id))
+    lightbts.db.execute('UPDATE bugs SET owner=? WHERE id=?', (args.owner, args.id))
 
 def do_noowner(args):
-    db.execute('UPDATE bugs SET owner=NULL WHERE id=?', (args.id))
+    lightbts.db.execute('UPDATE bugs SET owner=NULL WHERE id=?', (args.id))
 
 def do_spam(args):
-    db.execute('UPDATE messages SET spam=1 WHERE msgid=?', (args.msgid,))
+    lightbts.db.execute('UPDATE messages SET spam=1 WHERE msgid=?', (args.msgid,))
 
 def do_nospam(args):
-    db.execute('UPDATE messages SET spam=0 WHERE msgid=?', (args.msgid,))
+    lightbts.db.execute('UPDATE messages SET spam=0 WHERE msgid=?', (args.msgid,))
 
 # Initialize
 
 parser = argparse.ArgumentParser(description='Manage bugs.', epilog='Report bugs to guus@sliepen.org.')
 parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
-parser.add_argument('--version', action='version', version='LightBTS ' + version)
+parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.version)
 
 subparser = parser.add_subparsers(title='commands', dest='command')
 
@@ -339,7 +227,7 @@ parser_notfixed.set_defaults(func=do_notfixed)
 
 parser_severity = subparser.add_parser('severity', help='change bug severity')
 parser_severity.add_argument('id', help='bug id')
-parser_severity.add_argument('severity', help='bug id', choices=severitynames)
+parser_severity.add_argument('severity', help='bug id', choices=lightbts.severities)
 parser_severity.set_defaults(func=do_severity)
 
 parser_merge = subparser.add_parser('merge', help='merge two or more bugs')
@@ -375,22 +263,10 @@ parser_nospam.set_defaults(func=do_nospam)
 args = parser.parse_args()
 
 if args.data:
-    os.chdir(args.data)
+    lightbts.init(args.data)
 else:
-    os.chdir(os.environ['HOME'])
-
-maildir = mailbox.Maildir('btsmail')
-db = sqlite3.connect('bts.db')
-db.execute('PRAGMA foreign_key = on')
-
-db.execute('CREATE TABLE IF NOT EXISTS bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT)')
-db.execute('CREATE TABLE IF NOT EXISTS merges (a INTEGER, b INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))')
-db.execute('CREATE TABLE IF NOT EXISTS messages (msgid PRIMARY KEY, key TEXT, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, FOREIGN KEY(bug) REFERENCES bugs(id))')
-db.execute('CREATE INDEX IF NOT EXISTS msgid_index ON messages (msgid)')
-db.execute('CREATE TABLE IF NOT EXISTS recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))')
-db.execute('CREATE TABLE IF NOT EXISTS tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))')
+    lightbts.init(os.environ['HOME'])
 
 args.func(args)
 
-db.commit()
-db.close()
+lightbts.exit()

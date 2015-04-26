@@ -1,15 +1,9 @@
 #!/usr/bin/python
 # coding: utf-8
 
+import lightbts
 import argparse
 import os
-import platform
-import getpass
-import sys
-import email
-import mailbox
-import smtplib
-import sqlite3
 import syslog
 import string
 import urlparse
@@ -112,9 +106,9 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 
 	if args.data:
-	    os.chdir(args.data)
+	    lightbts.init(args.data)
 	else:
-	    os.chdir(os.environ['HOME'])
+	    lightbts.init(os.environ['HOME'])
 
 	from flup.server.fcgi import WSGIServer
 	WSGIServer(myapp).run()
