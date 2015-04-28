@@ -513,11 +513,11 @@ def import_email(msg):
         bugno = db.execute("INSERT INTO bugs (title) VALUES (?)", (subject,)).lastrowid
         new = True
 
-    bug = lightbts.bug(bugno)
+    bug = get_bug(bugno)
 
-    db.execute("UPDATE messages SET bug=? WHERE key=?", (bug, key))
+    db.execute("UPDATE messages SET bug=? WHERE key=?", (bugno, key))
 
-    db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", (bug, msg['From']))
+    db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", (bugno, msg['From']))
 
     # Move the message to the appropriate folder
 
