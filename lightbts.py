@@ -340,6 +340,7 @@ def init(dir=''):
     config.add_section('email')
     config.set('email', 'address', getpass.getuser() + '@' + platform.node())
     config.set('email', 'templates', os.path.join(basedir, 'templates'))
+    config.set('email', 'smtphost', 'localhost')
 
     # Read the configuration file
 
@@ -361,6 +362,7 @@ def init(dir=''):
     # Email configuration
     emailaddress = config.get('email', 'address')
     emailtemplates = config.get('email', 'templates')
+    smtphost = config.get('email', 'smtphost')
 
     # Web configuration
     webroot = config.get('web', 'root')

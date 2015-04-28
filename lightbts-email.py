@@ -50,7 +50,7 @@ reply['Subject'] = subject
 reply['Message-Id'] = email.utils.make_msgid('LightBTS')
 reply['In-Reply-To'] = id
 
-smtp = smtplib.SMTP('xar', 25)
+smtp = smtplib.SMTP(lightbts.smtphost)
 smtp.sendmail(reply['From'], reply['To'], reply.as_string())
 
 lightbts.record_msgid(bug.id, email.utils.unquote(reply['Message-Id']))
