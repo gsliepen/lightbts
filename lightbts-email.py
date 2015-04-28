@@ -5,6 +5,8 @@ import os
 import platform
 import getpass
 import sys
+import email
+import smtplib
 
 import lightbts
 
@@ -31,16 +33,15 @@ if args.data:
 else:
     lightbts.init(os.environ['HOME'])
 
-result = lightbts.import(sys.stdin.read())
-msg = result[0]
-new = result[1]
-subject = msg['Subject']
+msg = email.message_from_file(sys.stdin)
+(bug, new) = lightbts.import_email(msg)
 
 if new:
-    reply = email.MIMEText.MIMEText("Thank you for reporting a bug, which has been assigned number " + str(msg.bugno))
-    subject = 'Bug#' + str(msg.bugno) + ': ' + subject
+    subject = 'Bug#' + str(bug.id) + ': ' + msg['Subject']
+    reply = email.MIMEText.MIMEText("Thank you for reporting a bug, which has been assigned number " + str(bug.id))
 else:
-    reply = email.MIMEText.MIMEText("Thank you for reporting additional information for bug number " + str(msg.bugno))
+    subject = msg['Subject']
+    reply = email.MIMEText.MIMEText("Thank you for reporting additional information for bug number " + str(bug.id))
 
 reply['From'] = args.name + ' <' + myaddress + '>'
 reply['To'] = msg['From']
@@ -52,7 +53,7 @@ reply['In-Reply-To'] = id
 smtp = smtplib.SMTP('xar', 25)
 smtp.sendmail(reply['From'], reply['To'], reply.as_string())
 
-lightbts.record_msgid(msg.bugno, email.utils.unquote(reply['Message-Id']))
+lightbts.record_msgid(bug.id, email.utils.unquote(reply['Message-Id']))
 
 # Send a copy to the admin
 
