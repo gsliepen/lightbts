@@ -327,19 +327,19 @@ def init(dir=''):
     config.add_section('core')
     config.set('core', 'project', 'LightBTS')
     config.set('core', 'admin', '')
-    config.set('core', 'messages', 'btsmail')
-    config.set('core', 'database', 'bts.db')
+    config.set('core', 'messages', os.path.join(basedir, 'btsmail'))
+    config.set('core', 'database', os.path.join(basedir, 'bts.db'))
     config.set('core', 'respond-to-new', 'yes')
     config.set('core', 'respond-to-reply', 'yes')
 
     config.add_section('web')
     config.set('web', 'root', '/')
     config.set('web', 'static-root', '/')
-    config.set('web', 'templates', 'templates')
+    config.set('web', 'templates', os.path.join(basedir, 'templates'))
 
     config.add_section('email')
     config.set('email', 'address', getpass.getuser() + '@' + platform.node())
-    config.set('email', 'templates', 'templates')
+    config.set('email', 'templates', os.path.join(basedir, 'templates'))
 
     # Read the configuration file
 
