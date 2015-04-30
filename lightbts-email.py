@@ -17,7 +17,7 @@ parser.add_argument('-a', '--admin', metavar='ADDRESS', help='admin email addres
 parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
 parser.add_argument('-f', '--from', metavar='ADDRESS', help='email address of this instance of LightBTS', dest='myaddress')
 parser.add_argument('-n', '--name', metavar='NAME', help='name for this instance of LightBTS', default='LightBTS')
-parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.version)
+parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
 
 args = parser.parse_args()
 
@@ -46,6 +46,7 @@ else:
 reply['From'] = args.name + ' <' + myaddress + '>'
 reply['To'] = msg['From']
 reply['Subject'] = subject
+reply['User-Agent'] = 'LightBTS/' + lightbs.__version__
 
 reply['Message-Id'] = email.utils.make_msgid('LightBTS')
 reply['In-Reply-To'] = id

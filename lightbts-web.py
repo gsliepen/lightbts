@@ -8,10 +8,7 @@ import syslog
 import string
 import urlparse
 
-version = '0.1'
-copyright = 'LightBTS ' + version + ', copyright (c) 2014-2015 Guus Sliepen'
-staticroot = '/'
-root = '/'
+copyright = 'LightBTS ' + lightbts.__version__ + ', copyright (c) 2014-2015 Guus Sliepen'
 
 def init():
         lightbts.init(home)
@@ -52,7 +49,7 @@ def do_bug(environ, start_response, query):
     for msg in bug.get_messages():
         msglist += tmpl_message.substitute({'msgid': msg.msg['Message-Id'], 'from': msg.msg['From'], 'to': msg.msg['To'], 'subject': msg.msg['Subject'], 'date': msg.msg['Date'], 'body': msg.msg.get_payload()})
 
-    page = tmpl_bug.substitute({'id': bug.id, 'submitter': 'x', 'date': 'x', 'status': bug.statusname, 'severity': bug.severityname 'title': bug.title, 'msglist': msglist, 'root': root, 'copyright': copyright})
+    page = tmpl_bug.substitute({'id': bug.id, 'submitter': 'x', 'date': 'x', 'status': bug.statusname, 'severity': bug.severityname 'title': bug.title, 'msglist': msglist, 'root': lightbts.webroot, 'copyright': copyright})
     exit()
     return str(page)
 
@@ -69,7 +66,7 @@ def myapp(environ, start_response):
         prop=()
     for bug in lightbts.list_bugs(args):
         buglist += tmpl_bugrow.substitute({'id': bug._id, 'status': bug.statusname, 'severity': bug.severityname, 'title': bug.title})
-    page = tmpl_main.substitute({'buglist': str(buglist), 'copyright': copyright, 'root': staticroot})
+    page = tmpl_main.substitute({'buglist': str(buglist), 'copyright': copyright, 'root': lightbts.staticroot})
     exit()
 
     return page
@@ -81,7 +78,7 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser(description='LightBTS web frontend.', epilog='Report bugs to guus@sliepen.org.')
 	parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
-	parser.add_argument('--version', action='version', version='LightBTS ' + version)
+	parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
 
 	args = parser.parse_args()
 

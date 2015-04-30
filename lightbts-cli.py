@@ -205,7 +205,7 @@ def do_nospam(args):
 
 parser = argparse.ArgumentParser(description='Manage bugs.', epilog='Report bugs to guus@sliepen.org.')
 parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
-parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.version)
+parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
 
 subparser = parser.add_subparsers(title='commands', dest='command')
 
