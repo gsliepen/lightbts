@@ -7,72 +7,72 @@ import sys
 import lightbts
 
 def do_init(args):
-    print 'LightBTS initialized.'
+    print('LightBTS initialized.')
 
 def do_list(args):
     for bug in lightbts.list_bugs(args):
-        print "{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title)
+        print(("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title)))
 
 def do_show_bug(bugno, verbose):
     bug = lightbts.get_bug(bugno)
     if not bug:
-        print 'Could not find bug #' + str(bugno)
+        print(('Could not find bug #' + str(bugno)))
         return
 
     found_versions = bug.get_found_versions()
     fixed_versions = bug.get_fixed_versions()
-    print 'Bug#' + str(bug.id) + ': ' + bug.title
-    print 'Status: ' + bug.statusname
+    print(('Bug#' + str(bug.id) + ': ' + bug.title))
+    print(('Status: ' + bug.statusname))
     if found_versions:
-        print 'Found in: ' + ' '.join(found_versions)
+        print(('Found in: ' + ' '.join(found_versions)))
     if fixed_versions:
-        print 'Fixed in: ' + ' '.join(fixed_versions)
-    print 'Severity: ' + bug.severityname
+        print(('Fixed in: ' + ' '.join(fixed_versions)))
+    print(('Severity: ' + bug.severityname))
     tags = bug.get_tags()
     if tags:
-        print 'Tags: ' + ' '.join(tags)
+        print(('Tags: ' + ' '.join(tags)))
 
-    print
+    print()
 
     for msg in bug.get_messages():
         if(verbose):
-            print 'From: ' + msg.msg['From']
-            print 'To: ' + msg.msg['To']
-            print 'Subject: ' + msg.msg['Subject']
-            print 'Date: ' + msg.msg['Date']
-            print 'Message-Id: ' + msg.msg['Message-Id']
-            print
-            print msg.msg.get_payload();
-            print
+            print(('From: ' + msg.msg['From']))
+            print(('To: ' + msg.msg['To']))
+            print(('Subject: ' + msg.msg['Subject']))
+            print(('Date: ' + msg.msg['Date']))
+            print(('Message-Id: ' + msg.msg['Message-Id']))
+            print()
+            print((msg.msg.get_payload()));
+            print()
         else:
-            print msg.msgid
+            print((msg.msgid))
 
 def do_show_message(msgid):
     msg = lightbts.get_message(msgid)
     if not msg:
-        print 'Could not find message with id ' + msgid
+        print(('Could not find message with id ' + msgid))
         return
 
     bug = lightbts.get_bug(msg.bug)
     found_versions = bug.get_found_versions()
     fixed_versions = bug.get_fixed_versions()
-    print 'Bug#' + str(bug.id) + ': ' + bug.title
-    print 'Status: ' + bug.statusname
+    print(('Bug#' + str(bug.id) + ': ' + bug.title))
+    print(('Status: ' + bug.statusname))
     if found_versions:
-        print 'Found in: ' + ' '.join(found_versions)
+        print(('Found in: ' + ' '.join(found_versions)))
     if fixed_versions:
-        print 'Fixed in: ' + ' '.join(fixed_versions)
-    print 'Severity: ' + bug.severityname
+        print(('Fixed in: ' + ' '.join(fixed_versions)))
+    print(('Severity: ' + bug.severityname))
     tags = bug.get_tags()
     if tags:
-        print 'Tags: ' + tags
-    print
-    print 'From: ' + msg.msg['From']
-    print 'To: ' + msg.msg['To']
-    print 'Subject: ' + msg.msg['Subject']
-    print 'Date: ' + msg.msg['Date']
-    print
-    print msg.msg.get_payload();
+        print(('Tags: ' + tags))
+    print()
+    print(('From: ' + msg.msg['From']))
+    print(('To: ' + msg.msg['To']))
+    print(('Subject: ' + msg.msg['Subject']))
+    print(('Date: ' + msg.msg['Date']))
+    print()
+    print((msg.msg.get_payload()));
 
 def do_show(args):
     if '@' in args.id:
@@ -82,32 +82,32 @@ def do_show(args):
 
 def do_search(args):
     for bug in lightbts.search_bugs(args):
-        print "{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title)
+        print(("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title)))
 
 def do_create(args):
     title = ' '.join(args.title)
     address = lightbts.get_local_email_address()
-    print "Write the bug report here, press control-D on an empty line to stop:"
+    print("Write the bug report here, press control-D on an empty line to stop:")
     text = sys.stdin.read();
     bug = lightbts.create(title, address, text);
     if args.version:
         bug.found(args.version)
     if args.tag:
         bug.add_tag(args.tag)
-    print 'Thank you for reporting a bug, which has been assigned number ' + str(bug.id)
+    print(('Thank you for reporting a bug, which has been assigned number ' + str(bug.id)))
 
 def do_reply(args):
     if args.close and args.reopen:
-        print 'Make up your mind!'
+        print('Make up your mind!')
         return
 
     bug = lightbts.get_bug(args.id)
     if not bug:
-        print 'Could not find bug #' + str(bugno)
+        print(('Could not find bug #' + str(bugno)))
         return
 
     address = lightbts.get_local_email_address()
-    print "Write the bug reply here, press control-D on an empty line to stop:"
+    print("Write the bug reply here, press control-D on an empty line to stop:")
     text = sys.stdin.read();
     lightbts.reply(bug, address, text);
     if args.version:
@@ -121,7 +121,7 @@ def do_reply(args):
         bug.close()
     if args.reopen:
         bug.reopen()
-    print 'Thank you for reporting additional information for bug number ' + str(bug.id)
+    print(('Thank you for reporting additional information for bug number ' + str(bug.id)))
 
 def do_close(args):
     lightbts.get_bug(args.id).close()

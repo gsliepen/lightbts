@@ -7,7 +7,10 @@ import platform
 import email
 import mailbox
 import sqlite3
-import ConfigParser
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser
 
 try:
     import pwd
@@ -322,7 +325,7 @@ def init(dir=''):
 
     # Set default options
 
-    config = ConfigParser.SafeConfigParser()
+    config = configparser.SafeConfigParser()
 
     config.add_section('core')
     config.set('core', 'project', 'LightBTS')
@@ -448,7 +451,7 @@ def create_message(title, address, text):
         db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, msgid, 0));
     except sqlite3.IntegrityError:
         # TODO: throw something intelligent
-        print "Duplicate message!"
+        print("Duplicate message!")
         sys.exit(1)
 
     return message(msgid, key, msg=msg)
@@ -489,7 +492,7 @@ def import_email(msg):
         db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, msgid, 0));
     except sqlite3.IntegrityError:
         # TODO: throw something intelligent
-        print "Duplicate message!"
+        print("Duplicate message!")
         sys.exit(1)
 
     # Can we match the message to an existing bug?
