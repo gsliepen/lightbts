@@ -15,19 +15,19 @@ def init():
 
         # Load templates
         global tmpl_main
-        with open('template/main.html', 'r') as tmpl:
+        with open('templates/main.html', 'r') as tmpl:
             tmpl_main = string.Template(tmpl.read())
 
         global tmpl_bugrow
-        with open('template/bugrow.html', 'r') as tmpl:
+        with open('templates/bugrow.html', 'r') as tmpl:
             tmpl_bugrow = string.Template(tmpl.read())
 
         global tmpl_bug
-        with open('template/bug.html', 'r') as tmpl:
+        with open('templates/bug.html', 'r') as tmpl:
             tmpl_bug = string.Template(tmpl.read())
 
         global tmpl_message
-        with open('template/message.html', 'r') as tmpl:
+        with open('templates/message.html', 'r') as tmpl:
             tmpl_message = string.Template(tmpl.read())
 
 def exit():
