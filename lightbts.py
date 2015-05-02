@@ -328,10 +328,10 @@ def init(dir=''):
     config = configparser.SafeConfigParser()
 
     config.add_section('core')
-    config.set('core', 'project', 'LightBTS')
+    config.set('core', 'project', '')
     config.set('core', 'admin', '')
-    config.set('core', 'messages', os.path.join(basedir, 'btsmail'))
-    config.set('core', 'database', os.path.join(basedir, 'bts.db'))
+    config.set('core', 'messages', os.path.join(basedir, 'messages'))
+    config.set('core', 'index', os.path.join(basedir, 'index'))
     config.set('core', 'respond-to-new', 'yes')
     config.set('core', 'respond-to-reply', 'yes')
 
@@ -355,7 +355,7 @@ def init(dir=''):
     config.read(os.path.join(basedir, 'lightbts.conf'))
 
     # Core configuration
-    dbfile = config.get('core', 'database')
+    dbfile = config.get('core', 'index')
     maildir = config.get('core', 'messages')
     project = config.get('core', 'project')
     admin = config.get('core', 'admin')
