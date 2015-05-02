@@ -438,6 +438,7 @@ def create_message(title, address, text):
     msg['From'] = address
     msg['To'] = 'LightBTS'
     msg['Date'] = email.utils.formatdate()
+    msg['User-Agent'] = 'LightBTS/' + __version__
 
     msgid = email.utils.unquote(msg['Message-Id'])
 
