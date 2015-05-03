@@ -44,10 +44,13 @@ if msg['Auto-Submitted'] == 'auto-replied':
 
 if new:
     subject = 'Bug#' + str(bug.id) + ': ' + msg['Subject']
-    reply = email.MIMEText.MIMEText("Thank you for reporting a bug, which has been assigned number " + str(bug.id))
+    tmpl = lightbts.get_template("new.txt", "Thank you for reporting a bug, which has been assigned number ${id}.")
 else:
     subject = msg['Subject']
-    reply = email.MIMEText.MIMEText("Thank you for reporting additional information for bug number " + str(bug.id))
+    tmpl = lightbts.get_template("reply.txt", "Thank you for reporting additional information for bug number ${id}.")
+
+text = tmpl.substitute({'id': bug._id})
+reply = email.MIMEText.MIMEText(text)
 
 reply['From'] = args.name + ' <' + myaddress + '>'
 reply['To'] = msg['From']
