@@ -7,6 +7,8 @@ import platform
 import email
 import mailbox
 import sqlite3
+import string
+import logging
 try:
     import configparser
 except ImportError:
@@ -316,12 +318,28 @@ def unmerge(*bugs):
             continue
         db.execute('DELETE FROM merges WHERE a=? AND b=?', (a.bugno, b.bugno))
 
+def get_template(name, fallback=None):
+    try:
+        with open(os.path.join(emailtemplates, name), 'r') as file:
+            return string.Template(file.read())
+    except IOError:
+        try:
+            with open(os.path.join(default_templates, name), 'r') as file:
+                return string.Template(file.read())
+        except:
+            logging.error("Template " + name + " not found")
+            if fallback:
+                return string.Template(fallback)
+            else:
+                return None
+
 def init(dir=''):
     global basedir, config, dbfile, maildir, project, admin, respond_to_new, respond_to_reply
     global emailaddress, emailtemplates, webroot, staticroot, webtemplates
-    global db, mail
+    global db, mail, default_templates
 
     basedir = dir
+    default_templates = os.path.join(os.path.split(__file__)[0], "templates")
 
     # Set default options
 

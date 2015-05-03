@@ -15,20 +15,19 @@ def init():
 
         # Load templates
         global tmpl_main
-        with open('templates/main.html', 'r') as tmpl:
-            tmpl_main = string.Template(tmpl.read())
+        tmpl_main = lightbts.get_template('main.html')
 
         global tmpl_bugrow
-        with open('templates/bugrow.html', 'r') as tmpl:
-            tmpl_bugrow = string.Template(tmpl.read())
+        tmpl_bugrow = lightbts.get_template('bugrow.html')
 
         global tmpl_bug
-        with open('templates/bug.html', 'r') as tmpl:
-            tmpl_bug = string.Template(tmpl.read())
+        tmpl_bug = lightbts.get_template('bug.html')
 
         global tmpl_message
-        with open('templates/message.html', 'r') as tmpl:
-            tmpl_message = string.Template(tmpl.read())
+        tmpl_message = lightbts.get_template('message.html')
+
+        if not tmpl_main or not tmpl_bugrow or not tmpl_bug or not tmpl_message:
+            exit(1)
 
 def exit():
         lightbts.exit()
