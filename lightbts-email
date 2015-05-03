@@ -42,6 +42,10 @@ if msg['Auto-Submitted'] == 'auto-replied' or msg['X-Autoreply'] or msg['X-Autor
 
 (bug, new) = lightbts.import_email(msg)
 
+if bug is None:
+    # This is a duplicate message, ignore.
+    exit(0)
+
 if new:
     subject = 'Bug#' + str(bug.id) + ': ' + msg['Subject']
     tmpl = lightbts.get_template("new.txt", "Thank you for reporting a bug, which has been assigned number ${id}.")

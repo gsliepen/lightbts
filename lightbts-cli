@@ -85,6 +85,8 @@ def do_create(args):
     print("Write the bug report here, press control-D on an empty line to stop:")
     text = sys.stdin.read();
     bug = lightbts.create(title, address, text);
+    if not bug:
+        exit(1)
     if args.version:
         bug.found(args.version)
     if args.tag:

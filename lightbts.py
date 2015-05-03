@@ -470,8 +470,8 @@ def create_message(title, address, text):
         db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, msgid, 0));
     except sqlite3.IntegrityError:
         # TODO: throw something intelligent
-        print("Duplicate message!")
-        sys.exit(1)
+        logging.error("Integrity error while creating a new message")
+        return None
 
     return message(msgid, key, msg=msg)
 
@@ -511,8 +511,8 @@ def import_email(msg):
         db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, msgid, 0));
     except sqlite3.IntegrityError:
         # TODO: throw something intelligent
-        print("Duplicate message!")
-        sys.exit(1)
+        logging.warning("Ignoring duplicate message from " + msg['From'] + " with Message-Id " + msgid)
+        return (None, None)
 
     # Can we match the message to an existing bug?
 
