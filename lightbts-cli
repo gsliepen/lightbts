@@ -94,6 +94,9 @@ def do_create(args):
     if args.tag:
         bug.add_tag(args.tag)
         action += 'tags +' + args.tag + '\n'
+    if args.severity:
+        bug.set_severity(args.severity)
+        action += 'severity ' + args.severity + '\n'
     if action:
         bug.record_action(action)
     print('Thank you for reporting a bug, which has been assigned number ' + str(bug.id))
@@ -267,6 +270,7 @@ parser_search.set_defaults(func=do_search)
 parser_create = subparser.add_parser('create', help='create a new bug')
 parser_create.add_argument('-v', '--version', metavar='VERSION', help='mark the bug as found in the given version')
 parser_create.add_argument('-t', '--tag', metavar='TAG', help='set the given tag')
+parser_create.add_argument('-s', '--severity', metavar='SEVERITY', help='set the bug severity')
 parser_create.add_argument('title', help='bug title', nargs=argparse.REMAINDER)
 parser_create.set_defaults(func=do_create)
 
