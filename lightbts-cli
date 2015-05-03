@@ -85,12 +85,17 @@ def do_create(args):
     print("Write the bug report here, press control-D on an empty line to stop:")
     text = sys.stdin.read();
     bug = lightbts.create(title, address, text);
+    action = ''
     if not bug:
         exit(1)
     if args.version:
         bug.found(args.version)
+        action += 'found ' + args.version + '\n'
     if args.tag:
         bug.add_tag(args.tag)
+        action += 'tags +' + args.tag + '\n'
+    if action:
+        bug.record_action(action)
     print('Thank you for reporting a bug, which has been assigned number ' + str(bug.id))
 
 def do_reply(args):
@@ -107,67 +112,99 @@ def do_reply(args):
     print("Write the bug reply here, press control-D on an empty line to stop:")
     text = sys.stdin.read();
     lightbts.reply(bug, address, text);
+    action = ''
     if args.version:
         if args.close:
             bug.fixed(args.version)
+            action += 'fixed ' + args.version + '\n'
         else:
             bug.found(args.version)
+            action += 'found ' + args.version + '\n'
     if args.tag:
         bug.add_tag(args.tag)
+        action += 'tags +' + args.tag + '\n'
     if args.close:
         bug.close()
+        action += 'close\n'
     if args.reopen:
         bug.reopen()
+        action += 'reopen\n'
+    if action:
+        bug.record_action(action)
     print('Thank you for reporting additional information for bug number ' + str(bug.id))
 
 def do_close(args):
-    lightbts.get_bug(args.id).close()
+    bug = lightbts.get_bug(args.id)
+    action = 'close'
+    bug.close()
+
     if args.version:
         bug.fixed(args.version)
+        action += '\nfixed ' + args.version
+
     if args.tag:
         bug.add_tag(args.tag)
+        action += '\ntags +' + args.tag
+
+    bug.record_action(action)
 
 def do_reopen(args):
-    lightbts.get_bug(args.id).reopen()
+    bug = lightbts.get_bug(args.id)
+    bug.reopen()
+    action = 'reopen'
+
     if args.version:
         bug.found(args.version)
+        action += '\nfound ' + args.version
     if args.tag:
         bug.add_tag(args.tag)
+        action += '\ntags +' + args.tag
+
+    bug.record_action(action)
 
 def do_retitle(args):
-    lightbts.get_bug(args.id).set_title(' '.join(args.title))
+    bug = lightbts.get_bug(args.id)
+    title = ' '.join(args.title)
+    bug.set_title(title)
+    bug.record_action('retitle ' + title)
 
 def do_found(args):
-    lightbts.get_bug(args.id).found(args.version)
+    bug = lightbts.get_bug(args.id)
+    bug.found(args.version)
+    bug.record_action('found ' + args.version)
 
 def do_notfound(args):
-    lightbts.get_bug(args.id).notfound(args.version)
+    bug = lightbts.get_bug(args.id)
+    bug.notfound(args.version)
+    bug.record_action('notfound ' + args.version)
 
 def do_fixed(args):
-    lightbts.get_bug(args.id).fixed(args.version)
+    bug = lightbts.get_bug(args.id)
+    bug.fixed(args.version)
+    bug.record_action('fixed ' + args.version)
 
 def do_notfixed(args):
-    lightbts.get_bug(args.id).notfixed(args.version)
+    bug = lightbts.get_bug(args.id)
+    bug.notfixed(args.version)
+    bug.record_action('notfixed ' + args.version)
 
 def do_severity(args):
-    severity = lightbts.severityindex(args.severity)
-    lightbts.db.execute('UPDATE bugs SET severity=? WHERE id=?', (severity, args.id))
+    bug = lightbts.get_bug(args.id)
+    bug.set_severity(args.severity)
+    bug.record_action('severity ' + args.severity)
 
 def do_merge(args):
     a = min(args.id)
-    for b in args.id:
-        if a == b:
-            continue
-        lightbts.db.execute('INSERT OR IGNORE INTO merges (a, b) VALUES (?, ?)', (a, b))
+    lightbts.merge(args.id)
+    a.record_action('merge ' + ' '.join(args.id))
 
 def do_unmerge(args):
     a = min(args.id)
-    for b in args.id:
-        if a == b:
-            continue
-        lightbts.db.execute('DELETE FROM merges WHERE a=? AND b=?', (a, b))
+    lightbts.unmerge(args.id)
+    a.record_action('unmerge ' + ' '.join(args.id))
 
 def do_tags(args):
+    bug = lightbts.get_bug(args.id)
     add = True
     for tag in args.tags:
         if tag[0] == '-':
@@ -178,19 +215,24 @@ def do_tags(args):
             tag = tag[1:]
         elif tag[0] == '=':
             add = True
-            lightbts.db.execute('DELETE FROM tags WHERE bug=?', (args.id,))
+            bug.clear_tags()
             tag = tag[1:]
         if tag:
             if add:
-                lightbts.db.execute('INSERT OR IGNORE INTO tags (bug, tag) VALUES (?, ?)', (args.id, tag))
+                bug.add_tag(tag)
             else:
-                lightbts.db.execute('DELETE FROM tags WHERE bug=? AND tag=?', (args.id, tag))
+                bug.del_tag(tag)
+    bug.record_action('tags ' + ' '.join(args.tags))
 
 def do_owner(args):
-    lightbts.db.execute('UPDATE bugs SET owner=? WHERE id=?', (args.owner, args.id))
+    bug = lightbts.get_bug(args.id)
+    bug.set_owner(args.owner)
+    bug.record_action('owner ' + args.owner)
 
 def do_noowner(args):
-    lightbts.db.execute('UPDATE bugs SET owner=NULL WHERE id=?', (args.id))
+    bug = lightbts.get_bug(args.id)
+    bug.set_owner(None)
+    bug.record_action('noowner')
 
 def do_spam(args):
     lightbts.db.execute('UPDATE messages SET spam=1 WHERE msgid=?', (args.msgid,))

@@ -60,6 +60,27 @@ def status(arg):
     except:
         return statusindex(arg)
 
+def get_local_email_address():
+    if 'EMAIL' in os.environ:
+        address = os.environ['EMAIL']
+        if address.find(" <") >= 0:
+            return address
+    else:
+        address = getpass.getuser() + '@' + platform.node()
+
+    if 'FULLNAME' in os.environ:
+        fullname = os.environ['FULLNAME']
+    else:
+        if have_pwd:
+            fullname = pwd.getpwuid(os.getuid())[4].split(",")[0]
+        elif have_win32api:
+            fullname = win32api.GetUserName(3)
+
+    if fullname:
+        return fullname + ' <' + address + '>'
+    else:
+        return address
+
 class bug(object):
     def __init__(self, id=None, title=None, status=None, severity=None):
         self._id = id
@@ -123,6 +144,9 @@ class bug(object):
     def del_tag(self, tag):
         db.execute('DELETE FROM tags WHERE bug=? AND tag=?', (self._id, tag))
 
+    def clear_tags(self):
+        db.execute('DELETE FROM tags WHERE bug=?', (self._id,))
+
     def get_tags(self):
         result = []
         for i in db.execute('SELECT tag FROM tags WHERE bug=?', (self._id,)):
@@ -152,7 +176,10 @@ class bug(object):
                     self.del_tag(tag)
 
     def set_owner(self, owner):
-        db.execute('UPDATE bugs SET owner=? WHERE id=?', (owner, self._id))
+        if owner:
+            db.execute('UPDATE bugs SET owner=? WHERE id=?', (owner, self._id))
+        else:
+            db.execute('UPDATE bugs SET owner=NULL WHERE id=?', (owner, self._id))
 
     def close(self):
         self.set_status(0)
@@ -189,6 +216,16 @@ class bug(object):
         for i in db.execute('SELECT msgid, key FROM messages WHERE bug=?', (self._id,)):
             result.append(message(i[0], i[1], self._id))
         return result
+
+    def get_first_msgid(self):
+        return db.execute('SELECT msgid FROM messages WHERE bug=?', (self._id,)).fetchone()[0]
+
+    def record_action(self, action, address=get_local_email_address()):
+        msg = create_message(self.title, address, action, headers={
+            'X-LightBTS-Control': 'yes',
+            'In-Reply-To': self.get_first_msgid()
+        });
+        msg.assign_to(self)
 
 class message(object):
     def __init__(self, msgid=None, key=None, bug=None, msg=None):
@@ -425,28 +462,7 @@ def exit():
     config.remove_section('DEFAULT')
     config.write(open(os.path.join(basedir, 'lightbts.conf'), 'w'))
 
-def get_local_email_address():
-    if 'EMAIL' in os.environ:
-        address = os.environ['EMAIL']
-        if address.find(" <") >= 0:
-            return address
-    else:
-        address = getpass.getuser() + '@' + platform.node()
-
-    if 'FULLNAME' in os.environ:
-        fullname = os.environ['FULLNAME']
-    else:
-        if have_pwd:
-            fullname = pwd.getpwuid(os.getuid())[4].split(",")[0]
-        elif have_win32api:
-            fullname = win32api.GetUserName(3)
-
-    if fullname:
-        return fullname + ' <' + address + '>'
-    else:
-        return address
-
-def create_message(title, address, text):
+def create_message(title, address, text, headers={}):
     global db, mail
 
     msg = email.MIMEText.MIMEText(text)
@@ -457,6 +473,9 @@ def create_message(title, address, text):
     msg['To'] = 'LightBTS'
     msg['Date'] = email.utils.formatdate()
     msg['User-Agent'] = 'LightBTS/' + __version__
+
+    for key, value in headers.iteritems():
+        msg[key] = value
 
     msgid = email.utils.unquote(msg['Message-Id'])
 
@@ -493,6 +512,12 @@ def reply(bug, address, text):
     msg.assign_to(bug)
  
 def import_email(msg):
+    # Don't allow messages with the X-LightBTS-Control header set
+
+    if msg['X-LightBTS-Control']:
+        logging.error("Denying import of message with X-LightBTS-Control header from " + msg['From'])
+        return (None, None)
+
     # Handle missing Message-Id
 
     if not msg['Message-Id']:
