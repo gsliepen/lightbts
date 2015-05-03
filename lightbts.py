@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os
+import sys
 import getpass
 import platform
 import email
@@ -370,6 +371,46 @@ def get_template(name, fallback=None):
             else:
                 return None
 
+def init_db(dbfile):
+    db = sqlite3.connect(dbfile)
+    db.execute('PRAGMA foreign_key = on')
+    version = db.execute('PRAGMA user_version').fetchone()[0]
+    appid = db.execute('PRAGMA application_id').fetchone()
+    if appid:
+        appid = appid[0]
+
+    if appid or (appid == 0 and version):
+        if appid != 0x4c425453:
+            logging.error("Index is a SQLite database not created by LightBTS!")
+            sys.exit(1)
+
+    if not appid:
+        db.execute('PRAGMA application_id=0x4c425453')
+
+    if not version:
+        # Fresh start, create everything.
+        db.execute('CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER)')
+        db.execute('CREATE TABLE merges (a INTEGER, b INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), CHECK (a < b), FOREIGN KEY(b) REFERENCES bugs(id))')
+        db.execute('CREATE TABLE messages (msgid PRIMARY KEY, key TEXT, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, date INTEGER, FOREIGN KEY(bug) REFERENCES bugs(id))')
+        db.execute('CREATE INDEX messages_key_index ON messages (key)')
+        db.execute('CREATE TABLE recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))')
+        db.execute('CREATE INDEX recipients_bug_index ON recipients (bug)')
+        db.execute('CREATE INDEX recipients_address_index ON recipients (address)')
+        db.execute('CREATE TABLE tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))')
+        db.execute('CREATE INDEX tags_bug_index ON tags (bug)')
+        db.execute('CREATE INDEX tags_tag_index ON tags (tag)')
+        db.execute('CREATE TABLE versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))')
+        db.execute('CREATE INDEX versions_bug_index ON versions (bug)')
+        db.execute('CREATE INDEX versions_version_index ON versions (version)')
+        db.execute('PRAGMA user_version=1')
+        return db
+    elif version == 1:
+        # Latest version, nothing to do.
+        return db
+    elif version < 0 or version > 1:
+        logging.error("Unknown database version " + str(version))
+        sys.exit(1)
+
 def init(dir=''):
     global basedir, config, dbfile, maildir, project, admin, respond_to_new, respond_to_reply
     global emailaddress, emailtemplates, webroot, staticroot, webtemplates
@@ -433,21 +474,7 @@ def init(dir=''):
     mail = mailbox.Maildir(maildir)
 
     # Open or create the database
-    db = sqlite3.connect(dbfile)
-    db.execute('PRAGMA foreign_key = on')
-    db.execute('CREATE TABLE IF NOT EXISTS bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER)')
-    db.execute('CREATE TABLE IF NOT EXISTS merges (a INTEGER, b INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), CHECK (a < b), FOREIGN KEY(b) REFERENCES bugs(id))')
-    db.execute('CREATE TABLE IF NOT EXISTS messages (msgid PRIMARY KEY, key TEXT, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, date INTEGER, FOREIGN KEY(bug) REFERENCES bugs(id))')
-    db.execute('CREATE INDEX IF NOT EXISTS messages_key_index ON messages (key)')
-    db.execute('CREATE TABLE IF NOT EXISTS recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))')
-    db.execute('CREATE INDEX IF NOT EXISTS recipients_bug_index ON recipients (bug)')
-    db.execute('CREATE INDEX IF NOT EXISTS recipients_address_index ON recipients (address)')
-    db.execute('CREATE TABLE IF NOT EXISTS tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))')
-    db.execute('CREATE INDEX IF NOT EXISTS tags_bug_index ON tags (bug)')
-    db.execute('CREATE INDEX IF NOT EXISTS tags_tag_index ON tags (tag)')
-    db.execute('CREATE TABLE IF NOT EXISTS versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))')
-    db.execute('CREATE INDEX IF NOT EXISTS versions_bug_index ON versions (bug)')
-    db.execute('CREATE INDEX IF NOT EXISTS versions_version_index ON versions (version)')
+    db = init_db(dbfile)
 
 def exit():
     global basedir, db, mail, config
