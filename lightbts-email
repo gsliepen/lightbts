@@ -36,7 +36,7 @@ else:
 
 msg = email.message_from_file(sys.stdin)
 
-if msg['Auto-Submitted'] == 'auto-replied':
+if msg['Auto-Submitted'] == 'auto-replied' or msg['X-Autoreply'] or msg['X-Autorespond']:
     logger.warning('Ignoring auto-replied message from ' + msg['From'])
     exit(0)
 
@@ -57,6 +57,7 @@ reply['To'] = msg['From']
 reply['Subject'] = subject
 reply['User-Agent'] = 'LightBTS/' + lightbs.__version__
 reply['Auto-Submitted'] = 'auto-replied'
+reply['X-Auto-Response-Suppress'] = 'All'
 
 reply['Message-Id'] = email.utils.make_msgid('LightBTS')
 reply['In-Reply-To'] = id
