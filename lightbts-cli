@@ -65,14 +65,9 @@ def do_show_message(msgid):
     print(('Severity: ' + bug.severityname))
     tags = bug.get_tags()
     if tags:
-        print(('Tags: ' + tags))
-    print()
-    print(('From: ' + msg.msg['From']))
-    print(('To: ' + msg.msg['To']))
-    print(('Subject: ' + msg.msg['Subject']))
-    print(('Date: ' + msg.msg['Date']))
-    print()
-    print((msg.msg.get_payload()));
+        print('Tags: ' + tags)
+    print('')
+    print(msg.msg.as_string());
 
 def do_show(args):
     if '@' in args.id:
