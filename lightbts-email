@@ -18,14 +18,23 @@ parser.add_argument('-a', '--admin', metavar='ADDRESS', help='admin email addres
 parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
 parser.add_argument('-f', '--from', metavar='ADDRESS', help='email address of this instance of LightBTS', dest='myaddress')
 parser.add_argument('-n', '--name', metavar='NAME', help='name for this instance of LightBTS', default='LightBTS')
+parser.add_argument('-c', '--close', help='close the bug', action='store_true')
+parser.add_argument('-r', '--reopen', help='reopen the bug', action='store_true')
+parser.add_argument('-T', '--tag', metavar='TAG', help='set the given tag')
 parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
 
 args = parser.parse_args()
+
+if args.close and args.reopen:
+    logger.error('Make up your mind!')
+    sys.exit(1)
 
 if args.data:
     lightbts.init(args.data)
 else:
     lightbts.init(os.environ['HOME'])
+
+# Parse command line options
 
 if args.name:
     lightbts.emailname = args.name
@@ -36,22 +45,26 @@ if args.myaddress:
 if args.admin:
     lightbts.admin = args.admin
 
-if lightbts.emailname:
-    myfrom = lightbts.emailname + ' <' + lightbts.emailaddress + '>'
-else:
-    myfrom = lightbts.emailaddress
+# Import the email message
 
 msg = email.message_from_file(sys.stdin)
 
 if msg['Auto-Submitted'] == 'auto-replied' or msg['X-Autoreply'] or msg['X-Autorespond']:
     logger.warning('Ignoring auto-replied message from ' + msg['From'])
-    exit(0)
+    sys.exit(0)
 
 (bug, new) = lightbts.import_email(msg)
 
+# Construct a reply
+
+if lightbts.emailname:
+    myfrom = lightbts.emailname + ' <' + lightbts.emailaddress + '>'
+else:
+    myfrom = lightbts.emailaddress
+
 if bug is None:
     # This is a duplicate message, ignore.
-    exit(0)
+    sys.exit(0)
 
 if new:
     subject = 'Bug#' + str(bug.id) + ': ' + msg['Subject']
@@ -77,6 +90,21 @@ smtp = smtplib.SMTP(lightbts.smtphost)
 smtp.sendmail(reply['From'], reply['To'], reply.as_string())
 
 lightbts.record_msgid(bug.id, email.utils.unquote(reply['Message-ID']))
+
+# Apply actions
+
+action=''
+if args.tag:
+    bug.add_tag(args.tag)
+    action += 'tags +' + args.tag + '\n'
+if args.close:
+    bug.close()
+    action += 'close\n'
+if args.reopen:
+    bug.reopen()
+    action += 'reopen\n'
+if action:
+    bug.record_action(action)
 
 # Send a copy to the admin
 
