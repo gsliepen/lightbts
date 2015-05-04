@@ -38,7 +38,7 @@ if args.admin:
 
 if lightbts.emailname:
     myfrom = lightbts.emailname + ' <' + lightbts.emailaddress + '>'
-else
+else:
     myfrom = lightbts.emailaddress
 
 msg = email.message_from_file(sys.stdin)
