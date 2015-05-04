@@ -413,7 +413,7 @@ def init_db(dbfile):
 
 def init(dir=''):
     global basedir, config, dbfile, maildir, project, admin, respond_to_new, respond_to_reply
-    global emailaddress, emailtemplates, smtphost, webroot, staticroot, webtemplates
+    global emailaddress, emailname, emailtemplates, smtphost, webroot, staticroot, webtemplates
     global db, mail, default_templates
 
     basedir = dir
@@ -438,6 +438,7 @@ def init(dir=''):
 
     config.add_section('email')
     config.set('email', 'address', getpass.getuser() + '@' + platform.node())
+    config.set('email', 'name', '')
     config.set('email', 'templates', os.path.join(basedir, 'templates'))
     config.set('email', 'smtphost', 'localhost')
 
@@ -460,6 +461,9 @@ def init(dir=''):
 
     # Email configuration
     emailaddress = config.get('email', 'address')
+    emailname = config.get('email', 'name')
+    if not emailname:
+        emailname = project
     emailtemplates = config.get('email', 'templates')
     smtphost = config.get('email', 'smtphost')
 

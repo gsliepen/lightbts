@@ -14,7 +14,7 @@ import lightbts
 # Initialize
 
 parser = argparse.ArgumentParser(description='Process incoming bug reports.', epilog='Report bugs to guus@sliepen.org.')
-parser.add_argument('-a', '--admin', metavar='ADDRESS', help='admin email address')
+parser.add_argument('-a', '--admin', metavar='ADDRESS', help='admin email address', dest='admin')
 parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
 parser.add_argument('-f', '--from', metavar='ADDRESS', help='email address of this instance of LightBTS', dest='myaddress')
 parser.add_argument('-n', '--name', metavar='NAME', help='name for this instance of LightBTS', default='LightBTS')
@@ -22,17 +22,24 @@ parser.add_argument('--version', action='version', version='LightBTS ' + lightbt
 
 args = parser.parse_args()
 
-if args.myaddress:
-    myaddress = args.myaddress
-else:
-    myaddress = getpass.getuser() + '@' + platform.node()
-
-admin = args.admin
-
 if args.data:
     lightbts.init(args.data)
 else:
     lightbts.init(os.environ['HOME'])
+
+if args.name:
+    lightbts.emailname = args.name
+
+if args.myaddress:
+    lightbts.emailaddress = args.myaddress
+
+if args.admin:
+    lightbts.admin = args.admin
+
+if lightbts.emailname:
+    myfrom = lightbts.emailname + ' <' + lightbts.emailaddress + '>'
+else
+    myfrom = lightbts.emailaddress
 
 msg = email.message_from_file(sys.stdin)
 
@@ -56,7 +63,7 @@ else:
 text = tmpl.substitute({'id': bug._id})
 reply = email.MIMEText.MIMEText(text)
 
-reply['From'] = args.name + ' <' + myaddress + '>'
+reply['From'] = myfrom
 reply['To'] = msg['From']
 reply['Subject'] = subject
 reply['User-Agent'] = 'LightBTS/' + lightbts.__version__
@@ -73,9 +80,9 @@ lightbts.record_msgid(bug.id, email.utils.unquote(reply['Message-ID']))
 
 # Send a copy to the admin
 
-if admin:
+if lightbts.admin:
     msg.replace_header('Subject', subject)
-    msg['Reply-To'] = myaddress
-    smtp.sendmail(msg['From'], admin, msg.as_string())
+    msg['Reply-To'] = myfrom
+    smtp.sendmail(msg['From'], lightbts.admin, msg.as_string())
 
 lightbts.exit()
