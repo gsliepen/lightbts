@@ -40,7 +40,7 @@ def do_show_bug(bugno, verbose):
             print('To: ' + msg.msg['To'])
             print('Subject: ' + msg.msg['Subject'])
             print('Date: ' + msg.msg['Date'])
-            print('Message-Id: ' + msg.msg['Message-Id'])
+            print('Message-ID: ' + msg.msg['Message-ID'])
             print('')
             print(msg.msg.get_payload());
             print('')

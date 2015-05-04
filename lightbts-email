@@ -63,13 +63,13 @@ reply['User-Agent'] = 'LightBTS/' + lightbts.__version__
 reply['Auto-Submitted'] = 'auto-replied'
 reply['X-Auto-Response-Suppress'] = 'All'
 
-reply['Message-Id'] = email.utils.make_msgid('LightBTS')
+reply['Message-ID'] = email.utils.make_msgid('LightBTS')
 reply['In-Reply-To'] = msg['Message-ID']
 
 smtp = smtplib.SMTP(lightbts.smtphost)
 smtp.sendmail(reply['From'], reply['To'], reply.as_string())
 
-lightbts.record_msgid(bug.id, email.utils.unquote(reply['Message-Id']))
+lightbts.record_msgid(bug.id, email.utils.unquote(reply['Message-ID']))
 
 # Send a copy to the admin
 

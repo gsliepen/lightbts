@@ -495,7 +495,7 @@ def create_message(title, address, text, headers={}):
     msg = email.MIMEText.MIMEText(text)
 
     msg['Subject'] = title
-    msg['Message-Id'] = email.utils.make_msgid('LightBTS')
+    msg['Message-ID'] = email.utils.make_msgid('LightBTS')
     msg['From'] = address
     msg['To'] = 'LightBTS'
     msg['Date'] = email.utils.formatdate()
@@ -504,7 +504,7 @@ def create_message(title, address, text, headers={}):
     for key, value in headers.iteritems():
         msg[key] = value
 
-    msgid = email.utils.unquote(msg['Message-Id'])
+    msgid = email.utils.unquote(msg['Message-ID'])
 
     # Save message to new
 
@@ -545,14 +545,14 @@ def import_email(msg):
         logging.error("Denying import of message with X-LightBTS-Control header from " + msg['From'])
         return (None, None)
 
-    # Handle missing Message-Id
+    # Handle missing Message-ID
 
-    if not msg['Message-Id']:
-            msg['Message-Id'] = email.utils.make_msgid('LightBTS')
+    if not msg['Message-ID']:
+            msg['Message-ID'] = email.utils.make_msgid('LightBTS')
 
     # Save message to new
 
-    msgid = email.utils.unquote(msg['Message-Id'])
+    msgid = email.utils.unquote(msg['Message-ID'])
     parent = msg['In-Reply-To']
     subject = msg['Subject']
     key = mail.add(msg)
@@ -563,7 +563,7 @@ def import_email(msg):
         db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, msgid, 0));
     except sqlite3.IntegrityError:
         # TODO: throw something intelligent
-        logging.warning("Ignoring duplicate message from " + msg['From'] + " with Message-Id " + msgid)
+        logging.warning("Ignoring duplicate message from " + msg['From'] + " with Message-ID " + msgid)
         return (None, None)
 
     # Can we match the message to an existing bug?

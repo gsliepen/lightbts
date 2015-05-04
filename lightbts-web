@@ -46,7 +46,7 @@ def do_bug(environ, start_response, query):
 
     msglist = ''
     for msg in bug.get_messages():
-        msglist += tmpl_message.substitute({'msgid': msg.msg['Message-Id'], 'from': msg.msg['From'], 'to': msg.msg['To'], 'subject': msg.msg['Subject'], 'date': msg.msg['Date'], 'body': msg.msg.get_payload()})
+        msglist += tmpl_message.substitute({'msgid': msg.msg['Message-ID'], 'from': msg.msg['From'], 'to': msg.msg['To'], 'subject': msg.msg['Subject'], 'date': msg.msg['Date'], 'body': msg.msg.get_payload()})
 
     page = tmpl_bug.substitute({'id': bug.id, 'submitter': 'x', 'date': 'x', 'status': bug.statusname, 'severity': bug.severityname 'title': bug.title, 'msglist': msglist, 'root': lightbts.webroot, 'copyright': copyright})
     exit()
