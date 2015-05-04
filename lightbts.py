@@ -413,7 +413,7 @@ def init_db(dbfile):
 
 def init(dir=''):
     global basedir, config, dbfile, maildir, project, admin, respond_to_new, respond_to_reply
-    global emailaddress, emailtemplates, webroot, staticroot, webtemplates
+    global emailaddress, emailtemplates, smtphost, webroot, staticroot, webtemplates
     global db, mail, default_templates
 
     basedir = dir

@@ -59,7 +59,7 @@ reply = email.MIMEText.MIMEText(text)
 reply['From'] = args.name + ' <' + myaddress + '>'
 reply['To'] = msg['From']
 reply['Subject'] = subject
-reply['User-Agent'] = 'LightBTS/' + lightbs.__version__
+reply['User-Agent'] = 'LightBTS/' + lightbts.__version__
 reply['Auto-Submitted'] = 'auto-replied'
 reply['X-Auto-Response-Suppress'] = 'All'
 
@@ -78,5 +78,4 @@ if admin:
     msg['Reply-To'] = myaddress
     smtp.sendmail(msg['From'], admin, msg.as_string())
 
-db.commit()
-db.close()
+lightbts.exit()
