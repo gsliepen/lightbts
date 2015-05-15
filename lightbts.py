@@ -10,6 +10,7 @@ import mailbox
 import sqlite3
 import string
 import logging
+import smtplib
 try:
     import configparser
 except ImportError:
@@ -214,7 +215,7 @@ class bug(object):
 
     def get_messages(self):
         result = []
-        for i in db.execute('SELECT msgid, key FROM messages WHERE bug=?', (self._id,)):
+        for i in db.execute('SELECT msgid, key FROM messages WHERE bug=? AND key NOT NULL', (self._id,)):
             result.append(message(i[0], i[1], self._id))
         return result
 
@@ -541,7 +542,30 @@ def create(title, address, text):
 def reply(bug, address, text):
     msg = create_message(bug.title, address, text)
     msg.assign_to(bug)
- 
+
+def forward_message(bug, msg):
+    # Get email addresses of bug participants
+    # TODO: handle -quiet, -maintonly, -submitter here.
+
+    do = [admin]
+    for i in db.execute("SELECT address FROM recipients WHERE bug=?", (bug._id,)):
+        do.append(i[0])
+
+    do = set(map((lambda x: x[1]), email.utils.getaddresses(do)))
+
+    # Get all To: and Cc: addresses from the message
+
+    dont = msg.get_all('From', []) + msg.get_all('To', []) + msg.get_all('Cc', [])
+    dont = set(map((lambda x: x[1]), email.utils.getaddresses(dont)))
+
+    # Send a copy to those who didn't get the message yet
+
+    do -= dont
+
+    if do:
+        smtp = smtplib.SMTP(smtphost)
+        smtp.sendmail(msg['From'], do, msg.as_string())
+
 def import_email(msg):
     # Don't allow messages with the X-LightBTS-Control header set
 
@@ -552,12 +576,12 @@ def import_email(msg):
     # Handle missing Message-ID
 
     if not msg['Message-ID']:
-            msg['Message-ID'] = email.utils.make_msgid('LightBTS')
+        msg['Message-ID'] = email.utils.make_msgid('LightBTS')
 
     # Save message to new
 
     msgid = email.utils.unquote(msg['Message-ID'])
-    parent = msg['In-Reply-To']
+    parent = email.utils.unquote(msg['In-Reply-To'])
     subject = msg['Subject']
     key = mail.add(msg)
 
@@ -601,10 +625,15 @@ def import_email(msg):
 
     # Move the message to the appropriate folder
 
-    mailbox.Maildir(os.path.join(maildir, str(bug))).close()
+    bugdir = os.path.join(maildir, str(bugno))
+    mailbox.Maildir(bugdir).close()
     movefrom = os.path.join(maildir, 'new', key)
-    moveto = os.path.join(maildir, str(bug), 'cur', key)
+    moveto = os.path.join(bugdir, 'cur', key)
     os.rename(movefrom, moveto)
+
+    # Email a copy to interested people
+
+    forward_message(bug, msg)
 
     return (bug, new)
 
