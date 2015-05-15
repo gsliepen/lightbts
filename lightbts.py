@@ -418,6 +418,9 @@ def init(dir=None):
     global db, mail, default_templates
 
     if not dir:
+        dir = os.getenv("LIGHTBTS_DIR")
+
+    if not dir:
         dir = os.getcwd()
         while dir:
             if os.access(os.path.join(dir, ".lightbts", "config"), os.F_OK):
