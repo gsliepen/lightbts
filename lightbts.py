@@ -412,10 +412,25 @@ def init_db(dbfile):
         logging.error("Unknown database version " + str(version))
         sys.exit(1)
 
-def init(dir=''):
+def init(dir=None):
     global basedir, config, dbfile, maildir, project, admin, respond_to_new, respond_to_reply
     global emailaddress, emailname, emailtemplates, smtphost, webroot, staticroot, webtemplates
     global db, mail, default_templates
+
+    if not dir:
+        dir = os.getcwd()
+        while dir:
+            if os.access(os.path.join(dir, ".lightbts", "config"), os.F_OK):
+                break
+            parent = os.path.dirname(dir)
+            if parent == dir:
+                dir = None
+            else:
+                dir = parent
+        if not dir:
+            logging.error("No LightBTS instance found")
+            sys.exit(1)
+        dir = os.path.join(dir, ".lightbts")
 
     basedir = dir
     default_templates = os.path.join(os.path.split(__file__)[0], "templates")
@@ -492,7 +507,7 @@ def exit():
     mail = None
 
     config.remove_section('DEFAULT')
-    config.write(open(os.path.join(basedir, 'lightbts.conf'), 'w'))
+    config.write(open(os.path.join(basedir, 'config'), 'w'))
 
 def create_message(title, address, text, headers={}):
     global db, mail

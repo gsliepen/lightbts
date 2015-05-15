@@ -29,10 +29,7 @@ if args.close and args.reopen:
     logger.error('Make up your mind!')
     sys.exit(1)
 
-if args.data:
-    lightbts.init(args.data)
-else:
-    lightbts.init(os.environ['HOME'])
+lightbts.init(args.data)
 
 # Parse command line options
 

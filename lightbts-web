@@ -81,10 +81,7 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 
-	if args.data:
-	    home = args.data
-	else:
-	    home = os.environ['HOME']
+	home = args.data
 
 	from flup.server.fcgi import WSGIServer
 	WSGIServer(myapp).run()

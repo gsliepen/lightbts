@@ -7,7 +7,20 @@ import sys
 import lightbts
 
 def do_init(args):
-    print('LightBTS initialized.')
+    if not args.dir:
+        args.dir = args.data
+
+    if not args.dir:
+        args.dir = os.path.join(os.getcwd(), ".lightbts")
+
+    new = not os.access(os.path.join(args.dir, "config"), os.F_OK)
+
+    lightbts.init(args.dir)
+
+    if new:
+        print("Initialized empty LightBTS instance in " + args.dir)
+    else:
+        print("Reinitialized existing LightBTS instance in " + args.dir)
 
 def do_list(args):
     for bug in lightbts.list_bugs(args):
@@ -252,6 +265,7 @@ parser.add_argument('--version', action='version', version='LightBTS ' + lightbt
 subparser = parser.add_subparsers(title='commands', dest='command')
 
 parser_init = subparser.add_parser('init', help='initialize bug database')
+parser_init.add_argument('dir', help='directory to store bug database in', nargs='?')
 parser_init.set_defaults(func=do_init)
 
 parser_list = subparser.add_parser('list', help='list bugs')
@@ -356,10 +370,8 @@ parser_nospam.set_defaults(func=do_nospam)
 
 args = parser.parse_args()
 
-if args.data:
+if args.func != do_init:
     lightbts.init(args.data)
-else:
-    lightbts.init(os.environ['HOME'])
 
 args.func(args)
 
