@@ -445,20 +445,20 @@ def init(dir=None):
     config.add_section('core')
     config.set('core', 'project', '')
     config.set('core', 'admin', '')
-    config.set('core', 'messages', os.path.join(basedir, 'messages'))
-    config.set('core', 'index', os.path.join(basedir, 'index'))
+    config.set('core', 'messages', 'messages')
+    config.set('core', 'index', 'index')
     config.set('core', 'respond-to-new', 'yes')
     config.set('core', 'respond-to-reply', 'yes')
 
     config.add_section('web')
     config.set('web', 'root', '/')
     config.set('web', 'static-root', '/')
-    config.set('web', 'templates', os.path.join(basedir, 'templates'))
+    config.set('web', 'templates', 'templates')
 
     config.add_section('email')
     config.set('email', 'address', getpass.getuser() + '@' + platform.node())
     config.set('email', 'name', '')
-    config.set('email', 'templates', os.path.join(basedir, 'templates'))
+    config.set('email', 'templates', 'templates')
     config.set('email', 'smtphost', 'localhost')
 
     # Read the configuration file
@@ -468,11 +468,11 @@ def init(dir=None):
     except:
         pass
 
-    config.read(os.path.join(basedir, 'lightbts.conf'))
+    config.read(os.path.join(basedir, 'config'))
 
     # Core configuration
-    dbfile = config.get('core', 'index')
-    maildir = config.get('core', 'messages')
+    dbfile = os.path.join(basedir, config.get('core', 'index'))
+    maildir = os.path.join(basedir, config.get('core', 'messages'))
     project = config.get('core', 'project')
     admin = config.get('core', 'admin')
     respond_to_new = config.getboolean('core', 'respond-to-new')
@@ -483,7 +483,7 @@ def init(dir=None):
     emailname = config.get('email', 'name')
     if not emailname:
         emailname = project
-    emailtemplates = config.get('email', 'templates')
+    emailtemplates = os.path.join(basedir, config.get('email', 'templates'))
     smtphost = config.get('email', 'smtphost')
 
     # Web configuration
@@ -491,7 +491,7 @@ def init(dir=None):
     staticroot = config.get('web', 'static-root')
     if not staticroot:
         staticroot = webroot
-    webtemplates = config.get('web', 'templates')
+    webtemplates = os.path.join(basedir, config.get('web', 'templates'))
 
     # Open the mailbox
     mail = mailbox.Maildir(maildir)
