@@ -22,6 +22,24 @@ def do_init(args):
     else:
         print("Reinitialized existing LightBTS instance in " + args.dir)
 
+def do_config(args):
+    option = args.option.split('.')
+    if len(option) != 2:
+        print("Invalid option name")
+        exit(1)
+
+    (section, option) = option
+
+    if not args.value:
+        try:
+            print(lightbts.config.get(section, option))
+        except:
+            exit(1)
+    else:
+        if not lightbts.config.has_section(section):
+            lightbts.config.add_section(section)
+        lightbts.config.set(section, option, args.value)
+
 def do_list(args):
     for bug in lightbts.list_bugs(args):
         print("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title))
@@ -267,6 +285,11 @@ subparser = parser.add_subparsers(title='commands', dest='command')
 parser_init = subparser.add_parser('init', help='initialize bug database')
 parser_init.add_argument('dir', help='directory to store bug database in', nargs='?')
 parser_init.set_defaults(func=do_init)
+
+parser_config = subparser.add_parser('config', help='get/set configuration option')
+parser_config.add_argument('option', help='name of the option')
+parser_config.add_argument('value', help='new value for the option', nargs='?')
+parser_config.set_defaults(func=do_config)
 
 parser_list = subparser.add_parser('list', help='list bugs')
 parser_list.add_argument('prop', help='bug property (status, severity, tag)', nargs='*')
