@@ -368,6 +368,20 @@ parser_nospam = subparser.add_parser('nospam', help='mark a message as not being
 parser_nospam.add_argument('id', help='bug id')
 parser_nospam.set_defaults(func=do_nospam)
 
+def do_help(args):
+    if args.command:
+        if args.command in subparser.choices:
+            subparser.choices[args.command].print_help()
+        else:
+            print("Unknown command " + args.command)
+            parser.print_usage()
+    else:
+        parser.print_help()
+
+parser_help = subparser.add_parser('help', add_help='show help message')
+parser_help.add_argument('command', help='command to show specific help message for', nargs='?')
+parser_help.set_defaults(func=do_help)
+
 args = parser.parse_args()
 
 if args.func != do_init:
