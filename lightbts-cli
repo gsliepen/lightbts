@@ -5,8 +5,14 @@ from __future__ import print_function
 import os
 import argparse
 import sys
+import subprocess
+import tempfile
+import email.message
 
 import lightbts
+
+def is_interactive():
+    return os.isatty(0) and os.isatty(1)
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
@@ -115,42 +121,137 @@ def do_search(args):
     for bug in lightbts.search_bugs(args):
         print("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title))
 
+def edit_interactive(msg, hint = 'bug'):
+    # Find out which editor to use
+    editor = lightbts.config.get("cli", "editor")
+    if not editor:
+        editor = os.getenv("VISUAL")
+    if not editor:
+        editor = os.getenv("EDITOR")
+    if not editor:
+        editor = "edit"
+
+    # Create a temporary file, use .eml suffix (vim can use it for syntax highlighting)
+    (fd, path) = tempfile.mkstemp(prefix="lightbts-" + hint + "-", suffix='.eml', text=True)
+    file = os.fdopen(fd, "w+")
+
+    #Write message
+    text = msg.as_string()
+    file.write(text)
+
+    file.seek(0)
+    stat_before = os.fstat(fd)
+
+    start = ''
+
+    # Call the editor
+    retval = subprocess.call([editor, '+' + str(start), path])
+
+    if retval != 0:
+        eprint('"' + editor + '" returned with a non-zero exit code')
+        file.close()
+        os.unlink(path)
+        return None
+
+    # Read back the edited message, if it was changed at all
+    stat_after = os.fstat(fd)
+    if stat_before.st_mtime == stat_after.st_mtime and stat_before.st_size == stat_after.st_size:
+        result = None
+    else:
+        result = email.message_from_file(file);
+
+    file.close()
+    os.unlink(path)
+
+    return result
+
 def do_create(args):
-    title = ' '.join(args.title)
-    address = lightbts.get_local_email_address()
-    print("Write the bug report here, press control-D on an empty line to stop:")
-    text = sys.stdin.read();
-    bug = lightbts.create(title, address, text);
-    action = ''
+    # Create message headers, start with From: so the file command recognizes it as message/rfc822
+    msg = email.message.Message()
+    msg['From'] = lightbts.get_local_email_address()
+    msg['Subject'] = ' '.join(args.title)
+
+    if args.version:
+        msg['Version'] = args.version
+    if args.severity:
+        msg['Severity'] = args.severity
+    if args.tag:
+        msg['Tags'] = args.tag
+
+    if is_interactive():
+        msg = edit_interactive(msg, 'create')
+        if not msg:
+            eprint("Aborting new bug report.")
+            exit(1)
+    else:
+        msg.set_payload(sys.stdin.read())
+
+    msg['To'] = 'LightBTS'
+    msg['Date'] = email.utils.formatdate()
+    msg['User-Agent'] = 'LightBTS/' + lightbts.__version__
+
+    (bug, new) = lightbts.import_email(msg)
+
     if not bug:
         exit(1)
-    if args.version:
-        bug.found(args.version)
-        action += 'found ' + args.version + '\n'
-    if args.tag:
-        bug.add_tag(args.tag)
-        action += 'tags +' + args.tag + '\n'
-    if args.severity:
-        bug.set_severity(args.severity)
-        action += 'severity ' + args.severity + '\n'
-    if action:
-        bug.record_action(action)
-    print('Thank you for reporting a bug, which has been assigned number ' + str(bug.id))
+
+    action = ''
+    if msg['Version']:
+        bug.found(msg['Version'])
+    if msg['Tags']: #TODO: handle multiple tags
+        bug.add_tag(msg['Tags'])
+    if msg['Severity']:
+        bug.set_severity(msg['Severity'])
+    eprint('Thank you for reporting a bug, which has been assigned number ' + str(bug.id))
+
+def quote(text):
+    return ''.join('> ' + line + '\n' for line in text.strip('\n').split('\n'))
 
 def do_reply(args):
     if args.close and args.reopen:
-        print('Make up your mind!')
-        return
+        eprint('Make up your mind!')
+        exit(1)
 
-    bug = lightbts.get_bug(args.id)
-    if not bug:
-        print('Could not find bug #' + str(bugno))
-        return
+    if '@' in args.id:
+        origmsg = lightbts.get_message(args.id)
+        if not msg:
+            eprint('Could not find message ID ' + args.id)
+            exit(1)
+        bug = lightbts.get_bug(msg.get_bug())
+    else:
+        bug = lightbts.get_bug(int(args.id))
+        if not bug:
+            eprint('Could not find bug #' + args.id)
+            exit(1)
+        origmsg = lightbts.get_message(bug.get_first_msgid())
 
-    address = lightbts.get_local_email_address()
-    print("Write the bug reply here, press control-D on an empty line to stop:")
-    text = sys.stdin.read();
-    lightbts.reply(bug, address, text);
+    # Create message headers, start with From: so the file command recognizes it as message/rfc822
+    msg = email.message.Message()
+    msg['From'] = lightbts.get_local_email_address()
+    msg['Subject'] = bug.title
+
+    if is_interactive():
+        origdate = origmsg.get_msg()['Date']
+        (origrealname, origaddress) = email.utils.parseaddr(origmsg.get_msg()['From'])
+        body = "On " + origdate + ", " + origrealname + " wrote:\n\n"
+        body += quote(origmsg.get_body())
+
+        msg.set_payload(body)
+
+        msg = edit_interactive(msg, 'reply-' + str(bug.get_id()))
+        if not msg:
+            eprint("Aborting bug reply.")
+            exit(1)
+    else:
+        msg.set_payload(sys.stdin.read())
+
+    msg['To'] = 'LightBTS'
+    msg['Date'] = email.utils.formatdate()
+    msg['User-Agent'] = 'LightBTS/' + lightbts.__version__
+    msg['In-Reply-To'] = '<' + origmsg.get_msgid() + '>'
+
+    (bug, new) = lightbts.import_email(msg);
+
     action = ''
     if args.version:
         if args.close:

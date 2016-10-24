@@ -263,8 +263,24 @@ class message(object):
     def get_headers():
         return ''
 
-    def get_body():
-        return ''
+    def get_body(self):
+        msg = self.get_msg()
+        text = None
+        html = None
+        for part in msg.walk():
+            if part.get_content_type() == "text/plain":
+                text = part
+                break
+            if part.get_content_type() == "text/html":
+                html = part
+
+        if text:
+            return text.get_payload(decode = True)
+
+        if html:
+            return html.get_payload(decode = True)
+
+        return msg.msg.as_string()
 
     def set_spam(self, value=True):
         db.execute('UPDATE messages SET spam=? WHERE msgid=?', (value, self._msgid))
@@ -461,6 +477,9 @@ def init(dir=None):
     config.set('email', 'templates', 'templates')
     config.set('email', 'smtphost', 'localhost')
 
+    config.add_section('cli')
+    config.set('cli', 'editor', '')
+
     # Read the configuration file
 
     try:
@@ -596,10 +615,15 @@ def import_email(msg):
     if not msg['Message-ID']:
         msg['Message-ID'] = email.utils.make_msgid('LightBTS')
 
+    # Handle missing Date
+
+    if not msg['Date']:
+        msg['Date'] = email.utils.formatdate()
+
     # Save message to new
 
     msgid = email.utils.unquote(msg['Message-ID'])
-    parent = email.utils.unquote(msg['In-Reply-To'])
+    parent = email.utils.unquote(msg['In-Reply-To'] or '')
     subject = msg['Subject']
     key = mail.add(msg)
 
