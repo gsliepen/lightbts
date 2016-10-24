@@ -1,10 +1,15 @@
 #!/usr/bin/python
 
+from __future__ import print_function
+
 import os
 import argparse
 import sys
 
 import lightbts
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
 def do_init(args):
     if not args.dir:
@@ -18,14 +23,14 @@ def do_init(args):
     lightbts.init(args.dir)
 
     if new:
-        print("Initialized empty LightBTS instance in " + args.dir)
+        eprint("Initialized empty LightBTS instance in " + args.dir)
     else:
-        print("Reinitialized existing LightBTS instance in " + args.dir)
+        eprint("Reinitialized existing LightBTS instance in " + args.dir)
 
 def do_config(args):
     option = args.option.split('.')
     if len(option) != 2:
-        print("Invalid option name")
+        eprint("Invalid option name")
         exit(1)
 
     (section, option) = option
@@ -47,8 +52,8 @@ def do_list(args):
 def do_show_bug(bugno, verbose):
     bug = lightbts.get_bug(bugno)
     if not bug:
-        print('Could not find bug #' + str(bugno))
-        return
+        eprint('Could not find bug #' + str(bugno))
+        exit(1)
 
     found_versions = bug.get_found_versions()
     fixed_versions = bug.get_fixed_versions()
@@ -81,8 +86,8 @@ def do_show_bug(bugno, verbose):
 def do_show_message(msgid):
     msg = lightbts.get_message(msgid)
     if not msg:
-        print('Could not find message with id ' + msgid)
-        return
+        eprint('Could not find message with id ' + msgid)
+        exit(1)
 
     bug = lightbts.get_bug(msg.bug)
     found_versions = bug.get_found_versions()
@@ -165,7 +170,8 @@ def do_reply(args):
         action += 'reopen\n'
     if action:
         bug.record_action(action)
-    print('Thank you for reporting additional information for bug number ' + str(bug.id))
+    eprint('Thank you for reporting additional information for bug number ' + str(bug.id))
+
 
 def do_close(args):
     bug = lightbts.get_bug(args.id)
@@ -396,8 +402,9 @@ def do_help(args):
         if args.command in subparser.choices:
             subparser.choices[args.command].print_help()
         else:
-            print("Unknown command " + args.command)
-            parser.print_usage()
+            eprint("Unknown command " + args.command)
+            parser.print_usage(file = sys.stderr)
+            exit(1)
     else:
         parser.print_help()
 
