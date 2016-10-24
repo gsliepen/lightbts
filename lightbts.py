@@ -260,7 +260,7 @@ class message(object):
 
     msg = property(get_msg)
 
-    def get_headers():
+    def get_headers(self):
         return ''
 
     def get_body(self):
@@ -641,16 +641,17 @@ def import_email(msg):
     bugno = 0
     new = False
 
-    matches = db.execute("SELECT bug FROM messages WHERE msgid=?", (parent,))
-    for i in matches:
-        if i[0]:
-            bugno = i[0]
+    if parent:
+        matches = db.execute("SELECT bug FROM messages WHERE msgid=?", (parent,))
+        for i in matches:
+            if i[0]:
+                bugno = i[0]
 
     # Try finding one with a similar subject
     # TODO: more robust?
 
     if not bugno:
-            db.execute("SELECT id FROM bugs WHERE title LIKE ?", ('%' + subject,))
+            matches = db.execute("SELECT id FROM bugs WHERE title LIKE ?", ('%' + subject,))
             for i in matches:
                 if i[0]:
                     bugno = i[0]
