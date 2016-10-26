@@ -1,37 +1,38 @@
 #!/usr/bin/python
 # coding: utf-8
 
-import lightbts
 import argparse
 import os
 import syslog
 import string
 import urlparse
 
-copyright = 'LightBTS ' + lightbts.__version__ + ', copyright (c) 2014-2015 Guus Sliepen'
+import lightbts
+
+copyright = 'LightBTS ' + lightbts.__version__ + ', copyright (c) 2014-2016 Guus Sliepen'
 
 def init():
-        lightbts.init(home)
+    lightbts.init(home)
 
-        # Load templates
-        global tmpl_main
-        tmpl_main = lightbts.get_template('main.html')
+    # Load templates
+    global tmpl_main
+    tmpl_main = lightbts.get_template('main.html')
 
-        global tmpl_bugrow
-        tmpl_bugrow = lightbts.get_template('bugrow.html')
+    global tmpl_bugrow
+    tmpl_bugrow = lightbts.get_template('bugrow.html')
 
-        global tmpl_bug
-        tmpl_bug = lightbts.get_template('bug.html')
+    global tmpl_bug
+    tmpl_bug = lightbts.get_template('bug.html')
 
-        global tmpl_message
-        tmpl_message = lightbts.get_template('message.html')
+    global tmpl_message
+    tmpl_message = lightbts.get_template('message.html')
 
-        if not tmpl_main or not tmpl_bugrow or not tmpl_bug or not tmpl_message:
-            exit(1)
+    if not tmpl_main or not tmpl_bugrow or not tmpl_bug or not tmpl_message:
+        exit(1)
 
 def exit():
-        lightbts.exit()
-        pass
+    lightbts.exit()
+    pass
 
 def do_bug(environ, start_response, query):
     init()
@@ -48,7 +49,7 @@ def do_bug(environ, start_response, query):
     for msg in bug.get_messages():
         msglist += tmpl_message.substitute({'msgid': msg.msg['Message-ID'], 'from': msg.msg['From'], 'to': msg.msg['To'], 'subject': msg.msg['Subject'], 'date': msg.msg['Date'], 'body': msg.msg.get_payload()})
 
-    page = tmpl_bug.substitute({'id': bug.id, 'submitter': 'x', 'date': 'x', 'status': bug.statusname, 'severity': bug.severityname 'title': bug.title, 'msglist': msglist, 'root': lightbts.webroot, 'copyright': copyright})
+    page = tmpl_bug.substitute({'id': bug.id, 'submitter': 'x', 'date': 'x', 'status': bug.statusname, 'severity': bug.severityname, 'title': bug.title, 'msglist': msglist, 'root': lightbts.webroot, 'copyright': copyright})
     exit()
     return str(page)
 
@@ -66,22 +67,27 @@ def myapp(environ, start_response):
     for bug in lightbts.list_bugs(args):
         buglist += tmpl_bugrow.substitute({'id': bug._id, 'status': bug.statusname, 'severity': bug.severityname, 'title': bug.title})
     page = tmpl_main.substitute({'buglist': str(buglist), 'copyright': copyright, 'root': lightbts.staticroot})
-    exit()
 
-    return page
+    return str(page)
 
 if __name__ == '__main__':
-        global home
-	# Initialize
-	syslog.syslog("LightBTS web starting")
+    global home
+    # Initialize
+    syslog.syslog("LightBTS web starting")
 
-	parser = argparse.ArgumentParser(description='LightBTS web frontend.', epilog='Report bugs to guus@sliepen.org.')
-	parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
-	parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
+    parser = argparse.ArgumentParser(description='LightBTS web frontend.', epilog='Report bugs to guus@sliepen.org.')
+    parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
+    parser.add_argument('-p', '--port', metavar='PORT', help='TCP port to listen on', type=int, default=8080)
+    parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
 
-	args = parser.parse_args()
+    args = parser.parse_args()
+    home = args.data
 
-	home = args.data
-
-	from flup.server.fcgi import WSGIServer
-	WSGIServer(myapp).run()
+    if os.getenv("GATEWAY_INTERFACE"):
+        from flup.server.fcgi import WSGIServer
+        WSGIServer(myapp).run()
+    else:
+        from wsgiref.simple_server import make_server
+        httpd = make_server('127.0.0.1', args.port, myapp)
+        print "Serving on port " + str(args.port) + "..."
+        httpd.serve_forever()
