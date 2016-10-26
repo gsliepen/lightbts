@@ -65,6 +65,8 @@ def do_show_bug(bugno, verbose):
     fixed_versions = bug.get_fixed_versions()
     print('Bug#' + str(bug.id) + ': ' + bug.title)
     print('Status: ' + bug.statusname)
+    if bug.status and bug.progress:
+        print('Progress: ' + str(bug.progress) + '%')
     if found_versions:
         print('Found in: ' + ' '.join(found_versions))
     if fixed_versions:
@@ -73,6 +75,10 @@ def do_show_bug(bugno, verbose):
     tags = bug.get_tags()
     if tags:
         print('Tags: ' + ' '.join(tags))
+    if bug.deadline:
+        print('Deadline: ' + email.utils.formatdate(float(bug.deadline)))
+    if bug.milestone:
+        print('Milestone: ' + bug.milestone)
 
     print('')
 
@@ -381,6 +387,32 @@ def do_spam(args):
 def do_nospam(args):
     lightbts.db.execute('UPDATE messages SET spam=0 WHERE msgid=?', (args.msgid,))
 
+def do_deadline(args):
+    timestamp = dateutil.parse(args.deadline)
+    bug = lightbts.get_bug(args.id)
+    bug.set_deadline(timestamp)
+    bug.record_action('deadline ' + str(timestamp))
+
+def do_milestone(args):
+    bug = lightbts.get_bug(args.id)
+    bug.set_milestone(args.milestone)
+    bug.record_action('milestone ' + args.milestone)
+
+def do_progress(args):
+    try:
+        value = int(args.progress.rstrip('%'))
+    except ValueError:
+        eprint("Invalid format for progress")
+        exit(1)
+
+    if value < 0 or value > 100:
+        eprint("Progress value must be between 0 and 100")
+        exit(1)
+
+    bug = lightbts.get_bug(args.id)
+    bug.set_progress(value)
+    bug.record_action('progress ' + str(value))
+
 # Initialize
 
 parser = argparse.ArgumentParser(description='Manage bugs.', epilog='Report bugs to guus@sliepen.org.')
@@ -497,6 +529,22 @@ parser_spam.set_defaults(func=do_spam)
 parser_nospam = subparser.add_parser('nospam', help='mark a message as not being spam')
 parser_nospam.add_argument('id', help='bug id')
 parser_nospam.set_defaults(func=do_nospam)
+
+parser_progress = subparser.add_parser('progress', help='set level of progress made')
+parser_progress.add_argument('id', help='bug id')
+parser_progress.add_argument('progress', help='progress made in percent (integers only)')
+parser_progress.set_defaults(func=do_progress)
+
+parser_milestone = subparser.add_parser('milestone', help='associate bug with a project milestone')
+parser_milestone.add_argument('id', help='bug id')
+parser_milestone.add_argument('milestone', help='milestone name')
+parser_milestone.set_defaults(func=do_milestone)
+
+parser_deadline = subparser.add_parser('deadline', help='set deadline for a bug')
+parser_deadline.add_argument('id', help='bug id')
+parser_deadline.add_argument('deadline', help='deadline (many date/time formats accepted)')
+parser_deadline.set_defaults(func=do_deadline)
+
 
 def do_help(args):
     if args.command:

@@ -84,11 +84,17 @@ def get_local_email_address():
         return address
 
 class bug(object):
-    def __init__(self, id=None, title=None, status=None, severity=None):
+    def __init__(self, id=None, title=None, status=None, severity=None, owner=None, submitter=None, date=None, deadline=None, progress=0, milestone=None):
         self._id = id
         self._title = title
         self._status = status
         self._severity = severity
+        self._owner = owner
+        self._submitter = submitter
+        self._date = date
+        self._deadline = deadline
+        self._progress = progress
+        self._milestone = milestone
 
     def get_id(self):
         return self._id
@@ -177,11 +183,48 @@ class bug(object):
                 else:
                     self.del_tag(tag)
 
+    def get_owner(self):
+        return self._owner
+
     def set_owner(self, owner):
         if owner:
             db.execute('UPDATE bugs SET owner=? WHERE id=?', (owner, self._id))
         else:
             db.execute('UPDATE bugs SET owner=NULL WHERE id=?', (owner, self._id))
+        self._owner = owner
+
+    owner = property(get_owner, set_owner)
+
+    def get_deadline(self):
+        return self._deadline
+
+    def set_deadline(self, deadline):
+        if deadline:
+            db.execute('UPDATE bugs SET deadline=? WHERE id=?', (deadline, self._id))
+        else:
+            db.execute('UPDATE bugs SET deadline=NULL WHERE id=?', (deadline, self._id))
+        self._deadline = deadline
+
+    deadline = property(get_deadline, set_deadline)
+
+    def get_milestone(self):
+        return self._milestone
+
+    def set_milestone(self, milestone):
+        if milestone:
+            db.execute('UPDATE bugs SET milestone=? WHERE id=?', (milestone, self._id))
+        else:
+            db.execute('UPDATE bugs SET milestone=NULL WHERE id=?', (milestone, self._id))
+
+    milestone = property(get_milestone, set_milestone)
+
+    def get_progress(self):
+        return self._progress
+
+    def set_progress(self, progress):
+        db.execute('UPDATE bugs SET progress=? WHERE id=?', (progress, self._id))
+
+    progress = property(get_progress, set_progress)
 
     def close(self):
         self.set_status(0)
@@ -342,8 +385,8 @@ def search_bugs(args):
     return bugs
 
 def get_bug(bugno):
-    for i in db.execute('SELECT id, title, status, severity FROM bugs WHERE id=?', (bugno,)):
-        return bug(int(i[0]), i[1], i[2], i[3])
+    for i in db.execute('SELECT id, title, status, severity, owner, submitter, date, deadline, progress, milestone FROM bugs WHERE id=?', (bugno,)):
+        return bug(int(i[0]), title = i[1], status = i[2], severity = i[3], owner = i[4], submitter = i[5], date = i[6], deadline = i[7], progress = i[8], milestone = i[9])
     return None
 
 def get_bug_from_title(title):
@@ -406,7 +449,7 @@ def init_db(dbfile):
 
     if not version:
         # Fresh start, create everything.
-        db.execute('CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER)')
+        db.execute('CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER, deadline INTEGER, progress INTEGER NOT NULL DEFAULT 0, milestone TEXT)')
         db.execute('CREATE TABLE merges (a INTEGER, b INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), CHECK (a < b), FOREIGN KEY(b) REFERENCES bugs(id))')
         db.execute('CREATE TABLE messages (msgid PRIMARY KEY, key TEXT, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, date INTEGER, FOREIGN KEY(bug) REFERENCES bugs(id))')
         db.execute('CREATE INDEX messages_key_index ON messages (key)')
@@ -419,14 +462,22 @@ def init_db(dbfile):
         db.execute('CREATE TABLE versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))')
         db.execute('CREATE INDEX versions_bug_index ON versions (bug)')
         db.execute('CREATE INDEX versions_version_index ON versions (version)')
-        db.execute('PRAGMA user_version=1')
-        return db
-    elif version == 1:
-        # Latest version, nothing to do.
-        return db
-    elif version < 0 or version > 1:
+        db.execute('PRAGMA user_version=2')
+        db.commit()
+
+    if version < 0 or version > 2:
         logging.error("Unknown database version " + str(version))
         sys.exit(1)
+
+    if version < 2:
+        logging.info("Upgrading database to version 2...")
+        db.execute('ALTER TABLE bugs ADD COLUMN deadline INTEGER')
+        db.execute('ALTER TABLE bugs ADD COLUMN progress INTEGER')
+        db.execute('ALTER TABLE bugs ADD COLUMN milestone TEXT')
+        db.execute('PRAGMA user_version=2')
+        db.commit()
+
+    return db
 
 def init(dir=None):
     global basedir, config, dbfile, maildir, project, admin, respond_to_new, respond_to_reply
