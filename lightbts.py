@@ -263,7 +263,7 @@ class bug(object):
         return result
 
     def get_first_msgid(self):
-        return db.execute('SELECT msgid FROM messages WHERE bug=?', (self._id,)).fetchone()[0]
+        return db.execute('SELECT msgid FROM messages WHERE bug=? LIMIT 1', (self._id,)).fetchone()[0]
 
     def record_action(self, action, address=get_local_email_address()):
         msg = create_message(self.title, address, action, headers={
