@@ -333,7 +333,7 @@ class message(object):
         movefrom = os.path.join(maildir, 'new', self._key)
         moveto = os.path.join(maildir, str(bug.id), 'cur', self._key)
         os.rename(movefrom, moveto)
-     
+
         db.execute('UPDATE messages SET bug=? WHERE key=?', (bug.id, self._key))
         db.execute('INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)', (bug.id, self._msg['From']))
 
@@ -371,7 +371,7 @@ def list_bugs(args):
             cmd += ' OR EXISTS (SELECT 1 FROM tags WHERE bug=id AND tag=?)'
             cmdargs.append(i)
         cmd += ')'
-            
+
     bugs = []
     for i in db.execute(cmd, tuple(cmdargs)):
         bugs.append(bug(int(i[0]), i[1], i[2], i[3]))
@@ -464,6 +464,7 @@ def init_db(dbfile):
         db.execute('CREATE INDEX versions_version_index ON versions (version)')
         db.execute('PRAGMA user_version=2')
         db.commit()
+        version = 2
 
     if version < 0 or version > 2:
         logging.error("Unknown database version " + str(version))
@@ -533,10 +534,8 @@ def init(dir=None):
 
     # Read the configuration file
 
-    try:
+    if not os.access(basedir, os.F_OK):
         os.makedirs(basedir)
-    except:
-        pass
 
     config.read(os.path.join(basedir, 'config'))
 
@@ -626,7 +625,7 @@ def create(title, address, text):
     bug = create_bug(title)
     msg.assign_to(bug)
     return bug
- 
+
 def reply(bug, address, text):
     msg = create_message(bug.title, address, text)
     msg.assign_to(bug)
