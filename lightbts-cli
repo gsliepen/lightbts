@@ -415,6 +415,9 @@ def do_progress(args):
 
 # Initialize
 
+if not os.getenv("TRACEBACK"):
+    sys.tracebacklimit = 0
+
 parser = argparse.ArgumentParser(description='Manage bugs.', epilog='Report bugs to guus@sliepen.org.')
 parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
 parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
