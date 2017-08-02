@@ -7,6 +7,7 @@ import getpass
 import platform
 import email
 import mailbox
+import re
 import sqlite3
 import string
 import logging
@@ -136,12 +137,11 @@ class bug(object):
         return severityname(self._severity)
 
     def set_severity(self, severity):
-        code = severities.index(severity)
-        db.execute('UPDATE bugs SET severity=? WHERE id=?', (code, self._id))
+        db.execute('UPDATE bugs SET severity=? WHERE id=?', (severity, self._id))
         self._severity = severity
 
     def set_severityname(self, name):
-        set_severity(severityinex(name))
+        set_severity(severityindex(name))
 
     severity = property(get_severity, set_severity)
     severityname = property(get_severityname, set_severityname)
@@ -164,7 +164,7 @@ class bug(object):
     def clear_tags(self):
         db.execute('DELETE FROM tags WHERE bug=?', (self._id,))
 
-    def modify_tags(self, *tags):
+    def modify_tags(self, tags):
         add = True
         for tag in tags:
             if tag[0] == '-':
@@ -630,6 +630,140 @@ def reply(bug, address, text):
     msg = create_message(bug.title, address, text)
     msg.assign_to(bug)
 
+def parse_metadata(bug, msg, msgstatus = None):
+    text = msg.get_payload()
+    regex = re.compile("([A-Za-z-]+):[ \t]+(.*)")
+
+    status = None
+    severity = None
+    title = None
+    tags = []
+    version = None
+    found = []
+    notfound = []
+    fixed = []
+    notfixed = []
+    merge = []
+    unmerge = []
+    owner = None
+    progress = None
+    milestone = None
+    deadline = None
+
+    for line in text.splitlines():
+        match = regex.match(line)
+        if not match:
+            break
+
+        key = match.group(1).lower()
+        value = match.group(2).strip()
+
+        if key == "status":
+            if status:
+                log += "Duplicate status field.\n"
+            try:
+                status = statusindex(value.lower())
+            except ValueError:
+                log += "Invalid status field.\n"
+
+        elif key == "severity":
+            if severity:
+                log += "Duplicate severity field.\n"
+            try:
+                severity = severityindex(value.lower())
+            except ValueError:
+                log += "Invalid severity field.\n"
+
+        elif key == "tags" or key == "tag":
+            tags.append(value)
+
+        elif key == "version":
+            version = value
+
+        elif key == "found":
+            found.extend(value.split())
+
+        elif key == "notfound":
+            found.extend(value.split())
+
+        elif key == "fixed":
+            fixed.extend(value.split())
+
+        elif key == "notfixed":
+            notfixed.extend(value.split())
+
+        elif key == "merge":
+            merge.extend(value.split())
+
+        elif key == "unmerge":
+            unmerge.extend(value.split())
+
+        elif key == "owner":
+            if owner:
+                log += "Duplicate owner field.\n"
+            owner = value
+
+        elif key == "progress":
+            if value[-1] == '%':
+                value = value[:-1]
+            try:
+                progress = int(value)
+            except ValueError:
+                log += "Invalid progress field.\n"
+
+        elif key == "milestone":
+            if milestone:
+                log += "Duplicate milestone field.\n"
+            milestone = value
+
+        elif key == "deadline":
+            if deadline:
+                log += "Duplicate deadline field.\n"
+            deadline = value
+
+        elif key == "title" or key == "topic":
+            if title:
+                log += "Duplicate title field.\n"
+            title = value
+
+    if status is not None:
+        bug.set_status(status)
+    else:
+        status = 1
+
+    if severity is not None:
+        bug.set_severity(severity)
+
+    if title:
+        bug.set_title(title)
+
+    if version:
+        bug.set_version_status(version, status)
+
+    for version in notfound:
+        bug.notfound(version)
+
+    for version in found:
+        bug.found(version)
+
+    for version in notfixed:
+        bug.notfixed(version)
+
+    for version in fixed:
+        bug.fixed(version)
+
+    if milestone:
+        bug.set_milestone(milestone)
+
+    if deadline:
+        bug.set_deadline(deadline)
+
+    if owner:
+        bug.set_owner(owner)
+
+    for tag in tags:
+        bug.modify_tags(tag.split())
+
 def forward_message(bug, msg):
     # Get email addresses of bug participants
     # TODO: handle -quiet, -maintonly, -submitter here.
@@ -727,6 +861,10 @@ def import_email(msg):
     # Email a copy to interested people
 
     forward_message(bug, msg)
+
+    # Handle metadata
+
+    parse_metadata(bug, msg)
 
     return (bug, new)
 

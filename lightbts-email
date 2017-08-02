@@ -92,14 +92,11 @@ lightbts.record_msgid(bug.id, email.utils.unquote(reply['Message-ID']))
 
 action=''
 if args.tag:
-    bug.add_tag(args.tag)
-    action += 'tags +' + args.tag + '\n'
+    action += 'Tags: +' + args.tag + '\n'
 if args.close:
-    bug.close()
-    action += 'close\n'
+    action += 'Status: closed\n'
 if args.reopen:
-    bug.reopen()
-    action += 'reopen\n'
+    action += 'Status: open\n'
 if action:
     bug.record_action(action)
 
