@@ -65,6 +65,10 @@ def do_show_bug(bugno, verbose):
     fixed_versions = bug.get_fixed_versions()
     print('Bug#' + str(bug.id) + ': ' + bug.title)
     print('Status: ' + bug.statusname)
+    if bug.submitter:
+        print('Submitted by:  ' + bug.submitter)
+    if bug.owner != bug.submitter:
+        print('Owner by: ' + bug.owner)
     if bug.status and bug.progress:
         print('Progress: ' + str(bug.progress) + '%')
     if found_versions:

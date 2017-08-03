@@ -195,6 +195,11 @@ class bug(object):
 
     owner = property(get_owner, set_owner)
 
+    def get_submitter(self):
+        return self._submitter
+
+    submitter = property(get_submitter)
+
     def get_deadline(self):
         return self._deadline
 
