@@ -22,12 +22,16 @@ parser.add_argument('-c', '--close', help='close the bug', action='store_true')
 parser.add_argument('-r', '--reopen', help='reopen the bug', action='store_true')
 parser.add_argument('-T', '--tag', metavar='TAG', help='set the given tag')
 parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
+parser.add_argument('--no-email', action='store_true', help='do not send email messages')
 
 args = parser.parse_args()
 
 if args.close and args.reopen:
     logger.error('Make up your mind!')
     sys.exit(1)
+
+if args.no_email:
+    lightbts.quiet = True
 
 lightbts.init(args.data)
 
@@ -58,6 +62,12 @@ if args.reopen:
     msg['X-LightBTS-Status'] = 'open'
 
 (bug, new) = lightbts.import_email(msg)
+
+# Exit early is we are not supposed to reply
+
+if args.no_email:
+    lightbts.exit()
+    sys.exit(0)
 
 # Construct a reply
 

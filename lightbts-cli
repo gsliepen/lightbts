@@ -8,6 +8,7 @@ import sys
 import subprocess
 import tempfile
 import email.message
+import dateutil.parser
 
 import lightbts
 
@@ -66,9 +67,9 @@ def do_show_bug(bugno, verbose):
     print('Bug#' + str(bug.id) + ': ' + bug.title)
     print('Status: ' + bug.statusname)
     if bug.submitter:
-        print('Submitted by:  ' + bug.submitter)
+        print('Submitter:  ' + bug.submitter)
     if bug.owner != bug.submitter:
-        print('Owner by: ' + bug.owner)
+        print('Owner: ' + bug.owner)
     if bug.status and bug.progress:
         print('Progress: ' + str(bug.progress) + '%')
     if found_versions:
@@ -148,6 +149,7 @@ def edit_interactive(msg, hint = 'bug'):
     #Write message
     text = msg.as_string()
     file.write(text)
+    file.write('\n')
 
     file.seek(0)
     stat_before = os.fstat(fd)
@@ -181,20 +183,24 @@ def do_create(args):
     msg['From'] = lightbts.get_local_email_address()
     msg['Subject'] = ' '.join(args.title)
 
+    action = ''
     if args.version:
-        msg['Version'] = args.version
+        action += 'Version: ' + args.version + '\n'
     if args.severity:
-        msg['Severity'] = args.severity
+        action += 'Severity: ' + args.severity + '\n'
     if args.tag:
-        msg['Tags'] = args.tag
+        action += 'Tags: +' + args.tag + '\n'
+    if action:
+        action += '\n'
 
     if is_interactive():
+        msg.set_payload(action)
         msg = edit_interactive(msg, 'create')
         if not msg:
             eprint("Aborting new bug report.")
             exit(1)
     else:
-        msg.set_payload(sys.stdin.read())
+        msg.set_payload(action + sys.stdin.read())
 
     msg['To'] = 'LightBTS'
     msg['Date'] = email.utils.formatdate()
@@ -205,13 +211,6 @@ def do_create(args):
     if not bug:
         exit(1)
 
-    action = ''
-    if msg['Version']:
-        bug.found(msg['Version'])
-    if msg['Tags']: #TODO: handle multiple tags
-        bug.add_tag(msg['Tags'])
-    if msg['Severity']:
-        bug.set_severity(msg['Severity'])
     eprint('Thank you for reporting a bug, which has been assigned number ' + str(bug.id))
 
 def quote(text):
@@ -224,10 +223,10 @@ def do_reply(args):
 
     if '@' in args.id:
         origmsg = lightbts.get_message(args.id)
-        if not msg:
+        if not origmsg:
             eprint('Could not find message ID ' + args.id)
             exit(1)
-        bug = lightbts.get_bug(msg.get_bug())
+        bug = lightbts.get_bug(origmsg.get_bug())
     else:
         bug = lightbts.get_bug(int(args.id))
         if not bug:
@@ -240,10 +239,25 @@ def do_reply(args):
     msg['From'] = lightbts.get_local_email_address()
     msg['Subject'] = bug.title
 
+    action = ''
+    if args.version:
+        if args.close:
+            action += 'Fixed: ' + args.version + '\n'
+        else:
+            action += 'Found: ' + args.version + '\n'
+    if args.tag:
+        action += 'Tags: +' + args.tag + '\n'
+    if args.close:
+        action += 'Status: closed\n'
+    if args.reopen:
+        action += 'Status: open\n'
+
+    action += '\n'
+
     if is_interactive():
         origdate = origmsg.get_msg()['Date']
         (origrealname, origaddress) = email.utils.parseaddr(origmsg.get_msg()['From'])
-        body = "On " + origdate + ", " + origrealname + " wrote:\n\n"
+        body = action + "On " + origdate + ", " + origrealname + " wrote:\n\n"
         body += quote(origmsg.get_body())
 
         msg.set_payload(body)
@@ -253,7 +267,7 @@ def do_reply(args):
             eprint("Aborting bug reply.")
             exit(1)
     else:
-        msg.set_payload(sys.stdin.read())
+        msg.set_payload(action + sys.stdin.read())
 
     msg['To'] = 'LightBTS'
     msg['Date'] = email.utils.formatdate()
@@ -262,128 +276,102 @@ def do_reply(args):
 
     (bug, new) = lightbts.import_email(msg);
 
-    action = ''
-    if args.version:
-        if args.close:
-            bug.fixed(args.version)
-            action += 'fixed ' + args.version + '\n'
-        else:
-            bug.found(args.version)
-            action += 'found ' + args.version + '\n'
-    if args.tag:
-        bug.add_tag(args.tag)
-        action += 'tags +' + args.tag + '\n'
-    if args.close:
-        bug.close()
-        action += 'close\n'
-    if args.reopen:
-        bug.reopen()
-        action += 'reopen\n'
-    if action:
-        bug.record_action(action)
     eprint('Thank you for reporting additional information for bug number ' + str(bug.id))
+
+def do_action(bug, action):
+    # Create message headers, start with From: so the file command recognizes it as message/rfc822
+    msg = email.message.Message()
+    msg['From'] = lightbts.get_local_email_address()
+    msg['Subject'] = bug.title
+
+    if is_interactive():
+        msg.set_payload(action)
+
+        msg = edit_interactive(msg, 'reply-' + str(bug.get_id()))
+        if not msg:
+            eprint("Aborting bug action.")
+            exit(1)
+    else:
+        msg.set_payload(action)
+
+    msg['To'] = 'LightBTS'
+    msg['Date'] = email.utils.formatdate()
+    msg['User-Agent'] = 'LightBTS/' + lightbts.__version__
+    msg['In-Reply-To'] = '<' + bug.get_first_msgid() + '>'
+
+    (bug, new) = lightbts.import_email(msg);
+
+    eprint('Action recorded for bug number ' + str(bug.id))
 
 
 def do_close(args):
     bug = lightbts.get_bug(args.id)
-    action = 'close'
-    bug.close()
+    action = 'Status: closed\n'
 
     if args.version:
-        bug.fixed(args.version)
-        action += '\nfixed ' + args.version
+        action += 'Fixed: ' + args.version + '\n'
 
     if args.tag:
-        bug.add_tag(args.tag)
-        action += '\ntags +' + args.tag
+        action += 'Tags: +' + args.tag + '\n'
 
-    bug.record_action(action)
+    do_action(bug, action)
 
 def do_reopen(args):
     bug = lightbts.get_bug(args.id)
-    bug.reopen()
-    action = 'reopen'
+    action = 'Status: open\n'
 
     if args.version:
-        bug.found(args.version)
-        action += '\nfound ' + args.version
-    if args.tag:
-        bug.add_tag(args.tag)
-        action += '\ntags +' + args.tag
+        action += 'Found: ' + args.version + '\n'
 
-    bug.record_action(action)
+    if args.tag:
+        action += 'Tags: +' + args.tag + '\n'
+
+    do_action(bug, action)
 
 def do_retitle(args):
     bug = lightbts.get_bug(args.id)
     title = ' '.join(args.title)
-    bug.set_title(title)
-    bug.record_action('retitle ' + title)
+    do_action(bug, 'Title: ' + title);
 
 def do_found(args):
     bug = lightbts.get_bug(args.id)
-    bug.found(args.version)
-    bug.record_action('found ' + args.version)
+    do_action(bug, 'Found: ' + args.version)
 
 def do_notfound(args):
     bug = lightbts.get_bug(args.id)
-    bug.notfound(args.version)
-    bug.record_action('notfound ' + args.version)
+    do_action(bug, 'Notfound: ' + args.version)
 
 def do_fixed(args):
     bug = lightbts.get_bug(args.id)
-    bug.fixed(args.version)
-    bug.record_action('fixed ' + args.version)
+    do_action(bug, 'Fixed: ' + args.version)
 
 def do_notfixed(args):
     bug = lightbts.get_bug(args.id)
-    bug.notfixed(args.version)
-    bug.record_action('notfixed ' + args.version)
+    do_action(bug, 'Notfixed: ' + args.version)
 
 def do_severity(args):
     bug = lightbts.get_bug(args.id)
-    bug.set_severity(args.severity)
-    bug.record_action('severity ' + args.severity)
+    do_action(bug, 'Severity: ' + args.severity)
 
 def do_merge(args):
-    a = min(args.id)
-    lightbts.merge(args.id)
-    a.record_action('merge ' + ' '.join(args.id))
+    #TODO: implement
+    pass
 
 def do_unmerge(args):
-    a = min(args.id)
-    lightbts.unmerge(args.id)
-    a.record_action('unmerge ' + ' '.join(args.id))
+    #TODO: implement
+    pass
 
 def do_tags(args):
     bug = lightbts.get_bug(args.id)
-    add = True
-    for tag in args.tags:
-        if tag[0] == '-':
-            add = False
-            tag = tag[1:]
-        elif tag[0] == '+':
-            add = True
-            tag = tag[1:]
-        elif tag[0] == '=':
-            add = True
-            bug.clear_tags()
-            tag = tag[1:]
-        if tag:
-            if add:
-                bug.add_tag(tag)
-            else:
-                bug.del_tag(tag)
-    bug.record_action('tags ' + ' '.join(args.tags))
+    do_action(bug, 'Tags: ' + ' '.join(args.tags))
 
 def do_owner(args):
     bug = lightbts.get_bug(args.id)
-    bug.set_owner(args.owner)
-    bug.record_action('owner ' + args.owner)
+    do_action(bug, 'Owner: ' + args.email)
 
 def do_noowner(args):
     bug = lightbts.get_bug(args.id)
-    bug.set_owner(None)
-    bug.record_action('noowner')
+    do_action(bug, 'Owner: -')
 
 def do_spam(args):
     lightbts.db.execute('UPDATE messages SET spam=1 WHERE msgid=?', (args.msgid,))
@@ -392,15 +380,13 @@ def do_nospam(args):
     lightbts.db.execute('UPDATE messages SET spam=0 WHERE msgid=?', (args.msgid,))
 
 def do_deadline(args):
-    timestamp = dateutil.parse(args.deadline)
+    timestamp = dateutil.parser.parse(args.deadline)
     bug = lightbts.get_bug(args.id)
-    bug.set_deadline(timestamp)
-    bug.record_action('deadline ' + str(timestamp))
+    do_action(bug, 'Deadline: ' + args.deadline)
 
 def do_milestone(args):
     bug = lightbts.get_bug(args.id)
-    bug.set_milestone(args.milestone)
-    bug.record_action('milestone ' + args.milestone)
+    do_action(bug, 'Milestone: ' + args.milestone)
 
 def do_progress(args):
     try:
@@ -414,8 +400,7 @@ def do_progress(args):
         exit(1)
 
     bug = lightbts.get_bug(args.id)
-    bug.set_progress(value)
-    bug.record_action('progress ' + str(value))
+    do_action(bug, 'Progress: ' + args.progress)
 
 # Initialize
 
@@ -425,6 +410,8 @@ if not os.getenv("TRACEBACK"):
 parser = argparse.ArgumentParser(description='Manage bugs.', epilog='Report bugs to guus@sliepen.org.')
 parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
 parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
+parser.add_argument('--batch', action='store_true', help='no interactive input')
+parser.add_argument('--no-email', action='store_true', help='do not send email messages')
 
 subparser = parser.add_subparsers(title='commands', dest='command')
 
@@ -552,7 +539,6 @@ parser_deadline.add_argument('id', help='bug id')
 parser_deadline.add_argument('deadline', help='deadline (many date/time formats accepted)')
 parser_deadline.set_defaults(func=do_deadline)
 
-
 def do_help(args):
     if args.command:
         if args.command in subparser.choices:
@@ -570,9 +556,13 @@ parser_help.set_defaults(func=do_help)
 
 args = parser.parse_args()
 
-if args.func != do_init:
+if args.no_email:
+    lightbts.quiet = True
+
+if args.func != do_init and args.func != do_help:
     lightbts.init(args.data)
 
 args.func(args)
 
-lightbts.exit()
+if args.func != do_help:
+    lightbts.exit()

@@ -12,6 +12,7 @@ import sqlite3
 import string
 import logging
 import smtplib
+import dateutil
 try:
     import configparser
 except ImportError:
@@ -35,6 +36,7 @@ db = None
 mail = None
 maildir = None
 dbfile = None
+quiet = False
 
 statii = ['closed', 'open']
 severities = ['wishlist', 'minor', 'normal', 'important', 'serious', 'critical', 'grave']
@@ -190,7 +192,7 @@ class bug(object):
         if owner:
             db.execute('UPDATE bugs SET owner=? WHERE id=?', (owner, self._id))
         else:
-            db.execute('UPDATE bugs SET owner=NULL WHERE id=?', (owner, self._id))
+            db.execute('UPDATE bugs SET owner=NULL WHERE id=?', (self._id,))
         self._owner = owner
 
     owner = property(get_owner, set_owner)
@@ -207,7 +209,7 @@ class bug(object):
         if deadline:
             db.execute('UPDATE bugs SET deadline=? WHERE id=?', (deadline, self._id))
         else:
-            db.execute('UPDATE bugs SET deadline=NULL WHERE id=?', (deadline, self._id))
+            db.execute('UPDATE bugs SET deadline=NULL WHERE id=?', (self._id,))
         self._deadline = deadline
 
     deadline = property(get_deadline, set_deadline)
@@ -219,7 +221,7 @@ class bug(object):
         if milestone:
             db.execute('UPDATE bugs SET milestone=? WHERE id=?', (milestone, self._id))
         else:
-            db.execute('UPDATE bugs SET milestone=NULL WHERE id=?', (milestone, self._id))
+            db.execute('UPDATE bugs SET milestone=NULL WHERE id=?', (self._id,))
 
     milestone = property(get_milestone, set_milestone)
 
@@ -227,7 +229,10 @@ class bug(object):
         return self._progress
 
     def set_progress(self, progress):
-        db.execute('UPDATE bugs SET progress=? WHERE id=?', (progress, self._id))
+        if progress or progress == 0:
+            db.execute('UPDATE bugs SET progress=? WHERE id=?', (progress, self._id))
+        else:
+            db.execute('UPDATE bugs SET progress=NULL WHERE id=?', (self._id,))
 
     progress = property(get_progress, set_progress)
 
@@ -379,19 +384,19 @@ def list_bugs(args):
 
     bugs = []
     for i in db.execute(cmd, tuple(cmdargs)):
-        bugs.append(bug(int(i[0]), i[1], i[2], i[3]))
+        bugs.append(bug(int(i[0]), i[1], i[2], int(i[3])))
 
     return bugs
 
 def search_bugs(args):
     bugs = []
     for i in db.execute('SELECT id, title, status, severity FROM bugs WHERE title LIKE ?', (('%' + ' '.join(args.term) + '%'),)):
-        bugs.append(bug(int(i[0]), i[1], i[2], i[3]))
+        bugs.append(bug(int(i[0]), i[1], i[2], int(i[3])))
     return bugs
 
 def get_bug(bugno):
     for i in db.execute('SELECT id, title, status, severity, owner, submitter, date, deadline, progress, milestone FROM bugs WHERE id=?', (bugno,)):
-        return bug(int(i[0]), title = i[1], status = i[2], severity = i[3], owner = i[4], submitter = i[5], date = i[6], deadline = i[7], progress = i[8], milestone = i[9])
+        return bug(int(i[0]), title = i[1], status = int(i[2]), severity = int(i[3]), owner = i[4], submitter = i[5], date = i[6], deadline = i[7], progress = i[8], milestone = i[9])
     return None
 
 def get_bug_from_title(title):
@@ -698,7 +703,7 @@ def parse_metadata(bug, msg, msgstatus = None):
             found.extend(value.split())
 
         elif key == "notfound":
-            found.extend(value.split())
+            notfound.extend(value.split())
 
         elif key == "fixed":
             fixed.extend(value.split())
@@ -733,7 +738,10 @@ def parse_metadata(bug, msg, msgstatus = None):
         elif key == "deadline":
             if deadline:
                 log += "Duplicate deadline field.\n"
-            deadline = value
+            try:
+                deadline = int(dateutil.parser.parse(value).strftime("%s"))
+            except ValueError:
+                log += "Invalid deadline field.\n"
 
         elif key == "title" or key == "topic":
             if title:
@@ -764,6 +772,9 @@ def parse_metadata(bug, msg, msgstatus = None):
     for version in fixed:
         bug.fixed(version)
 
+    if progress is not None:
+        bug.set_progress(progress)
+
     if milestone:
         bug.set_milestone(milestone)
 
@@ -771,7 +782,10 @@ def parse_metadata(bug, msg, msgstatus = None):
         bug.set_deadline(deadline)
 
     if owner:
-        bug.set_owner(owner)
+        if owner == '-':
+            bug.set_owner(None)
+        else:
+            bug.set_owner(owner)
 
     for tag in tags:
         bug.modify_tags(tag.split())
@@ -779,6 +793,8 @@ def parse_metadata(bug, msg, msgstatus = None):
 def forward_message(bug, msg):
     # Get email addresses of bug participants
     # TODO: handle -quiet, -maintonly, -submitter here.
+    if quiet:
+        return
 
     do = [admin]
     for i in db.execute("SELECT address FROM recipients WHERE bug=?", (bug._id,)):

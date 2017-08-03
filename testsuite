@@ -1,0 +1,191 @@
+#!/bin/sh
+set -e
+
+cli=$PWD/lightbts-cli
+email=$PWD/lightbts-email
+web=$PWD/lightbts-web
+
+dir=`mktemp -d /tmp/lbts.XXXXXXXXXX`
+cd $dir
+
+if [ -e .lightbts ]; then
+	echo '.lightbts directory already exists' 1>&2
+	exit 1
+fi
+
+export TRACEBACK=1
+
+# CLI init
+
+$cli help >/dev/null
+$cli init
+$cli config core.project >/dev/null
+$cli config core.project "Test suite"
+test "`$cli config core.project`" = "Test suite"
+
+res=`$cli list`
+test -z "$res"
+
+# CLI create
+
+$cli --no-email create -V 0.1 -T test -S minor First bug <<EOF
+This is the first bug.
+EOF
+
+res=`$cli list`
+test -n "$res"
+
+res=`$cli show 1 | grep '^[^ ]\+$' | wc -l`
+test "$res" = "1"
+
+# CLI create another
+
+$cli --no-email create Second bug <<EOF
+This is the second bug.
+EOF
+
+res=`$cli list | wc -l`
+test "$res" = "2"
+
+# CLI reply to bug number
+
+$cli --no-email reply 1 <<EOF
+This is the first reply.
+EOF
+
+res=`$cli show 1 | grep '^[^ ]\+$' | wc -l`
+test "$res" = "2"
+
+# CLI reply to msgid
+
+id=`$cli show 1 | tail -1`
+$cli --no-email reply "$id" <<EOF
+This is the second reply.
+EOF
+
+res=`$cli show 1 | grep '^[^ ]\+$' | wc -l`
+test "$res" = "3"
+
+# CLI close bugs
+
+res=`$cli list closed`
+test -z "$res"
+
+$cli --no-email close -V 0.2 1 <<EOF
+Closed the first bugs.
+EOF
+
+res=`$cli list closed`
+test -n "$res"
+
+res=`$cli list | wc -l`
+test "$res" = "1"
+
+# Email import
+
+$email --no-email <<EOF
+From: Test Suite
+To: LightBTS
+Subject: email import test
+Message-ID: 1@test
+
+This is the first email message.
+EOF
+
+res=`$cli list | wc -l`
+test "$res" = "2"
+
+
+$email --no-email <<EOF
+From: Test Suite
+To: LightBTS
+Subject: email import test reply
+Message-ID: 2@test
+In-Reply-To: 1@test
+
+This is the reply to the first email message.
+EOF
+
+res=`$cli list | wc -l`
+test "$res" = "2"
+
+res=`$cli show 3 | tail -1`
+test "$res" = "2@test"
+
+# Email close bugs
+
+$email --no-email <<EOF
+From: Test Suite
+To: LightBTS
+Subject: email import test control
+Message-ID: 3@test
+In-Reply-To: 2@test
+
+Status: closed
+Tag: foo -bar baz
+Tag: quux
+thanks
+
+This is a test of control messages.
+EOF
+
+res=`$cli list | wc -l`
+test "$res" = "1"
+
+res=`$cli show 3|grep Tags:`
+test "$res" = "Tags: foo quux"
+
+# CLI test all actions
+
+$cli --no-email config foo.bar baz
+res=`$cli --no-email config foo.bar`
+test "$res" = "baz"
+
+$cli search First | grep -q "First bug$"
+
+$cli --no-email reopen 1 >/dev/null
+$cli list | grep -q "First bug$"
+
+$cli --no-email retitle 1 "Retitled bug" >/dev/null
+$cli list | grep -q "Retitled bug"
+
+$cli --no-email found 2 0.1.2 >/dev/null
+$cli --no-email found 2 0.1.3 >/dev/null
+$cli --no-email notfound 2 0.1.2 >/dev/null
+$cli show 2 | grep -q "^Found in: 0.1.3$"
+
+$cli --no-email fixed 2 0.2.3 >/dev/null
+$cli --no-email fixed 2 0.2.4 >/dev/null
+$cli --no-email notfixed 2 0.2.3 >/dev/null
+$cli show 2 | grep -q "^Fixed in: 0.2.4$"
+
+$cli --no-email severity 2 grave >/dev/null
+$cli show 2 | grep -q "^Severity: grave$"
+
+$cli --no-email tags 2 "+ foo" >/dev/null
+$cli --no-email tags 2 "+bar" >/dev/null
+$cli --no-email tags 2 "baz quux" >/dev/null
+$cli --no-email tags 2 "-bar +bla" >/dev/null
+$cli show 2 | grep -q "^Tags: baz bla foo quux"
+$cli --no-email tags 2 "=bloe" >/dev/null
+$cli show 2 | grep -q "^Tags: bloe"
+
+$cli --no-email owner 2 Rowen >/dev/null
+$cli show 2 | grep -q "^Owner: Rowen"
+
+$cli --no-email noowner 2 >/dev/null
+! ($cli show 2 | grep -q "^Owner:")
+
+$cli --no-email progress 2 "50%" >/dev/null
+$cli show 2 | grep -q "^Progress: 50%$"
+
+$cli --no-email milestone 2 Henge >/dev/null
+$cli show 2 | grep -q "^Milestone: Henge$"
+
+$cli --no-email deadline 2 "1978-01-01T01:00" >/dev/null
+$cli show 2 | grep -q "^Deadline: Sun, 01 Jan 1978"
+
+# Done
+
+echo "All tests run successfully." 1>&2
+rm -R $dir
