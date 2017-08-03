@@ -1,0 +1,25 @@
+Tags
+----
+
+An arbitrary number of tags can be set on a bug. Some are just informational, some have a special meaning. Here is a list of tags and their meaning:
+
+patch
+: A patch is available. Usually this tag is used when the reporter provided a patch that shows a possible way to resolve the issue.
+wontfix
+: This issue won't be resolved. For example, when arguably it is a valid issue, but the project has good reasons not to resolve it.
+invalid
+: This issue is not valid.
+moreinfo
+: This issue is lacking information that is needed to progress.
+help
+: Help is needed to resolve this issue.
+unreproducible
+: The issue is not reproducible.
+pending
+: This issue is nearly resolve, but not committed yet.
+security
+: This is a security-related issue.
+confirmed
+: This issue is confirmed to be an actual issue that needs to be resolved. Usually set by the project owner.
+spam
+: This issue was opened by spam email.

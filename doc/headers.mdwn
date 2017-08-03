@@ -1,0 +1,63 @@
+Header fields
+-------------
+
+There are two types of fields: the real RFC 2822 message header fields, and pseudo-fields that appear in the body.
+The former only conform to email-related standards, the latter are specific to LightBTS.
+
+## Email header fields
+
+Message-ID:
+: This uniquely identifies an email. It must be present, and never reused, except when forwarding the exact same email.
+In-Reply-To:
+: Which email this is a reply to. Is set on outgoing emails, and on incoming emails it is checked against the index to see if there is already a bug that has a message with the given id. If so, the email is automatically assocaited with that bug.
+References:
+: Which emails this email has a relation to. TODO: use this in case In-Reply-To is missing.
+Subject:
+: For the first email, this is taken to be the bug's title. On outgoing emails, this is copied, and "Bug #number:" is prepended to it.
+From:
+: For incoming email, all addresses listed in the From field are associated with the bug this email is about. For new bugs, this is recorded as the submitter. For outgoing emails, this is set to the BTS email address.
+Cc:
+: For incoming email, all addresses listed in the From field are associated with the bug this email is about.
+Auto-submitted:
+: For incoming email, if it is set to "auto-replied" the email is ignored. For outgoing emails, this is set to "auto-replied" for emails generated in response to incoming emails.
+X-Auto-Response-Suppress:
+: For outgoing emails, this is set to "All" for emails generated in response to incoming emails.
+X-Autoreply:
+: For incoming email, if this header is present, the email is ignored.
+X-Autorespond:
+: For incoming email, if this header is present, the email is ignored.
+X-LightBTS-Status:
+: If this header is present, it is interpreted the same way as the "Status:" pseudo-header. It is set by lightbts-email when the --close or --reopen option is used.
+X-LightBTS-Tag:
+: If this header is present, it is interpreted the same way as the "Tags:" pseudo-header. It is set by lightbts-email when the --tag option is used.
+
+## Pseudo header fields
+
+The following fields record simple changes to bugs:
+
+Version:
+: The version where a bug is found in (if a bug is opened or replied to), or the version that fixes a bug (when it is closed).
+Tags:
+: A list of tags that should be set. Tags can optionally be prepended with `+` or `-`, in the latter case the tag will be removed.
+Deadline:
+: A date before which the bug should be fixed. Should be in RFC2822 or 3339 format.
+Milestone:
+: This bug should be fixed before the given milestone.
+Status:
+: Is either `open` or `closed`.
+Severity:
+: Is one of: `wishlist`, `minor`, `normal`, `important`, `serious`, `critical`, `grave`.
+Found:
+: Is one or more version numbers in which the bug is found.
+Notfound:
+: Remove previously added records of version numbers in which the bug is found.
+Fixed:
+: Is one or more version numbers in which the bug is fixed.
+Notfixed:
+: Remove previously added records of version numbers in which the bug is fixed.
+Progress:
+: A percentage indicating how far the progress of a bug fix is.
+Owner:
+: Who is responsible for a bug.
+Title:
+: Sets a new title for a bug.
