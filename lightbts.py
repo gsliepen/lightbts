@@ -650,6 +650,15 @@ def parse_metadata(bug, msg, msgstatus = None):
     milestone = None
     deadline = None
 
+    if msg['X-LightBTS-Status']:
+        try:
+            status = statusindex(msg['X-LightBTS-Status'])
+        except ValueError:
+            log += "Invalid status field.\n"
+
+    if msg['X-LightBTS-Tag']:
+        tags.append(msg['X-LightBTS-Tag'])
+
     for line in text.splitlines():
         match = regex.match(line)
         if not match:
@@ -728,8 +737,6 @@ def parse_metadata(bug, msg, msgstatus = None):
 
     if status is not None:
         bug.set_status(status)
-    else:
-        status = 1
 
     if severity is not None:
         bug.set_severity(severity)
@@ -738,7 +745,7 @@ def parse_metadata(bug, msg, msgstatus = None):
         bug.set_title(title)
 
     if version:
-        bug.set_version_status(version, status)
+        bug.set_version_status(version, bug.get_status())
 
     for version in notfound:
         bug.notfound(version)

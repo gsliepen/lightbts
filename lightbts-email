@@ -50,6 +50,13 @@ if msg['Auto-Submitted'] == 'auto-replied' or msg['X-Autoreply'] or msg['X-Autor
     logger.warning('Ignoring auto-replied message from ' + msg['From'])
     sys.exit(0)
 
+if args.tag:
+    msg['X-LightBTS-Tag'] = args.tag
+if args.close:
+    msg['X-LightBTS-Status'] = 'closed'
+if args.reopen:
+    msg['X-LightBTS-Status'] = 'open'
+
 (bug, new) = lightbts.import_email(msg)
 
 # Construct a reply
@@ -87,18 +94,6 @@ smtp = smtplib.SMTP(lightbts.smtphost)
 smtp.sendmail(reply['From'], reply['To'], reply.as_string())
 
 lightbts.record_msgid(bug.id, email.utils.unquote(reply['Message-ID']))
-
-# Apply actions
-
-action=''
-if args.tag:
-    action += 'Tags: +' + args.tag + '\n'
-if args.close:
-    action += 'Status: closed\n'
-if args.reopen:
-    action += 'Status: open\n'
-if action:
-    bug.record_action(action)
 
 # Send a copy to the admin
 
