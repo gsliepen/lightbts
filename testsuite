@@ -1,5 +1,5 @@
 #!/bin/sh
-set -ex
+set -e
 
 cli=$PWD/lightbts-cli
 email=$PWD/lightbts-email
@@ -190,7 +190,7 @@ $cli show 2 | grep -q "^Deadline: Sun, 01 Jan 1978"
 cat >$dir/.lightbts/hooks/pre-index <<EOF
 #!/bin/sh
 set -e
-test -e "\$MESSAGE_FILE"
+test -f "\$MESSAGE_FILE"
 echo pre-index "\$LIGHTBTS_DIR" "\$MESSAGE_FILE" >../test
 exit 1
 EOF
@@ -215,9 +215,25 @@ test "$lightbts_dir" = "$dir/.lightbts"
 test -n "$message_file"
 test -z "$rest"
 
+rm $dir/test
+
+$email --no-email --no-hooks <<EOF
+From: Test Suite
+To: LightBTS
+Subject: pre-index hook test
+Message-ID: 4@test
+
+This is a test of the pre-index script.
+EOF
+
+res=`$cli list | wc -l`
+test "$res" = "3"
+
+test ! -f $dir/test
+
 # Post-index hook
 
-rm $dir/test $dir/.lightbts/hooks/pre-index
+rm $dir/.lightbts/hooks/pre-index
 
 cat >$dir/.lightbts/hooks/post-index <<EOF
 #!/bin/sh
@@ -238,13 +254,13 @@ This is a test of the post-index script.
 EOF
 
 res=`$cli list | wc -l`
-test "$res" = "3"
+test "$res" = "4"
 
 read id lightbts_dir message_file bug_id rest <$dir/test
 test "$id" = "post-index"
 test "$lightbts_dir" = "$dir/.lightbts"
 test -n "$message_file"
-test "$bug_id" = "4"
+test "$bug_id" = "5"
 test -z "$rest"
 
 # Done

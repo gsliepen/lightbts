@@ -453,6 +453,7 @@ parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBT
 parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
 parser.add_argument('--batch', action='store_true', help='no interactive input')
 parser.add_argument('--no-email', action='store_true', help='do not send email messages')
+parser.add_argument('--no-hooks', action='store_true', help='do not call hooks')
 
 subparser = parser.add_subparsers(title='commands', dest='command')
 
@@ -606,6 +607,9 @@ args = parser.parse_args()
 
 if args.no_email:
     lightbts.quiet = True
+
+if args.no_hooks:
+    lightbts.no_hooks = True
 
 if args.func != do_init and args.func != do_help:
     lightbts.init(args.data)

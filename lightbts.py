@@ -39,6 +39,7 @@ maildir = None
 hookdir = None
 dbfile = None
 quiet = False
+no_hooks = False
 
 statii = ['closed', 'open']
 severities = ['wishlist', 'minor', 'normal', 'important', 'serious', 'critical', 'grave']
@@ -826,7 +827,10 @@ def forward_message(bug, msg):
         smtp = smtplib.SMTP(smtphost)
         smtp.sendmail(msg['From'], do, msg.as_string())
 
-def hook(name, filename, bug = None):
+def run_hook(name, filename, bug = None):
+    if no_hooks:
+        return True
+
     # Prepare environment variables
     env = os.environ.copy()
     env['LIGHTBTS_DIR'] = basedir
@@ -868,7 +872,7 @@ def import_email(msg):
 
     # Run the pre-index hook
 
-    if not hook('pre-index', os.path.join(maildir, 'new', key)):
+    if not run_hook('pre-index', os.path.join(maildir, 'new', key)):
         logging.error("Pre-index script returned with an error.")
         return (None, None)
 
@@ -929,7 +933,7 @@ def import_email(msg):
 
     # Run the post-index hook
 
-    hook('post-index', moveto, bug = bugno)
+    run_hook('post-index', moveto, bug = bugno)
 
     return (bug, new)
 
