@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -ex
 
 cli=$PWD/lightbts-cli
 email=$PWD/lightbts-email
@@ -184,6 +184,68 @@ $cli show 2 | grep -q "^Milestone: Henge$"
 
 $cli --no-email deadline 2 "1978-01-01T01:00" >/dev/null
 $cli show 2 | grep -q "^Deadline: Sun, 01 Jan 1978"
+
+# Pre-index hook
+
+cat >$dir/.lightbts/hooks/pre-index <<EOF
+#!/bin/sh
+set -e
+test -e "\$MESSAGE_FILE"
+echo pre-index "\$LIGHTBTS_DIR" "\$MESSAGE_FILE" >../test
+exit 1
+EOF
+
+chmod u+x $dir/.lightbts/hooks/pre-index
+
+$email --no-email <<EOF
+From: Test Suite
+To: LightBTS
+Subject: pre-index hook test
+Message-ID: 4@test
+
+This is a test of the pre-index script.
+EOF
+
+res=`$cli list | wc -l`
+test "$res" = "2"
+
+read id lightbts_dir message_file rest <$dir/test
+test "$id" = "pre-index"
+test "$lightbts_dir" = "$dir/.lightbts"
+test -n "$message_file"
+test -z "$rest"
+
+# Post-index hook
+
+rm $dir/test $dir/.lightbts/hooks/pre-index
+
+cat >$dir/.lightbts/hooks/post-index <<EOF
+#!/bin/sh
+set -e
+test -e "\$MESSAGE_FILE"
+echo post-index "\$LIGHTBTS_DIR" "\$MESSAGE_FILE" "\$BUG_ID" >../test
+EOF
+
+chmod u+x $dir/.lightbts/hooks/post-index
+
+$email --no-email <<EOF
+From: Test Suite
+To: LightBTS
+Subject: post-index hook test
+Message-ID: 5@test
+
+This is a test of the post-index script.
+EOF
+
+res=`$cli list | wc -l`
+test "$res" = "3"
+
+read id lightbts_dir message_file bug_id rest <$dir/test
+test "$id" = "post-index"
+test "$lightbts_dir" = "$dir/.lightbts"
+test -n "$message_file"
+test "$bug_id" = "4"
+test -z "$rest"
 
 # Done
 

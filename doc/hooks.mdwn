@@ -1,0 +1,23 @@
+Hooks
+-----
+
+Hooks are scripts that are called because of certain events.
+Hooks are placed in the `hooks/` subdirectory of LightBTS's directory.
+Hooks must be made executable before they will run.
+
+## Supported hooks
+
+`pre-index`:
+: This is called when a new message is to be imported into the database. If this hook exits with a non-zero exit code, the message will be rejected.
+`post-index`:
+: This is called when a new message has been imported and indexed into the database. 
+
+## Environment variables
+
+Hooks are called without any arguments.
+Instead, any parameters are passed via environment variables.
+
+`MESSAGE_FILE`:
+: This contains the full path to the message file. It is strongly recommended that you do not modify, move or delete the file in any way.
+`BUG_ID`:
+: In the post-index hook, this is set to the bug number assigned to the bug.

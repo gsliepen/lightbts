@@ -13,6 +13,7 @@ import string
 import logging
 import smtplib
 import dateutil
+import subprocess
 try:
     import configparser
 except ImportError:
@@ -35,6 +36,7 @@ __version__ = '0.1'
 db = None
 mail = None
 maildir = None
+hookdir = None
 dbfile = None
 quiet = False
 
@@ -491,7 +493,7 @@ def init_db(dbfile):
     return db
 
 def init(dir=None):
-    global basedir, config, dbfile, maildir, project, admin, respond_to_new, respond_to_reply
+    global basedir, config, dbfile, maildir, hookdir, project, admin, respond_to_new, respond_to_reply
     global emailaddress, emailname, emailtemplates, smtphost, webroot, staticroot, webtemplates
     global db, mail, default_templates
 
@@ -524,6 +526,7 @@ def init(dir=None):
     config.set('core', 'project', '')
     config.set('core', 'admin', '')
     config.set('core', 'messages', 'messages')
+    config.set('core', 'hooks', 'hooks')
     config.set('core', 'index', 'index')
     config.set('core', 'respond-to-new', 'yes')
     config.set('core', 'respond-to-reply', 'yes')
@@ -552,6 +555,7 @@ def init(dir=None):
     # Core configuration
     dbfile = os.path.join(basedir, config.get('core', 'index'))
     maildir = os.path.join(basedir, config.get('core', 'messages'))
+    hookdir = os.path.join(basedir, config.get('core', 'hooks'))
     project = config.get('core', 'project')
     admin = config.get('core', 'admin')
     respond_to_new = config.getboolean('core', 'respond-to-new')
@@ -574,6 +578,13 @@ def init(dir=None):
 
     # Open the mailbox
     mail = mailbox.Maildir(maildir)
+
+    # Create the hooks directory
+    try:
+        os.mkdir(hookdir)
+        # TODO: install hook templates
+    except OSError:
+        pass
 
     # Open or create the database
     db = init_db(dbfile)
@@ -815,6 +826,22 @@ def forward_message(bug, msg):
         smtp = smtplib.SMTP(smtphost)
         smtp.sendmail(msg['From'], do, msg.as_string())
 
+def hook(name, filename, bug = None):
+    # Prepare environment variables
+    env = os.environ.copy()
+    env['LIGHTBTS_DIR'] = basedir
+    env['MESSAGE_FILE'] = filename
+    if bug:
+        env['BUG_ID'] = str(bug)
+    null = open('/dev/null', 'rw')
+    try:
+        process = subprocess.Popen([os.path.join('hooks', name)], cwd = basedir, env = env, stdin = null, stdout = null)
+    except OSError:
+        # If the hook is not startable, ignore the result.
+        return True;
+
+    return process.wait() == 0
+
 def import_email(msg):
     # Don't allow messages with the X-LightBTS-Control header set
 
@@ -838,6 +865,12 @@ def import_email(msg):
     parent = email.utils.unquote(msg['In-Reply-To'] or '')
     subject = msg['Subject']
     key = mail.add(msg)
+
+    # Run the pre-index hook
+
+    if not hook('pre-index', os.path.join(maildir, 'new', key)):
+        logging.error("Pre-index script returned with an error.")
+        return (None, None)
 
     # Store the message in the database
 
@@ -893,6 +926,10 @@ def import_email(msg):
     # Handle metadata
 
     parse_metadata(bug, msg)
+
+    # Run the post-index hook
+
+    hook('post-index', moveto, bug = bugno)
 
     return (bug, new)
 
