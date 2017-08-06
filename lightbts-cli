@@ -402,6 +402,9 @@ def do_progress(args):
     bug = lightbts.get_bug(args.id)
     do_action(bug, 'Progress: ' + args.progress)
 
+def do_index(args):
+    lightbts.update_index(args.filename)
+
 # Initialize
 
 if not os.getenv("TRACEBACK"):
@@ -538,6 +541,10 @@ parser_deadline = subparser.add_parser('deadline', help='set deadline for a bug'
 parser_deadline.add_argument('id', help='bug id')
 parser_deadline.add_argument('deadline', help='deadline (many date/time formats accepted)')
 parser_deadline.set_defaults(func=do_deadline)
+
+parser_deadline = subparser.add_parser('index', help='update index for a given message file')
+parser_deadline.add_argument('filename', help='file to index')
+parser_deadline.set_defaults(func=do_index)
 
 def do_help(args):
     if args.command:

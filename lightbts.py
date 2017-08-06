@@ -896,5 +896,67 @@ def import_email(msg):
 
     return (bug, new)
 
+# TODO: mostly duplicates import_email, refactor.
+# TODO: maybe we already know the bug number?
+def update_index(filename):
+    file = open(filename, 'r')
+    key = os.path.basename(filename)
+    msg = email.message_from_file(file)
+
+    msgid = email.utils.unquote(msg['Message-ID'])
+    parent = email.utils.unquote(msg['In-Reply-To'] or '')
+    subject = msg['Subject']
+
+    # Require a Message-ID
+
+    if not msgid:
+        logging.error("Missing Message-ID")
+        return (None, None)
+
+    # Store the message in the database
+
+    try:
+        db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, msgid, 0));
+    except sqlite3.IntegrityError:
+        # TODO: throw something intelligent
+        logging.warning("Ignoring duplicate message from " + msg['From'] + " with Message-ID " + msgid)
+        return (None, None)
+
+    # Check if this bug exists
+
+    bugno = 0
+    new = False
+
+    if parent:
+        matches = db.execute("SELECT bug FROM messages WHERE msgid=?", (parent,))
+        for i in matches:
+            if i[0]:
+                bugno = i[0]
+
+    # Try finding one with a similar subject
+    # TODO: more robust?
+
+    if not bugno:
+            matches = db.execute("SELECT id FROM bugs WHERE title LIKE ?", ('%' + subject,))
+            for i in matches:
+                if i[0]:
+                    bugno = i[0]
+
+    if not bugno:
+        bugno = db.execute("INSERT INTO bugs (title) VALUES (?)", (subject,)).lastrowid
+        new = True
+
+    bug = get_bug(bugno)
+
+    db.execute("UPDATE messages SET bug=? WHERE key=?", (bugno, key))
+
+    db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", (bugno, msg['From']))
+
+    # Handle metadata
+
+    parse_metadata(bug, msg)
+
+    return (bug, new)
+
 def record_msgid(bugno, msgid):
     db.execute("INSERT INTO messages (msgid, bug) values (?,?)", (msgid, bugno));
