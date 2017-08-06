@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import email.message
 import dateutil.parser
+import mailbox
 
 import lightbts
 
@@ -405,6 +406,43 @@ def do_progress(args):
 def do_index(args):
     lightbts.update_index(args.filename)
 
+def do_fsck(args):
+    warnings = 0
+    errors = 0
+
+    # Check if all messages in the index appear in the messages directory
+    ikeys = set()
+    for i in lightbts.db.execute('SELECT msgid, key, bug FROM messages'):
+        if not i[2]:
+            # MsgID was added but never assigned to a bug, due to errors during processing.
+            # TODO: remove these?
+            eprint('Warning: bug 0 msgid ' + msgid)
+            warnings += 1
+        ikeys.add(i[1])
+        maildir = mailbox.Maildir(os.path.join(lightbts.maildir, str(i[2])))
+        msg = email.Parser.Parser().parse(maildir.get_file(i[1]))
+        if msg['Message-ID'][1:-1] != i[0]:
+            # Message-ID in file and in index don't match.
+            # TODO: update the index?
+            eprint('Error: mismatching Message-ID: ' + msg['Message-ID'] + ' != ' + i[0])
+            errors += 1
+
+    # Check if there are any files in the messages directory that do not appear in the index
+    for root, dirs, filenames in os.walk(lightbts.maildir):
+        for filename in filenames:
+            if filename not in ikeys:
+                # A file was found that doesn't appear in the index.
+                # TODO: delete or update index, depending on whether it's in <bugno>/cur/ or in another directory
+                eprint('Error: unindexed file ' + root + '/' + filename)
+                errors += 1
+
+    if errors:
+        eprint("Errors were found.")
+        exit(1)
+
+    if warnings:
+        eprint("Warnings were found.")
+
 # Initialize
 
 if not os.getenv("TRACEBACK"):
@@ -545,6 +583,9 @@ parser_deadline.set_defaults(func=do_deadline)
 parser_deadline = subparser.add_parser('index', help='update index for a given message file')
 parser_deadline.add_argument('filename', help='file to index')
 parser_deadline.set_defaults(func=do_index)
+
+parser_deadline = subparser.add_parser('fsck', help='perform an integrity check')
+parser_deadline.set_defaults(func=do_fsck)
 
 def do_help(args):
     if args.command:
