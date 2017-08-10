@@ -54,8 +54,35 @@ def do_config(args):
         lightbts.config.set(section, option, args.value)
 
 def do_list(args):
+    do_tags = False
+    do_milestones = False
+    if len(args.prop):
+        if args.prop[-1] == "tags":
+            args.prop.pop()
+            tags = set()
+            do_tags = True
+        elif args.prop[-1] == "milestones":
+            args.prop.pop()
+            milestones = set()
+            do_milestones = True
+        elif args.prop[-1] == "bugs":
+            args.prop.pop()
+
     for bug in lightbts.list_bugs(args):
-        print("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title))
+        if do_tags:
+            tags |= set(bug.get_tags())
+        elif do_milestones:
+            milestones.add(bug.get_milestone())
+        else:
+            print("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title))
+
+    if do_tags:
+        for tag in tags:
+            print(tag)
+    elif do_milestones:
+        for milestone in milestones:
+            if milestone:
+                print(milestone)
 
 def do_show_bug(bugno, verbose):
     bug = lightbts.get_bug(bugno)
