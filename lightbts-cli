@@ -113,6 +113,12 @@ def do_show_bug(bugno, verbose):
     if bug.milestone:
         print('Milestone: ' + bug.milestone)
 
+    for linktype, bugs in bug.get_links().iteritems():
+        print(lightbts.verbose_linktypes[linktype].capitalize() + ': ' + ' '.join([str(i) for i in bugs]))
+
+    for linktype, bugs in bug.get_reverse_links().iteritems():
+        print(lightbts.reverse_linktypes[linktype].capitalize() + ': ' + ' '.join([str(i) for i in bugs]))
+
     print('')
 
     for msg in bug.get_messages():

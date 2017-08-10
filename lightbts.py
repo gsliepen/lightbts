@@ -44,6 +44,8 @@ no_hooks = False
 statii = ['closed', 'open']
 severities = ['wishlist', 'minor', 'normal', 'important', 'serious', 'critical', 'grave']
 linktypes = ['relates', 'duplicates', 'depends', 'blocks']
+verbose_linktypes = ['relates to', 'duplicates', 'depends on', 'blocks']
+reverse_linktypes = ['related to by', 'duplicated by', 'depended on by', 'blocked by']
 
 def severityname(nr):
     return severities[nr]
@@ -289,6 +291,22 @@ class bug(object):
     def unlink(self, linktype, *bugs):
         for other in bugs:
             db.execute('DELETE FROM links WHERE a=? AND b=? AND type=?', (self._id, other._id, linktype))
+
+    def get_links(self):
+        result = {}
+        for i in db.execute('SELECT b, type FROM links WHERE a=?', (self._id,)):
+            if i[1] not in result:
+                result[i[1]] = set()
+            result[i[1]].add(i[0])
+        return result
+
+    def get_reverse_links(self):
+        result = {}
+        for i in db.execute('SELECT a, type FROM links WHERE b=?', (self._id,)):
+            if i[1] not in result:
+                result[i[1]] = set()
+            result[i[1]].add(i[0])
+        return result
 
     def get_messages(self):
         result = []
