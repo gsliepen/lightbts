@@ -43,6 +43,7 @@ no_hooks = False
 
 statii = ['closed', 'open']
 severities = ['wishlist', 'minor', 'normal', 'important', 'serious', 'critical', 'grave']
+linktypes = ['relates', 'duplicates', 'depends', 'blocks']
 
 def severityname(nr):
     return severities[nr]
@@ -67,6 +68,18 @@ def status(arg):
         return statusname(arg)
     except:
         return statusindex(arg)
+
+def linktypename(nr):
+    return linktypes[nr]
+
+def linktypeindex(name):
+    return linktypes.index(name)
+
+def linktype(arg):
+    try:
+        return linktypename(arg)
+    except:
+        return linktypeindex(arg)
 
 def get_local_email_address():
     if 'EMAIL' in os.environ:
@@ -269,6 +282,14 @@ class bug(object):
             result.append(i[0])
         return result
 
+    def link(self, linktype, *bugs):
+        for other in bugs:
+            db.execute('INSERT OR IGNORE INTO links (a, b, type) VALUES (?, ?, ?)', (self._id, other._id, linktype))
+
+    def unlink(self, linktype, *bugs):
+        for other in bugs:
+            db.execute('DELETE FROM links WHERE a=? AND b=? AND type=?', (self._id, other._id, linktype))
+
     def get_messages(self):
         result = []
         for i in db.execute('SELECT msgid, key FROM messages WHERE bug=? AND key NOT NULL', (self._id,)):
@@ -415,20 +436,6 @@ def get_message(msgid):
 def get_bug_from_msgid(msgid):
     return get_bug(get_message(msgid)._bug)
 
-def merge(*bugs):
-    a = min(bugs.bugno)
-    for b in bugs:
-        if a == b:
-            continue
-        db.execute('INSERT OR IGNORE INTO merges (a, b) VALUES (?, ?)', (a.bugno, b.bugno))
-
-def unmerge(*bugs):
-    a = min(bugs.bugno)
-    for b in bugs:
-        if a == b:
-            continue
-        db.execute('DELETE FROM merges WHERE a=? AND b=?', (a.bugno, b.bugno))
-
 def get_template(name, fallback=None):
     try:
         with open(os.path.join(emailtemplates, name), 'r') as file:
@@ -463,7 +470,9 @@ def init_db(dbfile):
     if not version:
         # Fresh start, create everything.
         db.execute('CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER, deadline INTEGER, progress INTEGER NOT NULL DEFAULT 0, milestone TEXT)')
-        db.execute('CREATE TABLE merges (a INTEGER, b INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), CHECK (a < b), FOREIGN KEY(b) REFERENCES bugs(id))')
+        db.execute('CREATE TABLE links (a INTEGER, b INTEGER, type INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))')
+        db.execute('CREATE INDEX links_a_index ON links (a)')
+        db.execute('CREATE INDEX links_b_index ON links (b)')
         db.execute('CREATE TABLE messages (msgid PRIMARY KEY, key TEXT, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, date INTEGER, FOREIGN KEY(bug) REFERENCES bugs(id))')
         db.execute('CREATE INDEX messages_key_index ON messages (key)')
         db.execute('CREATE TABLE recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))')
@@ -475,11 +484,11 @@ def init_db(dbfile):
         db.execute('CREATE TABLE versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))')
         db.execute('CREATE INDEX versions_bug_index ON versions (bug)')
         db.execute('CREATE INDEX versions_version_index ON versions (version)')
-        db.execute('PRAGMA user_version=2')
+        db.execute('PRAGMA user_version=3')
         db.commit()
-        version = 2
+        version = 3
 
-    if version < 0 or version > 2:
+    if version < 0 or version > 3:
         logging.error("Unknown database version " + str(version))
         sys.exit(1)
 
@@ -489,6 +498,18 @@ def init_db(dbfile):
         db.execute('ALTER TABLE bugs ADD COLUMN progress INTEGER')
         db.execute('ALTER TABLE bugs ADD COLUMN milestone TEXT')
         db.execute('PRAGMA user_version=2')
+        version = 2
+        db.commit()
+
+    if version < 3:
+        logging.info("Upgrading database to version 3...")
+        db.execute('CREATE TABLE links (a INTEGER, b INTEGER, type INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))')
+        db.execute('CREATE INDEX links_a_index ON links (a)')
+        db.execute('CREATE INDEX links_b_index ON links (b)')
+        db.execute('INSERT INTO links (a, b, type) SELECT a, b, 1 FROM merges')
+        db.execute('DROP TABLE merges')
+        db.execute('PRAGMA user_version=3')
+        version = 3
         db.commit()
 
     return db
@@ -665,8 +686,6 @@ def parse_metadata(bug, msg, msgstatus = None):
     notfound = []
     fixed = []
     notfixed = []
-    merge = []
-    unmerge = []
     owner = None
     progress = None
     milestone = None
@@ -723,12 +742,6 @@ def parse_metadata(bug, msg, msgstatus = None):
         elif key == "notfixed":
             notfixed.extend(value.split())
 
-        elif key == "merge":
-            merge.extend(value.split())
-
-        elif key == "unmerge":
-            unmerge.extend(value.split())
-
         elif key == "owner":
             if owner:
                 log += "Duplicate owner field.\n"
@@ -759,6 +772,14 @@ def parse_metadata(bug, msg, msgstatus = None):
             if title:
                 log += "Duplicate title field.\n"
             title = value
+
+        elif key in linktypes:
+            others = [get_bug(s) for s in value.split()]
+            bug.link(linktypeindex(key), *others)
+
+        elif key[0:2] == 'un' and key[2:] in linktypes:
+            others = [get_bug(s) for s in value.split()]
+            bug.unlink(linktypeindex(key[2:]), *others)
 
     if status is not None:
         bug.set_status(status)

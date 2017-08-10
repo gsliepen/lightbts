@@ -381,13 +381,17 @@ def do_severity(args):
     bug = lightbts.get_bug(args.id)
     do_action(bug, 'Severity: ' + args.severity)
 
-def do_merge(args):
-    #TODO: implement
-    pass
+def do_link(args):
+    bug1 = lightbts.get_bug(args.id1)
+    bug2 = lightbts.get_bug(args.id2)
+    linktype = lightbts.linktypes[lightbts.linktypeindex(args.type)]
+    do_action(bug1, linktype.capitalize() + ': ' + str(bug2.get_id()));
 
-def do_unmerge(args):
-    #TODO: implement
-    pass
+def do_unlink(args):
+    bug1 = lightbts.get_bug(args.id1)
+    bug2 = lightbts.get_bug(args.id2)
+    linktype = lightbts.linktypes[lightbts.linktypeindex(args.type)]
+    do_action(bug1, 'Un' + linktype + ': ' + str(bug2.get_id()));
 
 def do_tags(args):
     bug = lightbts.get_bug(args.id)
@@ -563,13 +567,17 @@ parser_severity.add_argument('id', help='bug id')
 parser_severity.add_argument('severity', help='bug id', choices=lightbts.severities)
 parser_severity.set_defaults(func=do_severity)
 
-parser_merge = subparser.add_parser('merge', help='merge two or more bugs')
-parser_merge.add_argument('id', help='bug ids', nargs='+')
-parser_merge.set_defaults(func=do_merge)
+parser_merge = subparser.add_parser('link', help='add a link between two bugs')
+parser_merge.add_argument('id1', help='bug id')
+parser_merge.add_argument('type', help='link type (relates, duplicates, depends, blocks)')
+parser_merge.add_argument('id2', help='bug id')
+parser_merge.set_defaults(func=do_link)
 
-parser_unmerge = subparser.add_parser('unmerge', help='unmerge previously merged bugs')
-parser_unmerge.add_argument('id', help='bug ids', nargs='+')
-parser_unmerge.set_defaults(func=do_unmerge)
+parser_merge = subparser.add_parser('unlink', help='remove a link between two bugs')
+parser_merge.add_argument('id1', help='bug id')
+parser_merge.add_argument('type', help='link type (relates, duplicates, blocks, depends)')
+parser_merge.add_argument('id2', help='bug id')
+parser_merge.set_defaults(func=do_unlink)
 
 parser_tags = subparser.add_parser('tags', help='add or remove tags')
 parser_tags.add_argument('id', help='bug id')
