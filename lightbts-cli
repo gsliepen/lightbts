@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3.6
 
 from __future__ import print_function
 
@@ -10,6 +10,7 @@ import tempfile
 import email.message
 import dateutil.parser
 import mailbox
+import hashlib
 
 import lightbts
 
@@ -113,24 +114,27 @@ def do_show_bug(bugno, verbose):
     if bug.milestone:
         print('Milestone: ' + bug.milestone)
 
-    for linktype, bugs in bug.get_links().iteritems():
+    for linktype, bugs in bug.get_links().items():
         print(lightbts.verbose_linktypes[linktype].capitalize() + ': ' + ' '.join([str(i) for i in bugs]))
 
-    for linktype, bugs in bug.get_reverse_links().iteritems():
+    for linktype, bugs in bug.get_reverse_links().items():
         print(lightbts.reverse_linktypes[linktype].capitalize() + ': ' + ' '.join([str(i) for i in bugs]))
 
     print('')
+    more = False
 
     for msg in bug.get_messages():
         if(verbose):
+            if more:
+                print('')
             print('From: ' + msg.msg['From'])
             print('To: ' + msg.msg['To'])
             print('Subject: ' + msg.msg['Subject'])
             print('Date: ' + msg.msg['Date'])
             print('Message-ID: ' + msg.msg['Message-ID'])
             print('')
-            print(msg.msg.get_payload());
-            print('')
+            print(msg.msg.get_payload().rstrip());
+            more = True
         else:
             print(msg.msgid)
 
@@ -154,7 +158,7 @@ def do_show_message(msgid):
     if tags:
         print('Tags: ' + tags)
     print('')
-    print(msg.msg.as_string());
+    print(msg.msg.as_string().rstrip());
 
 def do_show(args):
     if '@' in args.id:
@@ -448,16 +452,19 @@ def do_fsck(args):
     errors = 0
 
     # Check if all messages in the index appear in the messages directory
-    ikeys = set()
-    for i in lightbts.db.execute('SELECT msgid, key, bug FROM messages'):
-        if not i[2]:
+    filenames = set()
+    for i in lightbts.db.execute('SELECT msgid, bug FROM messages'):
+        if not i[1]:
             # MsgID was added but never assigned to a bug, due to errors during processing.
             # TODO: remove these?
             eprint('Warning: bug 0 msgid ' + msgid)
             warnings += 1
-        ikeys.add(i[1])
-        maildir = mailbox.Maildir(os.path.join(lightbts.maildir, str(i[2])))
-        msg = email.Parser.Parser().parse(maildir.get_file(i[1]))
+        hash = hashlib.blake2b(i[0].encode(), digest_size=24).hexdigest()
+        filename = os.path.join(lightbts.maildir, hash[0:2], hash[2:])
+        print(filename)
+        filenames.add(filename)
+
+        msg = email.message_from_file(open(filename, "r"))
         if msg['Message-ID'][1:-1] != i[0]:
             # Message-ID in file and in index don't match.
             # TODO: update the index?
@@ -467,10 +474,10 @@ def do_fsck(args):
     # Check if there are any files in the messages directory that do not appear in the index
     for root, dirs, filenames in os.walk(lightbts.maildir):
         for filename in filenames:
-            if filename not in ikeys:
+            if os.path.join(root, filename) not in filenames:
                 # A file was found that doesn't appear in the index.
                 # TODO: delete or update index, depending on whether it's in <bugno>/cur/ or in another directory
-                eprint('Error: unindexed file ' + root + '/' + filename)
+                eprint('Error: unindexed file ' + os.path.join(root, filename))
                 errors += 1
 
     if errors:

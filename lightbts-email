@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3.6
 
 import argparse
 import os
@@ -70,6 +70,14 @@ if args.reopen:
 # Exit early is we are not supposed to reply
 
 if args.no_email:
+    lightbts.exit()
+    sys.exit(0)
+
+if new and not lightbts.respond_to_new:
+    lightbts.exit()
+    sys.exit(0)
+
+if not new and not lightbts.respond_to_reply:
     lightbts.exit()
     sys.exit(0)
 

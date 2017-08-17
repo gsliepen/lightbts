@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3.6
 # coding: utf-8
 
 import os
@@ -14,6 +14,8 @@ import logging
 import smtplib
 import dateutil
 import subprocess
+import hashlib
+import glob
 try:
     import configparser
 except ImportError:
@@ -40,6 +42,10 @@ hookdir = None
 dbfile = None
 quiet = False
 no_hooks = False
+emailaddress = None
+admin = None
+respond_to_new = False
+respond_to_reply = False
 
 statii = ['closed', 'open']
 severities = ['wishlist', 'minor', 'normal', 'important', 'serious', 'critical', 'grave']
@@ -84,6 +90,11 @@ def linktype(arg):
         return linktypeindex(arg)
 
 def get_local_email_address():
+    global admin
+
+    if admin:
+        return admin
+
     if 'EMAIL' in os.environ:
         address = os.environ['EMAIL']
         if address.find(" <") >= 0:
@@ -103,6 +114,27 @@ def get_local_email_address():
         return fullname + ' <' + address + '>'
     else:
         return address
+
+def store(msg):
+    msg_id = email.utils.unquote(msg['Message-ID']).encode()
+    hash = hashlib.blake2b(msg_id, digest_size=24).hexdigest()
+    tmpname = os.path.join(maildir, "tmp", hash)
+    filename = os.path.join(maildir, hash[0:2], hash[2:])
+    file = open(tmpname, "w")
+    file.write(msg.as_string())
+    file.close()
+    try:
+        os.mkdir(os.path.join(maildir, hash[0:2]))
+    except OSError:
+        pass
+
+    os.rename(tmpname, filename)
+    return filename
+
+def load(msg_id):
+    hash = hashlib.blake2b(email.utils.unquote(msg_id).encode(), digest_size=24).hexdigest()
+    filename = os.path.join(maildir, hash[0:2], hash[2:])
+    return email.message_from_file(open(filename, "r"))
 
 class bug(object):
     def __init__(self, id=None, title=None, status=None, severity=None, owner=None, submitter=None, date=None, deadline=None, progress=0, milestone=None):
@@ -310,8 +342,8 @@ class bug(object):
 
     def get_messages(self):
         result = []
-        for i in db.execute('SELECT msgid, key FROM messages WHERE bug=? AND key NOT NULL', (self._id,)):
-            result.append(message(i[0], i[1], self._id))
+        for i in db.execute('SELECT msgid FROM messages WHERE bug=?', (self._id,)):
+            result.append(message(i[0], self._id))
         return result
 
     def get_first_msgid(self):
@@ -325,9 +357,8 @@ class bug(object):
         msg.assign_to(self)
 
 class message(object):
-    def __init__(self, msgid=None, key=None, bug=None, msg=None):
+    def __init__(self, msgid=None, bug=None, msg=None):
         self._msgid = msgid
-        self._key = key
         self._bug = bug
         self._msg = msg
 
@@ -335,11 +366,6 @@ class message(object):
         return self._msgid
 
     msgid = property(get_msgid)
-
-    def get_key(self):
-        return self._key
-
-    key = property(get_key)
 
     def get_bug(self):
         return self._bug
@@ -349,8 +375,7 @@ class message(object):
     def get_msg(self):
         global maildir
         if not self._msg:
-            bugmaildir = mailbox.Maildir(os.path.join(maildir, str(self._bug)))
-            self._msg = email.Parser.Parser().parse(bugmaildir.get_file(self._key))
+            self._msg = load(self._msgid)
         return self._msg;
 
     msg = property(get_msg)
@@ -381,12 +406,7 @@ class message(object):
         db.execute('UPDATE messages SET spam=? WHERE msgid=?', (value, self._msgid))
 
     def assign_to(self, bug):
-        mailbox.Maildir(os.path.join(maildir, str(bug.id))).close()
-        movefrom = os.path.join(maildir, 'new', self._key)
-        moveto = os.path.join(maildir, str(bug.id), 'cur', self._key)
-        os.rename(movefrom, moveto)
-
-        db.execute('UPDATE messages SET bug=? WHERE key=?', (bug.id, self._key))
+        db.execute('UPDATE messages SET bug=? WHERE msgid=?', (bug.id, self._msgid))
         db.execute('INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)', (bug.id, self._msg['From']))
 
 def list_bugs(args):
@@ -447,8 +467,8 @@ def get_bug_from_title(title):
     return None
 
 def get_message(msgid):
-    for i in db.execute('SELECT msgid, key, bug FROM messages WHERE msgid=?', (email.utils.unquote(msgid),)):
-        return message(i[0], i[1], int(i[2]))
+    for i in db.execute('SELECT msgid, bug FROM messages WHERE msgid=?', (email.utils.unquote(msgid),)):
+        return message(i[0], int(i[1]))
     return None
 
 def get_bug_from_msgid(msgid):
@@ -491,8 +511,7 @@ def init_db(dbfile):
         db.execute('CREATE TABLE links (a INTEGER, b INTEGER, type INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))')
         db.execute('CREATE INDEX links_a_index ON links (a)')
         db.execute('CREATE INDEX links_b_index ON links (b)')
-        db.execute('CREATE TABLE messages (msgid PRIMARY KEY, key TEXT, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, date INTEGER, FOREIGN KEY(bug) REFERENCES bugs(id))')
-        db.execute('CREATE INDEX messages_key_index ON messages (key)')
+        db.execute('CREATE TABLE messages (msgid PRIMARY KEY, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, date INTEGER, FOREIGN KEY(bug) REFERENCES bugs(id))')
         db.execute('CREATE TABLE recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))')
         db.execute('CREATE INDEX recipients_bug_index ON recipients (bug)')
         db.execute('CREATE INDEX recipients_address_index ON recipients (address)')
@@ -502,11 +521,11 @@ def init_db(dbfile):
         db.execute('CREATE TABLE versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))')
         db.execute('CREATE INDEX versions_bug_index ON versions (bug)')
         db.execute('CREATE INDEX versions_version_index ON versions (version)')
-        db.execute('PRAGMA user_version=3')
+        db.execute('PRAGMA user_version=4')
         db.commit()
-        version = 3
+        version = 4
 
-    if version < 0 or version > 3:
+    if version < 0 or version > 4:
         logging.error("Unknown database version " + str(version))
         sys.exit(1)
 
@@ -528,6 +547,31 @@ def init_db(dbfile):
         db.execute('DROP TABLE merges')
         db.execute('PRAGMA user_version=3')
         version = 3
+        db.commit()
+
+    if version < 4:
+        logging.info("Upgrading database to version 4...")
+        for i in db.execute('SELECT bug, key FROM messages WHERE key IS NOT NULL'):
+            filename = glob.glob(os.path.join(maildir, str(i[0]), "cur", i[1] + "*"))[0]
+            store(email.message_from_file(open(filename, "r")))
+            os.remove(filename)
+        for i in db.execute('SELECT id FROM bugs'):
+            try:
+                os.rmdir(os.path.join(maildir, str(i[0]), "cur"))
+                os.rmdir(os.path.join(maildir, str(i[0]), "new"))
+                os.rmdir(os.path.join(maildir, str(i[0]), "tmp"))
+                os.rmdir(os.path.join(maildir, str(i[0])))
+            except:
+                pass
+        #db.execute('ALTER TABLE messages DROP COLUMN key')
+        db.execute('DROP INDEX messages_key_index')
+        db.execute('PRAGMA user_version=4')
+        try:
+            os.rmdir(os.path.join(maildir, "cur"))
+            os.rmdir(os.path.join(maildir, "new"))
+        except:
+            pass
+        version = 4
         db.commit()
 
     return db
@@ -654,25 +698,25 @@ def create_message(title, address, text, headers={}):
     msg['Date'] = email.utils.formatdate()
     msg['User-Agent'] = 'LightBTS/' + __version__
 
-    for key, value in headers.iteritems():
+    for key, value in headers.items():
         msg[key] = value
 
     msgid = email.utils.unquote(msg['Message-ID'])
 
-    # Save message to new
+    # Save message
 
-    key = mail.add(msg)
+    store(msg)
 
     # Store the message in the database
 
     try:
-        db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, msgid, 0));
+        db.execute("INSERT INTO messages (msgid, bug) values (?,?,?)", (msgid, 0));
     except sqlite3.IntegrityError:
         # TODO: throw something intelligent
         logging.error("Integrity error while creating a new message")
         return None
 
-    return message(msgid, key, msg=msg)
+    return message(msgid, msg=msg)
 
 def create_bug(title):
     global db
@@ -856,7 +900,7 @@ def forward_message(bug, msg):
     # Get all To: and Cc: addresses from the message
 
     dont = msg.get_all('From', []) + msg.get_all('To', []) + msg.get_all('Cc', [])
-    dont = set(map((lambda x: x[1]), email.utils.getaddresses(dont)))
+    dont = set(map((lambda x: unicode(x[1], 'utf-8')), email.utils.getaddresses(dont)))
 
     # Send a copy to those who didn't get the message yet
 
@@ -876,7 +920,7 @@ def run_hook(name, filename, bug = None):
     env['MESSAGE_FILE'] = filename
     if bug:
         env['BUG_ID'] = str(bug)
-    null = open('/dev/null', 'rw')
+    null = open('/dev/null', 'r+')
     try:
         process = subprocess.Popen([os.path.join('hooks', name)], cwd = basedir, env = env, stdin = null, stdout = null)
     except OSError:
@@ -907,18 +951,18 @@ def import_email(msg):
     msgid = email.utils.unquote(msg['Message-ID'])
     parent = email.utils.unquote(msg['In-Reply-To'] or '')
     subject = msg['Subject']
-    key = mail.add(msg)
+    filename = store(msg)
 
     # Run the pre-index hook
 
-    if not run_hook('pre-index', os.path.join(maildir, 'new', key)):
+    if not run_hook('pre-index', filename):
         logging.error("Pre-index script returned with an error.")
         return (None, None)
 
     # Store the message in the database
 
     try:
-        db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, msgid, 0));
+        db.execute("INSERT INTO messages (msgid, bug) values (?,?)", (msgid, 0));
     except sqlite3.IntegrityError:
         # TODO: throw something intelligent
         logging.warning("Ignoring duplicate message from " + msg['From'] + " with Message-ID " + msgid)
@@ -950,17 +994,9 @@ def import_email(msg):
 
     bug = get_bug(bugno)
 
-    db.execute("UPDATE messages SET bug=? WHERE key=?", (bugno, key))
+    db.execute("UPDATE messages SET bug=? WHERE msgid=?", (bugno, msgid))
 
     db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", (bugno, msg['From']))
-
-    # Move the message to the appropriate folder
-
-    bugdir = os.path.join(maildir, str(bugno))
-    mailbox.Maildir(bugdir).close()
-    movefrom = os.path.join(maildir, 'new', key)
-    moveto = os.path.join(bugdir, 'cur', key)
-    os.rename(movefrom, moveto)
 
     # Email a copy to interested people
 
@@ -972,7 +1008,7 @@ def import_email(msg):
 
     # Run the post-index hook
 
-    run_hook('post-index', moveto, bug = bugno)
+    run_hook('post-index', filename, bug = bugno)
 
     return (bug, new)
 
@@ -980,7 +1016,6 @@ def import_email(msg):
 # TODO: maybe we already know the bug number?
 def update_index(filename):
     file = open(filename, 'r')
-    key = os.path.basename(filename)
     msg = email.message_from_file(file)
 
     msgid = email.utils.unquote(msg['Message-ID'])
@@ -996,7 +1031,7 @@ def update_index(filename):
     # Store the message in the database
 
     try:
-        db.execute("INSERT INTO messages (key, msgid, bug) values (?,?,?)", (key, msgid, 0));
+        db.execute("INSERT INTO messages (msgid, bug) values (?,?)", (msgid, 0));
     except sqlite3.IntegrityError:
         # TODO: throw something intelligent
         logging.warning("Ignoring duplicate message from " + msg['From'] + " with Message-ID " + msgid)
@@ -1028,7 +1063,7 @@ def update_index(filename):
 
     bug = get_bug(bugno)
 
-    db.execute("UPDATE messages SET bug=? WHERE key=?", (bugno, key))
+    db.execute("UPDATE messages SET bug=? WHERE msgid=?", (bugno, msgid))
 
     db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", (bugno, msg['From']))
 
