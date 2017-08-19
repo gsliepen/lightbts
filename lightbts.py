@@ -941,10 +941,15 @@ def import_email(msg):
     if not msg['Message-ID']:
         msg['Message-ID'] = email.utils.make_msgid('LightBTS')
 
+    # Add a Received: header
+
+    now = email.utils.formatdate()
+    msg._headers.insert(0, ('Received', 'by localhost (LightBTS); ' + now))
+
     # Handle missing Date
 
     if not msg['Date']:
-        msg['Date'] = email.utils.formatdate()
+        msg['Date'] = now
 
     # Save message to new
 
