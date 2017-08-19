@@ -163,11 +163,11 @@ def do_show_bug(bugno, verbose):
         write_pager(lightbts.reverse_linktypes[linktype].capitalize() + ': ' + ' '.join([str(i) for i in bugs]))
 
     write_pager('')
-    more = False
+    first = True
 
     for msg in bug.get_messages():
         if(verbose):
-            if more:
+            if not first:
                 write_pager('')
             write_pager('From: ' + msg.msg['From'])
             write_pager('To: ' + msg.msg['To'])
@@ -176,9 +176,18 @@ def do_show_bug(bugno, verbose):
             write_pager('Message-ID: ' + msg.msg['Message-ID'])
             write_pager('')
             write_pager(msg.msg.get_payload().rstrip());
-            more = True
         else:
+            if first:
+                text = msg.msg.get_payload().splitlines()
+                if text:
+                    if len(text) > 10:
+                        write_pager('\n'.join(text[0:10]))
+                        write_pager('[...]')
+                    else:
+                        write_pager(msg.msg.get_payload().rstrip())
+                    write_pager('')
             write_pager(msg.msgid)
+        first = False
 
     close_pager()
 
