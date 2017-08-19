@@ -900,7 +900,7 @@ def forward_message(bug, msg):
     # Get all To: and Cc: addresses from the message
 
     dont = msg.get_all('From', []) + msg.get_all('To', []) + msg.get_all('Cc', [])
-    dont = set(map((lambda x: unicode(x[1], 'utf-8')), email.utils.getaddresses(dont)))
+    dont = set(email.utils.getaddresses(dont))
 
     # Send a copy to those who didn't get the message yet
 
