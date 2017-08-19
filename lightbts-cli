@@ -20,6 +20,41 @@ def is_interactive():
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
+pager = None
+
+def open_pager():
+    if not is_interactive():
+        return
+
+    cmd = lightbts.config.get('cli', 'pager')
+    if not cmd:
+        if 'LIGHTBTS_PAGER' in os.environ:
+            cmd = os.environ['LIGHTBTS_PAGER']
+        elif 'PAGER' in os.environ:
+            cmd = os.environ['PAGER']
+        else:
+            cmd = 'less'
+
+    if cmd == '-':
+        return
+
+    if 'LESS' not in os.environ:
+        os.environ['LESS'] = 'FRX'
+
+    global pager
+    pager = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE)
+
+def write_pager(text):
+    if pager:
+        pager.stdin.write(text.encode() + b'\n')
+    else:
+        print(text)
+
+def close_pager():
+    if pager:
+        pager.stdin.close()
+        pager.wait()
+
 def do_init(args):
     if not args.dir:
         args.dir = args.data
@@ -69,21 +104,25 @@ def do_list(args):
         elif args.prop[-1] == "bugs":
             args.prop.pop()
 
+    open_pager()
+
     for bug in lightbts.list_bugs(args):
         if do_tags:
             tags |= set(bug.get_tags())
         elif do_milestones:
             milestones.add(bug.get_milestone())
         else:
-            print("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title))
+            write_pager("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title))
 
     if do_tags:
         for tag in tags:
-            print(tag)
+            write_pager(tag)
     elif do_milestones:
         for milestone in milestones:
             if milestone:
-                print(milestone)
+                write_pager(milestone)
+
+    close_pager()
 
 def do_show_bug(bugno, verbose):
     bug = lightbts.get_bug(bugno)
@@ -93,50 +132,55 @@ def do_show_bug(bugno, verbose):
 
     found_versions = bug.get_found_versions()
     fixed_versions = bug.get_fixed_versions()
-    print('Bug#' + str(bug.id) + ': ' + bug.title)
-    print('Status: ' + bug.statusname)
+
+    open_pager()
+
+    write_pager('Bug#' + str(bug.id) + ': ' + bug.title)
+    write_pager('Status: ' + bug.statusname)
     if bug.submitter:
-        print('Submitter:  ' + bug.submitter)
+        write_pager('Submitter:  ' + bug.submitter)
     if bug.owner != bug.submitter:
-        print('Owner: ' + bug.owner)
+        write_pager('Owner: ' + bug.owner)
     if bug.status and bug.progress:
-        print('Progress: ' + str(bug.progress) + '%')
+        write_pager('Progress: ' + str(bug.progress) + '%')
     if found_versions:
-        print('Found in: ' + ' '.join(found_versions))
+        write_pager('Found in: ' + ' '.join(found_versions))
     if fixed_versions:
-        print('Fixed in: ' + ' '.join(fixed_versions))
-    print('Severity: ' + bug.severityname)
+        write_pager('Fixed in: ' + ' '.join(fixed_versions))
+    write_pager('Severity: ' + bug.severityname)
     tags = bug.get_tags()
     if tags:
-        print('Tags: ' + ' '.join(tags))
+        write_pager('Tags: ' + ' '.join(tags))
     if bug.deadline:
-        print('Deadline: ' + email.utils.formatdate(float(bug.deadline)))
+        write_pager('Deadline: ' + email.utils.formatdate(float(bug.deadline)))
     if bug.milestone:
-        print('Milestone: ' + bug.milestone)
+        write_pager('Milestone: ' + bug.milestone)
 
     for linktype, bugs in bug.get_links().items():
-        print(lightbts.verbose_linktypes[linktype].capitalize() + ': ' + ' '.join([str(i) for i in bugs]))
+        write_pager(lightbts.verbose_linktypes[linktype].capitalize() + ': ' + ' '.join([str(i) for i in bugs]))
 
     for linktype, bugs in bug.get_reverse_links().items():
-        print(lightbts.reverse_linktypes[linktype].capitalize() + ': ' + ' '.join([str(i) for i in bugs]))
+        write_pager(lightbts.reverse_linktypes[linktype].capitalize() + ': ' + ' '.join([str(i) for i in bugs]))
 
-    print('')
+    write_pager('')
     more = False
 
     for msg in bug.get_messages():
         if(verbose):
             if more:
-                print('')
-            print('From: ' + msg.msg['From'])
-            print('To: ' + msg.msg['To'])
-            print('Subject: ' + msg.msg['Subject'])
-            print('Date: ' + msg.msg['Date'])
-            print('Message-ID: ' + msg.msg['Message-ID'])
-            print('')
-            print(msg.msg.get_payload().rstrip());
+                write_pager('')
+            write_pager('From: ' + msg.msg['From'])
+            write_pager('To: ' + msg.msg['To'])
+            write_pager('Subject: ' + msg.msg['Subject'])
+            write_pager('Date: ' + msg.msg['Date'])
+            write_pager('Message-ID: ' + msg.msg['Message-ID'])
+            write_pager('')
+            write_pager(msg.msg.get_payload().rstrip());
             more = True
         else:
-            print(msg.msgid)
+            write_pager(msg.msgid)
+
+    close_pager()
 
 def do_show_message(msgid):
     msg = lightbts.get_message(msgid)
@@ -147,18 +191,23 @@ def do_show_message(msgid):
     bug = lightbts.get_bug(msg.bug)
     found_versions = bug.get_found_versions()
     fixed_versions = bug.get_fixed_versions()
-    print('Bug#' + str(bug.id) + ': ' + bug.title)
-    print('Status: ' + bug.statusname)
+
+    open_pager()
+
+    write_pager('Bug#' + str(bug.id) + ': ' + bug.title)
+    write_pager('Status: ' + bug.statusname)
     if found_versions:
-        print('Found in: ' + ' '.join(found_versions))
+        write_pager('Found in: ' + ' '.join(found_versions))
     if fixed_versions:
-        print('Fixed in: ' + ' '.join(fixed_versions))
-    print('Severity: ' + bug.severityname)
+        write_pager('Fixed in: ' + ' '.join(fixed_versions))
+    write_pager('Severity: ' + bug.severityname)
     tags = bug.get_tags()
     if tags:
-        print('Tags: ' + tags)
-    print('')
-    print(msg.msg.as_string().rstrip());
+        write_pager('Tags: ' + tags)
+    write_pager('')
+    write_pager(msg.msg.as_string().rstrip());
+
+    close_pager()
 
 def do_show(args):
     if '@' in args.id:
@@ -167,8 +216,12 @@ def do_show(args):
         return do_show_bug(int(args.id), args.verbose)
 
 def do_search(args):
+    open_pager()
+
     for bug in lightbts.search_bugs(args):
-        print("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title))
+        write_pager("{:>6} {:6} {:9}  {:}".format(bug.id, bug.statusname, bug.severityname, bug.title))
+
+    close_pager()
 
 def edit_interactive(msg, hint = 'bug'):
     # Find out which editor to use

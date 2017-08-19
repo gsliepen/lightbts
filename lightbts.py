@@ -628,6 +628,7 @@ def init(dir=None):
 
     config.add_section('cli')
     config.set('cli', 'editor', '')
+    config.set('cli', 'pager', '')
 
     # Read the configuration file
 
