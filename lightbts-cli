@@ -8,9 +8,13 @@ import sys
 import subprocess
 import tempfile
 import email.message
+import email.mime.base
+import email.mime.text
+import email.encoders
 import dateutil.parser
 import mailbox
 import hashlib
+import magic
 
 import lightbts
 
@@ -175,16 +179,16 @@ def do_show_bug(bugno, verbose):
             write_pager('Date: ' + msg.msg['Date'])
             write_pager('Message-ID: ' + msg.msg['Message-ID'])
             write_pager('')
-            write_pager(msg.msg.get_payload().rstrip());
+            write_pager(msg.get_body().rstrip());
         else:
             if first:
-                text = msg.msg.get_payload().splitlines()
+                text = msg.get_body().splitlines()
                 if text:
                     if len(text) > 10:
                         write_pager('\n'.join(text[0:10]))
                         write_pager('[...]')
                     else:
-                        write_pager(msg.msg.get_payload().rstrip())
+                        write_pager(msg.get_body().rstrip())
                     write_pager('')
             write_pager(msg.msgid)
         first = False
@@ -214,7 +218,8 @@ def do_show_message(msgid):
     if tags:
         write_pager('Tags: ' + tags)
     write_pager('')
-    write_pager(msg.msg.as_string().rstrip());
+
+    write_pager(msg.msg.as_string(policy=email.policy.default).rstrip());
 
     close_pager()
 
@@ -279,7 +284,7 @@ def edit_interactive(msg, hint = 'bug'):
 
 def do_create(args):
     # Create message headers, start with From: so the file command recognizes it as message/rfc822
-    msg = email.message.Message()
+    msg = email.message.EmailMessage()
     msg['From'] = lightbts.get_local_email_address()
     msg['Subject'] = ' '.join(args.title)
 
@@ -294,17 +299,20 @@ def do_create(args):
         action += '\n'
 
     if is_interactive():
-        msg.set_payload(action)
+        msg.set_content(action)
         msg = edit_interactive(msg, 'create')
         if not msg:
             eprint("Aborting new bug report.")
             exit(1)
     else:
-        msg.set_payload(action + sys.stdin.read())
+        msg.set_content(action + sys.stdin.read())
 
     msg['To'] = 'LightBTS'
     msg['Date'] = email.utils.formatdate()
     msg['User-Agent'] = 'LightBTS/' + lightbts.__version__
+
+    if args.attach:
+        attach(msg, args.attach)
 
     (bug, new) = lightbts.import_email(msg)
 
@@ -315,6 +323,12 @@ def do_create(args):
 
 def quote(text):
     return ''.join('> ' + line + '\n' for line in text.strip('\n').split('\n'))
+
+def attach(msg, filename):
+    data = open(filename, 'rb').read()
+    (type, encoding, name) = magic.detect_from_content(filename)
+    (maintype, subtype) = type.split('/')
+    msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=os.path.basename(filename))
 
 def do_reply(args):
     if args.close and args.reopen:
@@ -335,7 +349,7 @@ def do_reply(args):
         origmsg = lightbts.get_message(bug.get_first_msgid())
 
     # Create message headers, start with From: so the file command recognizes it as message/rfc822
-    msg = email.message.Message()
+    msg = email.message.EmailMessage()
     msg['From'] = lightbts.get_local_email_address()
     msg['Subject'] = bug.title
 
@@ -352,7 +366,8 @@ def do_reply(args):
     if args.reopen:
         action += 'Status: open\n'
 
-    action += '\n'
+    if action:
+        action += '\n'
 
     if is_interactive():
         origdate = origmsg.get_msg()['Date']
@@ -360,19 +375,22 @@ def do_reply(args):
         body = action + "On " + origdate + ", " + origrealname + " wrote:\n\n"
         body += quote(origmsg.get_body())
 
-        msg.set_payload(body)
+        msg.set_content(body)
 
         msg = edit_interactive(msg, 'reply-' + str(bug.get_id()))
         if not msg:
             eprint("Aborting bug reply.")
             exit(1)
     else:
-        msg.set_payload(action + sys.stdin.read())
+        msg.set_content(action + sys.stdin.read())
 
     msg['To'] = 'LightBTS'
     msg['Date'] = email.utils.formatdate()
     msg['User-Agent'] = 'LightBTS/' + lightbts.__version__
     msg['In-Reply-To'] = '<' + origmsg.get_msgid() + '>'
+
+    if args.attach:
+        attach(msg, args.attach)
 
     (bug, new) = lightbts.import_email(msg);
 
@@ -380,19 +398,19 @@ def do_reply(args):
 
 def do_action(bug, action):
     # Create message headers, start with From: so the file command recognizes it as message/rfc822
-    msg = email.message.Message()
+    msg = email.message.EmailMessage()
     msg['From'] = lightbts.get_local_email_address()
     msg['Subject'] = bug.title
 
     if is_interactive():
-        msg.set_payload(action)
+        msg.set_content(action)
 
         msg = edit_interactive(msg, 'reply-' + str(bug.get_id()))
         if not msg:
             eprint("Aborting bug action.")
             exit(1)
     else:
-        msg.set_payload(action)
+        msg.set_content(action)
 
     msg['To'] = 'LightBTS'
     msg['Date'] = email.utils.formatdate()
@@ -427,6 +445,37 @@ def do_reopen(args):
         action += 'Tags: +' + args.tag + '\n'
 
     do_action(bug, action)
+
+def do_attach(args):
+    bug = lightbts.get_bug(args.id)
+
+    if '@' in args.id:
+        origmsg = lightbts.get_message(args.id)
+        if not origmsg:
+            eprint('Could not find message ID ' + args.id)
+            exit(1)
+        bug = lightbts.get_bug(origmsg.get_bug())
+    else:
+        bug = lightbts.get_bug(int(args.id))
+        if not bug:
+            eprint('Could not find bug #' + args.id)
+            exit(1)
+        origmsg = lightbts.get_message(bug.get_first_msgid())
+
+    msg = email.message.EmailMessage()
+    msg['From'] = lightbts.get_local_email_address()
+    msg['Subject'] = bug.title
+    msg['To'] = 'LightBTS'
+    msg['Date'] = email.utils.formatdate()
+    msg['User-Agent'] = 'LightBTS/' + lightbts.__version__
+    msg['In-Reply-To'] = '<' + origmsg.get_msgid() + '>'
+
+    for filename in args.file:
+        attach(msg, filename)
+
+    (bug, new) = lightbts.import_email(msg);
+
+    eprint('Thank you for reporting additional information for bug number ' + str(bug.id))
 
 def do_retitle(args):
     bug = lightbts.get_bug(args.id)
@@ -589,6 +638,7 @@ parser_create = subparser.add_parser('create', help='create a new bug')
 parser_create.add_argument('-V', '--version', metavar='VERSION', help='mark the bug as found in the given version')
 parser_create.add_argument('-T', '--tag', metavar='TAG', help='set the given tag')
 parser_create.add_argument('-S', '--severity', metavar='SEVERITY', help='set the bug severity')
+parser_create.add_argument('-A', '--attach', metavar='FILE', help='attach a file')
 parser_create.add_argument('title', help='bug title', nargs=argparse.REMAINDER)
 parser_create.set_defaults(func=do_create)
 
@@ -597,6 +647,7 @@ parser_reply.add_argument('-c', '--close', help='close the bug', action='store_t
 parser_reply.add_argument('-r', '--reopen', help='reopen the bug', action='store_true')
 parser_reply.add_argument('-V', '--version', metavar='VERSION', help='mark the bug as found (fixed if the -c flag is used) in the given version')
 parser_reply.add_argument('-T', '--tag', metavar='TAG', help='set the given tag')
+parser_reply.add_argument('-A', '--attach', metavar='FILE', help='attach a file')
 parser_reply.add_argument('id', help='bug or message id')
 parser_reply.set_defaults(func=do_reply)
 
@@ -611,6 +662,11 @@ parser_reopen.add_argument('-V', '--version', metavar='VERSION', help='mark the 
 parser_reopen.add_argument('-T', '--tag', metavar='TAG', help='set the given tag')
 parser_reopen.add_argument('id', help='bug id')
 parser_reopen.set_defaults(func=do_reopen)
+
+parser_attach = subparser.add_parser('attach', help='attach file to an existing bug')
+parser_attach.add_argument('id', help='bug id')
+parser_attach.add_argument('file', help='file to attach', nargs='+')
+parser_attach.set_defaults(func=do_attach)
 
 parser_retitle = subparser.add_parser('retitle', help='change title of an existing bug')
 parser_retitle.add_argument('id', help='bug id')

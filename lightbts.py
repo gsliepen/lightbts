@@ -134,7 +134,9 @@ def store(msg):
 def load(msg_id):
     hash = hashlib.blake2b(email.utils.unquote(msg_id).encode(), digest_size=24).hexdigest()
     filename = os.path.join(maildir, hash[0:2], hash[2:])
-    return email.message_from_file(open(filename, "r"))
+    msg = email.message_from_file(open(filename, "r"))
+
+    return msg
 
 class bug(object):
     def __init__(self, id=None, title=None, status=None, severity=None, owner=None, submitter=None, date=None, deadline=None, progress=0, milestone=None):
@@ -395,12 +397,12 @@ class message(object):
                 html = part
 
         if text:
-            return text.get_payload(decode = True)
+            return text.get_payload()
 
         if html:
-            return html.get_payload(decode = True)
+            return html.payload()
 
-        return msg.msg.as_string()
+        return msg.get_content()
 
     def set_spam(self, value=True):
         db.execute('UPDATE messages SET spam=? WHERE msgid=?', (value, self._msgid))
@@ -737,7 +739,16 @@ def reply(bug, address, text):
     msg.assign_to(bug)
 
 def parse_metadata(bug, msg, msgstatus = None):
-    text = msg.get_payload()
+    text = None
+
+    for part in msg.walk():
+        if part.get_content_type() == "text/plain":
+            text = part.get_content()
+            break
+
+    if not text:
+        return
+
     regex = re.compile("([A-Za-z-]+):[ \t]+(.*)")
 
     status = None
