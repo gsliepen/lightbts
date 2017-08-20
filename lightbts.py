@@ -402,7 +402,7 @@ class message(object):
         if html:
             return html.payload()
 
-        return msg.get_content()
+        return ''
 
     def set_spam(self, value=True):
         db.execute('UPDATE messages SET spam=? WHERE msgid=?', (value, self._msgid))

@@ -477,6 +477,63 @@ def do_attach(args):
 
     eprint('Thank you for reporting additional information for bug number ' + str(bug.id))
 
+def ask_open(filename):
+    if os.path.exists(filename):
+        if not is_interactive():
+            eprint('File ' + filename + ' already exists, not overwriting!')
+            return None
+        while os.path.exists(filename):
+            eprint('File ' + filename + ' already exists, enter a new filename:')
+            filename = input('> ')
+    return open(filename, 'wb')
+
+def do_save(args):
+    if (not args.all and not args.file) or (args.all and args.file):
+        eprint('Either use --all or specify one or more attachment names to save!')
+        sys.exit(1)
+
+    bug = lightbts.get_bug(args.id)
+
+    if '@' in args.id:
+        msgs = [lightbts.get_message(args.id)]
+    else:
+        msgs = bug.get_messages()
+
+    directory = False
+
+    if args.output:
+        (head, tail) = os.path.split(args.output)
+        if not tail or args.all or len(args.file) > 1:
+            directory = True
+            if not os.path.exists(args.output):
+                os.mkdir(args.output)
+
+    for msg in msgs:
+        # Check all MIME parts
+        for part in msg.msg.walk():
+            # Check if it is an attachment
+            cdh = part.get('Content-Disposition', None)
+            if not cdh:
+                continue;
+            cds = cdh.split(';')
+            if cds[0] != 'attachment':
+                continue;
+
+            # Get the filename of the attachment
+            filename = os.path.basename(part.get_filename())
+            if not args.all and filename not in args.file:
+                continue
+
+            if directory:
+                filename = os.path.join(args.output, filename)
+            else:
+                if args.output:
+                    filename = args.output
+
+            f = ask_open(filename)
+
+            f.write(part.get_payload(decode = True))
+
 def do_retitle(args):
     bug = lightbts.get_bug(args.id)
     title = ' '.join(args.title)
@@ -667,6 +724,13 @@ parser_attach = subparser.add_parser('attach', help='attach file to an existing 
 parser_attach.add_argument('id', help='bug id')
 parser_attach.add_argument('file', help='file to attach', nargs='+')
 parser_attach.set_defaults(func=do_attach)
+
+parser_save = subparser.add_parser('save', help='save attachments to disk')
+parser_save.add_argument('-a', '--all', help='save all attachments', action='store_true')
+parser_save.add_argument('-o', '--output', metavar='PATH', help='output filename or directory')
+parser_save.add_argument('id', help='bug id')
+parser_save.add_argument('file', help='attachments to save', nargs='*')
+parser_save.set_defaults(func=do_save)
 
 parser_retitle = subparser.add_parser('retitle', help='change title of an existing bug')
 parser_retitle.add_argument('id', help='bug id')
