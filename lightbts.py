@@ -743,7 +743,7 @@ def parse_metadata(bug, msg, msgstatus = None):
 
     for part in msg.walk():
         if part.get_content_type() == "text/plain":
-            text = part.get_content()
+            text = part.get_payload()
             break
 
     if not text:
