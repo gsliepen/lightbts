@@ -352,7 +352,7 @@ class bug(object):
     def record_action(self, action, address=get_local_email_address()):
         msg = create_message(self.title, address, action, headers={
             'X-LightBTS-Control': 'yes',
-            'In-Reply-To': self.get_first_msgid()
+            'In-Reply-To': '<' + self.get_first_msgid() + '>'
         });
         msg.assign_to(self)
 
