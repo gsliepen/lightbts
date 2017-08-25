@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 
 using namespace std;
+using namespace fmt;
 
 #ifdef VERSION
 static const string lightbts_version = VERSION;
@@ -26,7 +27,7 @@ vector<string> versions;
 vector<string> attachments;
 
 static void show_version() {
-	fmt::print(
+	print(
 			"LightBTS version {}\n"
 			"Copyright © 2017 Guus Sliepen\n"
 			"\n"
@@ -43,7 +44,7 @@ static int do_version(const char *argv0, const vector<string> &args) {
 }
 
 static int do_help(const char *argv0, const vector<string> &args) {
-	fmt::print(
+	print(
 			"Usage: {} help [<command>]\n"
 			"\n"
 			"Shows a help message for the given <command>. If no <command> is given,\n"
@@ -72,7 +73,7 @@ static const map<string, int (*)(const char *, const vector<string> &)> function
 };
 
 static void show_help(FILE *out, const char *argv0) {
-	fmt::print(out,
+	print(out,
 			"Usage: {} [options] command [arguments]\n"
 			"\n"
 			"Options:\n"
@@ -174,7 +175,7 @@ int main(int argc, char *argv[]) {
 			break;
 
 		case '?':
-			fmt::print(stderr, "Try '{0} --help' for more information.\n", argv[0]);
+			print(stderr, "Try '{0} --help' for more information.\n", argv[0]);
 			return 1;
 
 		default:
@@ -196,7 +197,7 @@ int main(int argc, char *argv[]) {
 			show_help(stdout, argv[0]);
 			return 0;
 		} else {
-			fmt::print(stderr, "{0}: missing command\nTry '{0} --help' for more information.\n", argv[0]);
+			print(stderr, "{0}: missing command\nTry '{0} --help' for more information.\n", argv[0]);
 			return 1;
 		}
 	}
@@ -204,7 +205,7 @@ int main(int argc, char *argv[]) {
 	try {
 		return functions.at(command)(argv[0], args);
 	} catch (out_of_range &e) {
-		fmt::print(stderr, "{0}: unrecognized command '{1}'\nTry '{0} --help' for more information.\n", argv[0], command);
+		print(stderr, "{0}: unrecognized command '{1}'\nTry '{0} --help' for more information.\n", argv[0], command);
 		return 1;
 	}
 }
