@@ -1,5 +1,9 @@
 .*.swp
 *.pyc
+*.o
+*.bak
+*.orig
+*~
 __pycache__/
 /MANIFEST
 /dist/
