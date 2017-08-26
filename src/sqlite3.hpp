@@ -147,6 +147,17 @@ namespace SQLite3 {
 
 		row_iterator begin() { if (stmt.state == SQLITE_ROW) return row_iterator(stmt); else return row_iterator(); }
 		row_iterator end() { return row_iterator(); }
+
+		/* Get current column values */
+		int next() { return stmt.step() == SQLITE_ROW; }
+		int column_int(int col) { return sqlite3_column_int(stmt, col); }
+		int64_t column_int64(int col) { return sqlite3_column_int64(stmt, col); }
+		const char *column_c_str(int col) { return (const char *)sqlite3_column_text(stmt, col); }
+		std::string column_string(int col) { return (const char *)sqlite3_column_text(stmt, col); }
+		double column_double(int col) { return sqlite3_column_double(stmt, col); }
+		int column_type(int col) { return sqlite3_column_type(stmt, col); }
+		std::string column_name(int col) { return sqlite3_column_name(stmt, col); }
+		int column_count() { return sqlite3_column_count(stmt); }
 	};
 
 	class transaction {
@@ -182,13 +193,24 @@ namespace SQLite3 {
 		::sqlite3 *db;
 
 		public:
-		database(const std::string &filename) {
+		database(): db(nullptr) {}
+
+		void open(const std::string &filename) {
 			if (sqlite3_open(filename.c_str(), &db))
 				throw error("could not open database");
 		}
 
-		~database() {
+		database(const std::string &filename) {
+			open(filename);
+		}
+
+		void close() {
 			sqlite3_close(db);
+			db = nullptr;
+		}
+
+		~database() {
+			close();
 		}
 
 		statement prepare(const std::string &sql) {
