@@ -165,9 +165,17 @@ namespace SQLite3 {
 		bool finished;
 
 		public:
+		transaction(transaction &other) = delete;
+
+		transaction(transaction &&other) {
+			db = other.db;
+			other.finished = true;
+		}
+
 		transaction(::sqlite3 *db): db(db), finished(false) {
 			statement(db, "BEGIN").step();
 		}
+
 		~transaction() {
 			if (!finished)
 				abort();
@@ -214,7 +222,7 @@ namespace SQLite3 {
 		}
 
 		statement prepare(const std::string &sql) {
-			return std::move(statement(db, sql));
+			return statement(db, sql);
 		}
 
 		template<typename... Ts>
