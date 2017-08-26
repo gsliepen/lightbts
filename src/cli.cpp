@@ -1,8 +1,26 @@
+/* LightBTS -- a lightweight issue tracking system
+   Copyright © 2017 Guus Sliepen <guus@lightbts.info>
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <iostream>
 #include <getopt.h>
 #include <vector>
 #include <map>
 
-#include <fmt/format.h>
+#include <fmt/ostream.h>
 
 using namespace std;
 using namespace fmt;
@@ -72,7 +90,7 @@ static const map<string, int (*)(const char *, const vector<string> &)> function
 	{"version", do_version},
 };
 
-static void show_help(FILE *out, const char *argv0) {
+static void show_help(ostream &out, const char *argv0) {
 	print(out,
 			"Usage: {} [options] command [arguments]\n"
 			"\n"
@@ -119,7 +137,7 @@ static void show_help(FILE *out, const char *argv0) {
 
 int main(int argc, char *argv[]) {
 	if (argc <= 1) {
-		show_help(stderr, argv[0]);
+		show_help(cerr, argv[0]);
 		return 1;
 	}
 	
@@ -175,7 +193,7 @@ int main(int argc, char *argv[]) {
 			break;
 
 		case '?':
-			print(stderr, "Try '{0} --help' for more information.\n", argv[0]);
+			print(cerr, "Try '{0} --help' for more information.\n", argv[0]);
 			return 1;
 
 		default:
@@ -194,10 +212,10 @@ int main(int argc, char *argv[]) {
 	
 	if (command.empty()) {
 		if (help) {
-			show_help(stdout, argv[0]);
+			show_help(cout, argv[0]);
 			return 0;
 		} else {
-			print(stderr, "{0}: missing command\nTry '{0} --help' for more information.\n", argv[0]);
+			print(cerr, "{0}: missing command\nTry '{0} --help' for more information.\n", argv[0]);
 			return 1;
 		}
 	}
@@ -205,7 +223,7 @@ int main(int argc, char *argv[]) {
 	try {
 		return functions.at(command)(argv[0], args);
 	} catch (out_of_range &e) {
-		print(stderr, "{0}: unrecognized command '{1}'\nTry '{0} --help' for more information.\n", argv[0], command);
+		print(cerr, "{0}: unrecognized command '{1}'\nTry '{0} --help' for more information.\n", argv[0], command);
 		return 1;
 	}
 }
