@@ -28,12 +28,12 @@ namespace SQLite3 {
 		error(const std::string &what): std::runtime_error(what) {}
 	};
 
-	void check(int result) {
+	static inline void check(int result) {
 		if (result)
 			throw error(result);
 	}
 
-	void check(::sqlite3 *db, int result) {
+	static inline void check(::sqlite3 *db, int result) {
 		if (result)
 			throw error(db);
 	}
@@ -150,14 +150,14 @@ namespace SQLite3 {
 
 		/* Get current column values */
 		int next() { return stmt.step() == SQLITE_ROW; }
-		int column_int(int col) { return sqlite3_column_int(stmt, col); }
-		int64_t column_int64(int col) { return sqlite3_column_int64(stmt, col); }
-		const char *column_c_str(int col) { return (const char *)sqlite3_column_text(stmt, col); }
-		std::string column_string(int col) { return (const char *)sqlite3_column_text(stmt, col); }
-		double column_double(int col) { return sqlite3_column_double(stmt, col); }
-		int column_type(int col) { return sqlite3_column_type(stmt, col); }
-		std::string column_name(int col) { return sqlite3_column_name(stmt, col); }
-		int column_count() { return sqlite3_column_count(stmt); }
+		int get_int(int col) { return stmt.column_int(col); }
+		int64_t get_int64(int col) { return stmt.column_int64(col); }
+		const char *get_c_str(int col) { return stmt.column_c_str(col); }
+		std::string get_string(int col) { return stmt.column_string(col); }
+		double get_double(int col) { return stmt.column_double(col); }
+		int get_type(int col) { return stmt.column_type(col); }
+		std::string get_name(int col) { return stmt.column_name(col); }
+		int column_count() { return stmt.column_count(); }
 	};
 
 	class transaction {
@@ -227,7 +227,7 @@ namespace SQLite3 {
 		}
 	};
 
-	database open(const std::string &filename) {
+	static inline database open(const std::string &filename) {
 		return database(filename);
 	}
 }
