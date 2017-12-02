@@ -89,6 +89,26 @@ Incoming emails will now be parsed by LightBTS, and it will either create new
 tickets, or if it detects that an email is a follow-up for an existing ticket,
 it will update the existing ticket accordingly.
 
+Some emailservers, like Postfix, allow mail to be sent to username-extension or
+username+extension, and will look for `~/.forward-extension` or
+`~/.forward+extension` respectively. This allows you to use a `-bugs` extension
+without having to get a new email address or create a new UNIX account.
+However, if you have a dedicated account for your bug tracker, then you can
+also use it to handle special actions. For example, to have emails sent to
+`lightbts-close@example.com` to automatically close the referenced bug, create
+a file called `.forward-close` with this line:
+
+    |/path/to/lightbts-email -d /path-to-instance --close
+
+Most mailservers also read the file `/etc/aliases`, which is normally used to
+map email names to account names. However, it also supports the pipe syntax, so
+one could add:
+
+    lightbts: |/path/to/lightbts-email -d /path/to/instance
+
+However, be aware that this might run the command as user nobody, which is
+probably not what you want.
+
 ## Configuring web support
 
 LightBTS can run as both a simple stand-alone webserver, or as a CGI server.
