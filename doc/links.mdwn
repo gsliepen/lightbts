@@ -1,0 +1,33 @@
+Linking bugs
+------------
+
+Bug A can declare a link to another bug B.
+A link can have a type.
+There can be only one link from A to B,
+but B to A is seen as a distict link.
+
+## Link types
+
+Relates:
+: A declares a generic relationship with bug B.
+Duplicates:
+: A is a duplicate of bug B.
+Depends:
+: A depends on bug B to be closed before A itself can be closed.
+Blocks:
+: A declares it must be closed before bug B can be closed.
+
+Depends/Blocks are just the reverse of each other, but since A and B can be owned by different owners, it's probably best to keep both types.
+
+## Effects of linking
+
+For the database itself, links are just another piece of information.
+However, some actions should happen in response to actions on bugs that have links to other bugs, or have other bugs link to it.
+
+When a bug is closed, and other bugs are duplicate of the first bug, the other bugs should be closed as well.
+Open bugs that declare they are a duplicate of another bug should become immutable until the bug it duplicates is closed.
+
+When a bug is closed that says it depends on other bugs, and not all of those other bugs are closed, the close message must be rejected.
+When a bug is closed and there are other open bugs that claim they block the first bug, then the close message should be rejected (unless forced?).
+
+When a link is created, the message causing the link creation should be forwarded to the recipients of both bugs.

@@ -1,0 +1,225 @@
+Getting Started
+---------------
+
+## Creating and using a LightBTS instance from the command line
+
+### Creating a LightBTS instance
+
+    lightbts-cli init
+
+Just like you can start a new git repository by just calling `git init`, you
+can start a new LightBTS instance with `lightbts-cli init`. This creates a
+directory named `.lightbts` in the current working directory. Just like with
+git, if you are in the working directory where you ran `lightbts-cli init`, or
+any subdirectory thereof, any subsequent LightBTS commands will use the
+instance you just created.
+
+### Creating a new ticket
+
+    lightbts-cli create <title>
+
+This creates a new ticket with the given title. An editor will be started where
+you can write the details of the ticket. After saving the message, the ticket
+will be added to the database.
+
+### Listing existing tickets
+
+    lightbts-cli list
+
+This shows a list of all open tickets.
+
+## Looking at a specific ticket
+
+    lightbts-cli show <id>
+
+This shows the current status and any other metadata of the given ticket, and a
+summary of the ticket as was written when the ticket was created. This will
+also show a list of all messages associated with this ticket. All messages also
+have a unique ID, and you can use `lightbts-cli show <Message-ID>` to show a
+particular message in full. To show all messages of a given ticket in full,
+use:
+
+    lightbts-cli show -v <id>
+
+### Closing a ticket
+
+    lightbts-cli close <id>
+
+This marks the given ticket as closed. It will not show up anymore in the list
+produced by `lightbts-cli list`, however it is still present in the archive.
+One can still find closed tickets using `lightbts-cli list closed`, or by using
+`lightbts-cli search`.
+
+## Configuring email support
+
+### Setting up outgoing emails
+
+LightBTS can be configured to send and receive emails. The first step is to
+configure an email address for LightBTS itself. This is the address that will
+be used in the `From:` header in outgoing emails created by LightBTS. This can
+be set up as following:
+
+    lightbts-cli config email.address bugs@example.com
+    lightbts-cli config email.name "LightBTS example project"
+
+Emails are normally sent to the local mailserver. If your mail server is not
+running on the local host, you can specify like so:
+
+    lightbts-cli config email.smtphost smtp.example.com
+
+### Setting up incoming emails
+
+Before actually configuring LightBTS to receive emails, it is good to configure
+the admin email address. This is the address that is used to send a copy of
+incoming emails to, and ensures someone is informed when tickets are created or
+updated due to incoming emails. Typically you'd use your own email address. You
+configure it like so:
+
+    lightbts-cli config core.admin admin@example.com
+
+In order for LightBTS to be able to receive emails, one must have an email
+account set up for it, and ensure the `lightbts-email` command is called for
+every email that arrives. If one has set up a UNIX account, this can easily be
+done by creating a `.forward` file in the account's home directory, with the
+following line in it:
+
+    |/path/to/lightbts-email -d /path/to/instance
+
+Incoming emails will now be parsed by LightBTS, and it will either create new
+tickets, or if it detects that an email is a follow-up for an existing ticket,
+it will update the existing ticket accordingly.
+
+## Configuring web support
+
+LightBTS can run as both a simple stand-alone webserver, or as a CGI server.
+The latter allows it to be integrated with an existing website that is run by
+any webserver that support the CGI interface.
+
+(FastCGI should be possible but is broken at the moment.)
+
+### Stand-alone server
+
+    lightbts-web -d /path/to/instance
+
+This will start a web server running on port 8080 (use the `-p` option to have
+it listen on a different port). To access it, just point the browser to
+`http://localhost:8080/`.
+
+### Integration with Lighttpd
+
+    $HTTP["url"] =~ "^/lightbts" {
+    	cgi.assign = ("" => "")
+    }
+
+## Integration with git
+
+WARNING: this is experimental!!! Use it at your own risk. Make backups before
+proceeding. No warranty. You have been warned. Danger, Will Robinson! Here be
+dragons. Et cetera.
+
+It is possible to store the LightBTS instance inside a git repository. This
+way, you can use git to publish your bug tracker. In this section, we assume
+you have a git repository, and in the root of the working tree you have called
+`lightbts-cli init`. You should also add `/.lightbts` to `.gitignore`.
+
+NOTE: there are quite a number of steps to follow, in the future there will be
+a command that will take care of everything for you.
+
+### Setting up a worktree for LightBTS
+
+LightBTS needs to store its message database somewhere, and we don't want to
+have any conflicts with the normal working tree of a git repository. So, create
+a second worktree specifically for LightBTS:
+
+    git worktree add .git/lightbts master
+
+### Setting up a hidden branch for LightBTS
+
+Normally, you would not want the LightBTS database to be part of your normal
+Git branches. There are several reasons for that: first, LightBTS does not
+know about those branches, so it will probably do the wrong thing when you have
+more than one branch. Second, bugs don't always correspond well to commits, and
+they are typically opened and closed at a different time than the commits
+involved in the bug are made. Go to the LightBTS worktree and create an empty
+branch:
+
+    cd .git/lightbts
+    git checkout --orphan lightbts/master
+    git rm --cached -r .
+
+Now we need to add a file to it:
+
+    touch dummy
+    git add dummy
+    git commit -m "Initial commit"
+
+To hide the branch, we have to move the ref away from refs/heads:
+
+    git update-ref refs/lightbts/master HEAD
+    git checkout refs/lightbts/master
+    git update-ref -d refs/heads/lightbts/master
+
+Now we have a hidden branch. When calling `git status` in `.git/lightbts`, the
+output should be:
+
+    HEAD detached at refs/lightbts/master
+    nothing to commit, working tree clean
+
+### Move the message database into git
+
+Back in the normal working tree, move the message database into the second
+worktree we created for LightBTS:
+
+    mv .lightbts/messages .git/lightbts/
+
+Tell LightBTS about the new location of the message database:
+
+    lightbts-cli config core.messages .git/lightbts/messages
+
+If there are already any files in the message database, they have to be committed:
+
+    cd .git/lightbts
+    git add messages
+    git commit -m "Imported messages"
+
+### Setting up git integration hooks
+
+WARNING: This is severely untested.
+
+The final part is to set up hooks to commit new messages to the git repository.
+Back in the main work tree, type:
+
+    cat > .lightbts/hooks/pre-index << EOF
+    #!/bin/sh
+    cd ../.git/lightbts
+    git add $MESSAGE_FILE
+    git commit -m "Imported new message"
+    git update-ref refs/lightbts/master HEAD
+    EOF
+
+    chmod u+x .lightbts/hooks/pre-index
+
+Now new messages are automatically committed to the hidden LightBTS branch in
+git.
+
+If you want to pull new messages from a remote git repository, then git will
+just be able to check them out in the LightBTS worktree. However, for LightBTS
+to recognize the new messages, they have to be indexed by LightBTS. To do this,
+do:
+
+    cat > .git/hooks/post-checkout << EOF
+    #!/bin/sh
+    for file in `git diff --name-only $1..$2`; do
+        lightbts-cli index $file
+    done
+    EOF
+
+### Pushing and pulling to a remote repository
+
+To push:
+
+    git push <remote> refs/lightbts/master
+
+To pull:
+
+    git pull <remote> refs/lightbts/master

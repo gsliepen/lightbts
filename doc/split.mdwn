@@ -1,0 +1,37 @@
+Bug splitting
+-------------
+
+A common action is to split a bug into several subtasks.
+When working with email, it would be nice if one can reply to the original bug report and in one go create another bug that relates to the first one.
+Suggested format:
+
+```
+From: user@example.com
+To: bts@example.com
+Message-ID: reply1@foo
+In-Reply-To: msg1@foo
+Subject: Re: Bug#1: big task
+
+Split: subtask 1
+Owner: coworker@example.com
+
+We need to bla first.
+```
+
+While it is a reply to an existing message, it will in fact create a new bug, set the title to "subtask 1",
+perform all the other control fields actions on the new bug, and automatically adds a Blocks link back to the original bug.
+It should have exactly the same effect as sending a new message with the contents:
+
+```
+From: user@example.com
+To: bts@example.com
+Message-ID: msg2@foo
+Subject: subtask 1
+
+Blocks: 1
+Owner: coworker@example.com
+
+We need to bla first.
+```
+
+Since we depend on Message-IDs for linking messages together, we cannot do more than one split per message.
