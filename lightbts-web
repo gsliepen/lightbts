@@ -3,9 +3,10 @@
 
 import argparse
 import os
+import sys
 import syslog
 import string
-import urlparse
+import uritools
 
 import lightbts
 
@@ -37,6 +38,11 @@ def exit():
 def do_bug(environ, start_response, query):
     init()
     id = query['bug']
+    if len(id) != 1 or not id[0]:
+        start_response('400 Bad Request', [('Content-Type', 'text/plain; charset=utf-8')])
+        return 'Exactly one bug id should be specified.\n'
+    else:
+        id = id[0]
     bug = lightbts.get_bug(id);
 
     if not bug:
@@ -54,9 +60,10 @@ def do_bug(environ, start_response, query):
     return str(page)
 
 def myapp(environ, start_response):
-    query = dict(urlparse.parse_qsl(environ['QUERY_STRING']))
+    uri = uritools.urisplit('?' + environ['QUERY_STRING'])
+    query = uri.getquerydict()
     if 'bug' in query:
-        return do_bug(environ, start_response, query)
+        return [do_bug(environ, start_response, query).encode('utf-8')]
 
     start_response('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
 
@@ -68,7 +75,7 @@ def myapp(environ, start_response):
         buglist += tmpl_bugrow.substitute({'id': bug._id, 'status': bug.statusname, 'severity': bug.severityname, 'title': bug.title})
     page = tmpl_main.substitute({'buglist': str(buglist), 'copyright': copyright, 'root': lightbts.staticroot})
 
-    return str(page)
+    return [str(page).encode('utf-8')]
 
 if __name__ == '__main__':
     global home
@@ -78,16 +85,27 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='LightBTS web frontend.', epilog='Report bugs to guus@sliepen.org.')
     parser.add_argument('-d', '--data', metavar='DIR', help='directory where LightBTS stores its data')
     parser.add_argument('-p', '--port', metavar='PORT', help='TCP port to listen on', type=int, default=8080)
+    parser.add_argument('-s', '--socket', metavar='SOCKET', help='Path to FastCGI socket')
     parser.add_argument('--version', action='version', version='LightBTS ' + lightbts.__version__)
 
     args = parser.parse_args()
     home = args.data
+    interface = os.getenv("GATEWAY_INTERFACE")
 
-    if os.getenv("GATEWAY_INTERFACE"):
-        from flup.server.fcgi import WSGIServer
-        WSGIServer(myapp).run()
-    else:
+    if not interface:
         from wsgiref.simple_server import make_server
         httpd = make_server('127.0.0.1', args.port, myapp)
-        print "Serving on port " + str(args.port) + "..."
+        print("Serving on port " + str(args.port) + "...", file=sys.stderr)
         httpd.serve_forever()
+    elif interface.startswith("CGI/1."):
+        from wsgiref.handlers import CGIHandler
+        CGIHandler().run(myapp)
+    elif interface.startswith("FastCGI/"):
+        from flup.server.fcgi import WSGIServer
+        if args.socket:
+            WSGIServer(myapp, bindAddress=args.socket).run()
+        else:
+            WSGIServer(myapp).run()
+    else:
+        print("Unknown GATEWAY_INTERFACE '" + interface + "'", file=sys.stderr)
+        sys.exit(1)
