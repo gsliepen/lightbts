@@ -14,8 +14,9 @@ import logging
 import smtplib
 import dateutil
 import subprocess
-import hashlib
 import glob
+import ctypes
+import binascii
 try:
     import configparser
 except ImportError:
@@ -115,9 +116,18 @@ def get_local_email_address():
     else:
         return address
 
+# Python < 3.5 doesn't support the blake2b hash function, so borrow it from libb2.
+libb2 = ctypes.cdll.LoadLibrary('libb2.so')
+
+def blake2b(data, outlen=32):
+    out = ctypes.create_string_buffer(outlen)
+    result = libb2.blake2b(out, data, None, outlen, len(data), 0)
+    assert result == 0
+    return binascii.hexlify(out.raw).decode()
+
 def store(msg):
     msg_id = email.utils.unquote(msg['Message-ID']).encode()
-    hash = hashlib.blake2b(msg_id, digest_size=24).hexdigest()
+    hash = blake2b(msg_id, 24)
     tmpname = os.path.join(maildir, "tmp", hash)
     filename = os.path.join(maildir, hash[0:2], hash[2:])
     file = open(tmpname, "w")
@@ -132,7 +142,7 @@ def store(msg):
     return filename
 
 def load(msg_id):
-    hash = hashlib.blake2b(email.utils.unquote(msg_id).encode(), digest_size=24).hexdigest()
+    hash = blake2b(email.utils.unquote(msg_id).encode(), 24)
     filename = os.path.join(maildir, hash[0:2], hash[2:])
     msg = email.message_from_file(open(filename, "r"))
 
