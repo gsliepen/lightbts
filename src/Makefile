@@ -1,14 +1,14 @@
-all: lightbts-cli
+all: lbts
 
 CFLAGS ?= -Wall -O0 -g
 LIBS += -lfmt
 
 %.o: %.cpp
 	$(CXX) $(CFLAGS) -c -o $@ $<
-lightbts-cli: cli.o
+lbts: cli.o
 	$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
 
 clean:
-	rm -rf *.o lightbts-cli
+	rm -rf *.o lbts
 
 .PHONY: clean
