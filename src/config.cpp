@@ -23,6 +23,7 @@
 
 using namespace std;
 using namespace fmt;
+namespace fs = boost::filesystem;
 
 static void strip(string &s) {
 	auto start = s.find_first_not_of(" \t\r\n");
@@ -35,8 +36,8 @@ static void strip(string &s) {
 	}
 }
 
-void Config::load(const string &path) {
-	ifstream file(path);
+void Config::load(const fs::path &path) {
+	ifstream file(path.string());
 
 	string line;
 	string section;
@@ -69,8 +70,8 @@ void Config::load(const string &path) {
 	}
 }
 
-void Config::save(const string &path) {
-	ofstream file(path);
+void Config::save(const fs::path &path) {
+	ofstream file(path.string());
 
 	for (auto &section: db) {
 		print(file, "[{}]\n", section.first);
@@ -106,3 +107,13 @@ string Config::get(const string &section, const string &variable, const string &
 
 	return def;
 }
+
+bool Config::get_bool(const string &section, const string &variable, bool def) {
+	auto val = get(section, variable, def ? "true" : "false");
+	if (val == "true" || val == "yes")
+		return true;
+	if (val == "false" || val == "no")
+		return false;
+	throw runtime_error("Invalid value for boolean variable " + section + "." + variable);
+}
+

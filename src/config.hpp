@@ -19,14 +19,16 @@
 
 #include <map>
 #include <string>
+#include <boost/filesystem.hpp>
 
 class Config {
 	std::map<std::string, std::map<std::string, std::string>> db;
 
 	public:
-	void load(const std::string &path);
-	void save(const std::string &path);
-	std::string get(const std::string &section, const std::string &variable, const std::string &def = "");
+	void load(const boost::filesystem::path &path);
+	void save(const boost::filesystem::path &path);
+	std::string get(const std::string &section, const std::string &variable, const std::string &def = {});
+	bool get_bool(const std::string &section, const std::string &variable, bool def);
 	void set(const std::string &section, const std::string &variable, const std::string &value);
 	bool exists(const std::string &section, const std::string &variable = "");
 };

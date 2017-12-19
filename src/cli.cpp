@@ -15,12 +15,16 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "cli.hpp"
+
 #include <iostream>
 #include <getopt.h>
 #include <vector>
 #include <map>
 
 #include <fmt/ostream.h>
+
+#include "list.hpp"
 
 using namespace std;
 using namespace fmt;
@@ -88,6 +92,7 @@ static const struct option long_options[] = {
 static const map<string, int (*)(const char *, const vector<string> &)> functions = {
 	{"help", do_help},
 	{"version", do_version},
+	{"list", do_list},
 };
 
 static void show_help(ostream &out, const char *argv0) {
