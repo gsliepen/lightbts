@@ -17,6 +17,7 @@
 
 #include "cli.hpp"
 
+#include <algorithm>
 #include <iostream>
 #include <getopt.h>
 #include <vector>
@@ -25,6 +26,7 @@
 #include <fmt/ostream.h>
 
 #include "list.hpp"
+#include "show.hpp"
 
 using namespace std;
 using namespace fmt;
@@ -89,10 +91,20 @@ static const struct option long_options[] = {
 	{"attach", no_argument, nullptr, 'A'},
 };
 
-static const map<string, int (*)(const char *, const vector<string> &)> functions = {
+struct function {
+	const char *name;
+	int (*function)(const char *, const vector<string> &);
+	friend bool operator<(const struct function &a, const char *b) {
+		return strcmp(a.name, b) < 0;
+	}
+};
+
+// Keep the following list sorted at all times.
+static const function functions[] = {
 	{"help", do_help},
-	{"version", do_version},
 	{"list", do_list},
+	{"show", do_show},
+	{"version", do_version},
 };
 
 static void show_help(ostream &out, const char *argv0) {
@@ -225,9 +237,10 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	try {
-		return functions.at(command)(argv[0], args);
-	} catch (out_of_range &e) {
+	auto match = lower_bound(begin(functions), end(functions), command.c_str());
+	if (match != end(functions) && command == match->name) {
+		return match->function(argv[0], args);
+	} else {
 		print(cerr, "{0}: unrecognized command '{1}'\nTry '{0} --help' for more information.\n", argv[0], command);
 		return 1;
 	}

@@ -150,6 +150,7 @@ class Instance {
 	std::string get_config(const std::string &section, const std::string &variable);
 	void set_config(const std::string &section, const std::string &variable, const std::string &value);
 	std::vector<Ticket> list();
+	Ticket get_ticket(const std::string &id);
 
 	std::set<std::string> get_tags(const Ticket &ticket);
 	std::string get_milestone(const Ticket &ticket);

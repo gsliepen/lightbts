@@ -94,7 +94,7 @@ namespace SQLite3 {
 		int column_int(int col) { return sqlite3_column_int(stmt, col); }
 		int64_t column_int64(int col) { return sqlite3_column_int64(stmt, col); }
 		const char *column_c_str(int col) { return (const char *)sqlite3_column_text(stmt, col); }
-		std::string column_string(int col) { return (const char *)sqlite3_column_text(stmt, col); }
+		std::string column_string(int col) { auto str = (const char *)sqlite3_column_text(stmt, col); return str ? str : ""; }
 		double column_double(int col) { return sqlite3_column_double(stmt, col); }
 		int column_type(int col) { return sqlite3_column_type(stmt, col); }
 		std::string column_name(int col) { return sqlite3_column_name(stmt, col); }

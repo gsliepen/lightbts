@@ -48,7 +48,7 @@ void Instance::init_index(const fs::path &filename) {
 	db.execute("PRAGMA foreign_key = on");
 	auto version = db.execute("PRAGMA user_version").get_int(0);
 	auto appid_record = db.execute("PRAGMA application_id");
-	int appid;
+	int appid = 0;
 	if (appid_record)
 		appid = appid_record.get_int(0);
 
@@ -60,7 +60,7 @@ void Instance::init_index(const fs::path &filename) {
 		db.execute("PRAGMA application_id=0x4c425453");
 
 	if (!version) {
-		print(stderr, "Creating index...");
+		print(cerr, "Creating index...");
 
 		auto tx = db.begin();
 		db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER, deadline INTEGER, progress INTEGER NOT NULL DEFAULT 0, milestone TEXT)");
@@ -86,7 +86,7 @@ void Instance::init_index(const fs::path &filename) {
 		throw runtime_error(format("Unknown index version {}", version));
 
 	if (version < 4) {
-		print(stderr, "Old index, use the Python prototype of LightBTS to upgrade to version 4!");
+		print(cerr, "Old index, use the Python prototype of LightBTS to upgrade to version 4!");
 		throw runtime_error(format("Unsupported index version {}", version));
 	}
 }
@@ -156,6 +156,11 @@ vector<Ticket> Instance::list() {
 		tickets.emplace_back(row.get_string(0), row.get_string(1), static_cast<Status>(row.get_int(2)), static_cast<Severity>(row.get_int(3)));
 
 	return tickets;
+}
+
+Ticket Instance::get_ticket(const string &id) {
+	auto row = db.execute("SELECT id, title, status, severity FROM bugs WHERE id=?", id);
+	return Ticket(row.get_string(0), row.get_string(1), static_cast<Status>(row.get_int(2)), static_cast<Severity>(row.get_int(3)));
 }
 
 set<string> Instance::get_tags(const Ticket &ticket) {
