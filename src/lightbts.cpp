@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <boost/filesystem.hpp>
 #include <fmt/ostream.h>
+#include <blake2.h>
 
 #include "lightbts.hpp"
 
@@ -163,15 +164,59 @@ Ticket Instance::get_ticket(const string &id) {
 	return Ticket(row.get_string(0), row.get_string(1), static_cast<Status>(row.get_int(2)), static_cast<Severity>(row.get_int(3)));
 }
 
+Ticket Instance::get_ticket_from_message_id(const string &id) {
+	return get_ticket(db.execute("SELECT bug FROM messages WHERE msgid=?", id).get_string(0));
+}
+
+Mimesis::Message Instance::get_message(const string &id) {
+	if (id.size() < 3)
+		throw runtime_error("Invalid Message-ID value");
+
+	uint8_t id_hash[24];
+	int ec;
+
+	if (id[0] == '<' && id[id.size() - 1] == '>')
+		ec = blake2b(id_hash, id.data() + 1, nullptr, sizeof id_hash, id.size() - 2, 0);
+	else
+		ec = blake2b(id_hash, id.data(), nullptr, sizeof id_hash, id.size(), 0);
+
+	if (ec)
+		throw runtime_error("Hash function failed");
+
+	static const char hexdigits[] = "0123456789abcdef";
+	string result(sizeof id_hash * 2, '\0');
+
+	for (size_t i = 0; i < sizeof id_hash; i++) {
+		result[i * 2] = hexdigits[id_hash[i] >> 4];
+		result[i * 2 + 1] = hexdigits[id_hash[i] & 0xf];
+	}
+
+	fs::path filename = fs::path(maildir) / result.substr(0, 2) / result.substr(2);
+
+	Mimesis::Message message;
+	message.load(filename.string());
+
+	return message;
+}
+
 set<string> Instance::get_tags(const Ticket &ticket) {
 	set<string> tags;
-	for (auto &&row: db.execute("SELECT tag FROM tags WHERE bug=?", ticket.id))
+	for (auto &&row: db.execute("SELECT tag FROM tags WHERE bug=?", stol(ticket.id)))
 		tags.insert(row.get_string(0));
 	return tags;
 }
 
 string Instance::get_milestone(const Ticket &ticket) {
-	return db.execute("SELECT milestone FROM bugs WHERE id=?", ticket.id).get_string(0);
+	return db.execute("SELECT milestone FROM bugs WHERE id=?", stol(ticket.id)).get_string(0);
+}
+
+vector<string> Instance::get_message_ids(const Ticket &ticket) {
+	vector<string> result;
+
+	for (auto &&row: db.execute("SELECT msgid FROM messages WHERE bug=?", stol(ticket.id)))
+		result.push_back(row.get_string(0));
+
+	return result;
 }
 
 }

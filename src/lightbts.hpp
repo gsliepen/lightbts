@@ -18,6 +18,7 @@
 */
 
 #include <boost/filesystem.hpp>
+#include <mimesis.hpp>
 #include <set>
 #include <string>
 #include <vector>
@@ -151,9 +152,12 @@ class Instance {
 	void set_config(const std::string &section, const std::string &variable, const std::string &value);
 	std::vector<Ticket> list();
 	Ticket get_ticket(const std::string &id);
+	Ticket get_ticket_from_message_id(const std::string &id);
+	Mimesis::Message get_message(const std::string &id);
 
 	std::set<std::string> get_tags(const Ticket &ticket);
 	std::string get_milestone(const Ticket &ticket);
+	std::vector<std::string> get_message_ids(const Ticket &ticket);
 };
 
 }

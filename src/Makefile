@@ -3,7 +3,7 @@ all: lbts
 CFLAGS ?= -Wall -O0 -g
 CFLAGS += -std=c++11
 CFLAGS += `pkg-config --cflags mimesis sqlite3`
-LIBS += -lfmt -lboost_filesystem -lboost_system
+LIBS += -lfmt -lboost_filesystem -lboost_system -lb2
 LIBS += `pkg-config --libs mimesis sqlite3`
 
 %.o: %.cpp
