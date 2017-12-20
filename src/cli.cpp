@@ -237,6 +237,9 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	if (!isatty(0) || !isatty(1))
+		batch = true;
+
 	auto match = lower_bound(begin(functions), end(functions), command.c_str());
 	if (match != end(functions) && command == match->name) {
 		return match->function(argv[0], args);

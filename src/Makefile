@@ -8,7 +8,7 @@ LIBS += `pkg-config --libs mimesis sqlite3`
 
 %.o: %.cpp
 	$(CXX) $(CFLAGS) -c -o $@ $<
-lbts: cli.o list.o lightbts.o config.o show.o
+lbts: cli.o list.o lightbts.o config.o show.o pager.o
 	$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
 
 clean:

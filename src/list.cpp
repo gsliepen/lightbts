@@ -22,6 +22,7 @@
 
 #include "cli.hpp"
 #include "lightbts.hpp"
+#include "pager.hpp"
 
 using namespace std;
 using namespace fmt;
@@ -49,6 +50,8 @@ int do_list(const char *argv0, const vector<string> &args) {
 		}
 	}
 
+	Pager pager(bts.get_config("core", "pager"));
+
 	for(auto &&ticket: bts.list()) {
 		if (do_tags) {
 			for(auto &&tag: bts.get_tags(ticket))
@@ -56,16 +59,16 @@ int do_list(const char *argv0, const vector<string> &args) {
 		} else if (do_milestones) {
 			milestones.insert(bts.get_milestone(ticket));
 		} else {
-			print("{:>6} {:6} {:9}  {}\n", ticket.get_id(), ticket.get_status_name(), ticket.get_severity_name(), ticket.get_title());
+			print(pager, "{:>6} {:6} {:9}  {}\n", ticket.get_id(), ticket.get_status_name(), ticket.get_severity_name(), ticket.get_title());
 		}
 	}
 
 	if (do_tags) {
 		for (auto &&tag: tags)
-			print("{}\n", tag);
+			print(pager, "{}\n", tag);
 	} else if (do_milestones) {
 		for (auto &&milestone: milestones)
-			print("{}\n", milestone);
+			print(pager, "{}\n", milestone);
 	}
 
 	return 0;
