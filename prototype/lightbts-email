@@ -8,6 +8,7 @@ import sys
 import email
 import smtplib
 import logging
+import pystache
 
 import lightbts
 
@@ -94,12 +95,12 @@ if bug is None:
 
 if new:
     subject = 'Bug#' + str(bug.id) + ': ' + msg['Subject']
-    tmpl = lightbts.get_template("new.txt", "Thank you for reporting a bug, which has been assigned number ${id}.")
+    tmpl = lightbts.get_template("new.txt", "Thank you for reporting a bug, which has been assigned number {{id}}.")
 else:
     subject = msg['Subject']
-    tmpl = lightbts.get_template("reply.txt", "Thank you for reporting additional information for bug number ${id}.")
+    tmpl = lightbts.get_template("reply.txt", "Thank you for reporting additional information for bug number {{id}}.")
 
-text = tmpl.substitute({'id': bug._id})
+text = pystache.render(tmpl, {'id': bug._id})
 reply = email.MIMEText.MIMEText(text)
 
 reply['From'] = myfrom

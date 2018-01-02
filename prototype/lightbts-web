@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import pystache
 import sys
 import syslog
 import string
@@ -19,16 +20,13 @@ def init():
     global tmpl_main
     tmpl_main = lightbts.get_template('main.html')
 
-    global tmpl_bugrow
-    tmpl_bugrow = lightbts.get_template('bugrow.html')
-
     global tmpl_bug
     tmpl_bug = lightbts.get_template('bug.html')
 
-    global tmpl_message
-    tmpl_message = lightbts.get_template('message.html')
+    global tmpl_css
+    tmpl_css = lightbts.get_template('lightbts.css')
 
-    if not tmpl_main or not tmpl_bugrow or not tmpl_bug or not tmpl_message:
+    if not tmpl_main or not tmpl_bug:
         exit(1)
 
 def exit():
@@ -47,19 +45,23 @@ def do_bug(environ, start_response, query):
 
     if not bug:
         start_response('404 NOT FOUND', [('Content-Type', 'text/plain; charset=utf-8')])
-        return 'Bug ' + query['bug'] + ' does not exist.\n'
+        return 'Bug ' + str(id) + ' does not exist.\n'
 
     start_response('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
 
-    msglist = ''
+    msglist = []
     for msg in bug.get_messages():
-        msglist += tmpl_message.substitute({'msgid': msg.msg['Message-ID'], 'from': msg.msg['From'], 'to': msg.msg['To'], 'subject': msg.msg['Subject'], 'date': msg.msg['Date'], 'body': msg.msg.get_payload()})
+        msglist.append({'msgid': msg.msg['Message-ID'], 'from': msg.msg['From'], 'to': msg.msg['To'], 'subject': msg.msg['Subject'], 'date': msg.msg['Date'], 'body': msg.msg.get_payload()})
 
-    page = tmpl_bug.substitute({'id': bug.id, 'submitter': 'x', 'date': 'x', 'status': bug.statusname, 'severity': bug.severityname, 'title': bug.title, 'msglist': msglist, 'root': lightbts.webroot, 'copyright': copyright})
-    exit()
-    return str(page)
+    page = pystache.render(tmpl_bug, {'id': bug.id, 'submitter': 'x', 'date': 'x', 'status': bug.statusname, 'severity': bug.severityname, 'title': bug.title, 'messages': msglist, 'root': lightbts.webroot, 'copyright': copyright})
+
+    return page
 
 def myapp(environ, start_response):
+    if environ['PATH_INFO'] == '/lightbts.css':
+        start_response('200 OK', [('Content-Type', 'text/css; charset=utf-8')])
+        return [tmpl_css.encode('utf-8')]
+
     uri = uritools.urisplit('?' + environ['QUERY_STRING'])
     query = uri.getquerydict()
     if 'bug' in query:
@@ -68,12 +70,13 @@ def myapp(environ, start_response):
     start_response('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
 
     init()
-    buglist = ''
+    buglist = []
     class args(object):
         prop=()
     for bug in lightbts.list_bugs(args):
-        buglist += tmpl_bugrow.substitute({'id': bug._id, 'status': bug.statusname, 'severity': bug.severityname, 'title': bug.title})
-    page = tmpl_main.substitute({'buglist': str(buglist), 'copyright': copyright, 'root': lightbts.staticroot})
+        buglist.append({'id': bug._id, 'status': bug.statusname, 'severity': bug.severityname, 'title': bug.title})
+
+    page = pystache.render(tmpl_main, {'bugs': buglist, 'copyright': copyright, 'root': lightbts.staticroot})
 
     return [str(page).encode('utf-8')]
 

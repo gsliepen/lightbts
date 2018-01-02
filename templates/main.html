@@ -2,7 +2,7 @@
 <html>
 <head>
 <title>LightBTS</title>
-<link rel="stylesheet" type="text/css" href="${root}lightbts.css">
+<link rel="stylesheet" type="text/css" href="{{root}}lightbts.css">
 </head>
 <body>
 <header>
@@ -22,12 +22,24 @@
 		</tr>
 	</thead>
 	<tbody>
-	${buglist}
+	{{#bugs}}
+		<tr>
+			<td><a href="?bug={{id}}">{{id}}</a></td>
+			<td>{{status}}</td>
+			<td>{{severity}}</td>
+			<td><a href="?bug={{id}}">{{title}}</a></td>
+		</tr>
+	{{/bugs}}
+	{{^bugs}}
+		<tr>
+			<td colspan="4">No bugs found.</td>
+		</tr>
+	{{/bugs}}
 	</tbody>
 </table>
 <footer>
 	<p>
-	${copyright}
+	{{copyright}}
 	</p>
 </footer>
 </body>

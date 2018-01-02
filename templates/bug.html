@@ -1,23 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>LightBTS bug #${id}</title>
-<link rel="stylesheet" type="text/css" href="${root}lightbts.css">
+	<title>LightBTS bug #{{id}}</title>
+	<link rel="stylesheet" type="text/css" href="{{root}}lightbts.css">
 </head>
 <body>
 <header>
-	<h1>LightBTS bug #${id}<br>${title}</h1>
+	<h1>LightBTS bug #{{id}}<br>{{title}}</h1>
 </header>
 <p>
-Reported by: ${submitter}<br/>
-Date: ${date}<br/>
-Severity: ${severity}<br/>
-Status: ${status}<br/>
+Reported by: {{submitter}}<br/>
+Date: {{date}}<br/>
+Severity: {{severity}}<br/>
+Status: {{status}}<br/>
 </p>
-${msglist}
+{{#messages}}
+<div class="message">
+	<div class="header">
+		From: {{from}}<br/>
+		To: {{to}}<br/>
+		Subject: {{subject}}<br/>
+		Date: {{date}}<br/>
+	</div>
+	<div class="body">
+		<pre>{{body}}</pre>
+	</div>
+</div>
+{{/messages}}
 <footer>
 	<p>
-	${copyright}
+	{{copyright}}
 	</p>
 </footer>
 </body>

@@ -1,1 +1,1 @@
-Thank you for reporting a bug, which has been assigned number ${id}.
+Thank you for reporting a bug, which has been assigned number {{id}}.

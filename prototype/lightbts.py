@@ -489,15 +489,15 @@ def get_bug_from_msgid(msgid):
 def get_template(name, fallback=None):
     try:
         with open(os.path.join(emailtemplates, name), 'r') as file:
-            return string.Template(file.read())
+            return file.read()
     except IOError:
         try:
             with open(os.path.join(default_templates, name), 'r') as file:
-                return string.Template(file.read())
+                return file.read()
         except:
             logging.error("Template " + name + " not found")
             if fallback:
-                return string.Template(fallback)
+                return fallback
             else:
                 return None
 
