@@ -27,7 +27,7 @@ table#buglist {
 #buglist col.status { width: 6em; }
 #buglist col.severity { width: 10em; }
 
-#buglist tr:nth-child(2) {
+#buglist tr:hover {
 	background-color: #caf;
 }
 
