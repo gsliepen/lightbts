@@ -113,19 +113,18 @@ class Ticket {
 class Instance {
 	boost::filesystem::path base_dir;
 
-	std::string dbfile;
-	std::string maildir;
-	std::string hookdir;
-	std::string project;
-	std::string admin;
+	boost::filesystem::path dbfile;
+	boost::filesystem::path maildir;
+	boost::filesystem::path hookdir;
+	boost::filesystem::path templatedir;
+	boost::filesystem::path project;
+	boost::filesystem::path admin;
 
 	std::string emailaddress;
 	std::string emailname;
-	std::string emailtemplates;
 	std::string smtphost;
 	std::string webroot;
 	std::string staticroot;
-	std::string webtemplates;
 
 	bool quiet;
 	bool no_hooks;

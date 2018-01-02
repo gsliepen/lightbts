@@ -22,6 +22,7 @@
 #include <blake2.h>
 
 #include "lightbts.hpp"
+#include "templates.inl"
 
 using namespace std;
 using namespace fmt;
@@ -61,7 +62,7 @@ void Instance::init_index(const fs::path &filename) {
 		db.execute("PRAGMA application_id=0x4c425453");
 
 	if (!version) {
-		print(cerr, "Creating index...");
+		print(cerr, "Creating index...\n");
 
 		auto tx = db.begin();
 		db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER, deadline INTEGER, progress INTEGER NOT NULL DEFAULT 0, milestone TEXT)");
@@ -124,9 +125,10 @@ void Instance::init(const fs::path &start_dir, bool create) {
 	config.load(base_dir / "config");
 
 	// Core configuration
-	dbfile = fs::weakly_canonical(config.get("core", "index", "index"), base_dir).string();
-	maildir = fs::weakly_canonical(config.get("core", "messages", "messages"), base_dir).string();
-	hookdir = fs::weakly_canonical(config.get("core", "hooks", "hooks"), base_dir).string();
+	dbfile = fs::absolute(config.get("core", "index", "index"), base_dir);
+	maildir = fs::absolute(config.get("core", "messages", "messages"), base_dir);
+	hookdir = fs::absolute(config.get("core", "hooks", "hooks"), base_dir);
+	templatedir = fs::absolute(config.get("core", "templates", "templates"), base_dir);
 	project = config.get("core", "project");
 	admin = config.get("core", "admin");
 	respond_to_new = config.get_bool("core", "respond-to-new", true);
@@ -135,20 +137,30 @@ void Instance::init(const fs::path &start_dir, bool create) {
 	// Email configuration
 	emailaddress = config.get("email", "address");
 	emailname = config.get("email", "name");
-	emailtemplates = config.get("email", "templates");
 	smtphost = config.get("email", "smtphost");
 
 	// Web configuration
 	webroot = config.get("web", "root");
 	staticroot = config.get("web", "static-root");
-	webtemplates = config.get("web", "templates");
 
 	// Create directories if necessary
-	boost::system::error_code ec;
 	fs::create_directories(base_dir);
 	fs::create_directories(maildir);
-	fs::create_directories(hookdir, ec);
+	if (create) {
+		fs::create_directories(hookdir);
+		fs::create_directories(templatedir);
+	}
 
+	// Install templates
+	if (create) {
+		for (auto &&tmpl: templates) {
+			auto path = templatedir / tmpl.filename;
+			if (!fs::exists(path))
+				ofstream(path.string()) << tmpl.data;
+		}
+	}
+
+	// Initialize the index
 	init_index(dbfile);
 }
 
