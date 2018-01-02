@@ -136,7 +136,7 @@ class Instance {
 	SQLite3::database db;
 	Config config;
 
-	void init(const boost::filesystem::path &path);
+	void init(const boost::filesystem::path &path, bool create = false);
 	void init_index(const boost::filesystem::path &path);
 
 	public:

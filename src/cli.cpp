@@ -16,6 +16,7 @@
 */
 
 #include "cli.hpp"
+#include "lightbts.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -78,6 +79,18 @@ static int do_help(const char *argv0, const vector<string> &args) {
 	return 0;
 }
 
+static int do_init(const char *argv0, const vector<string> &args) {
+	if (args.size() > 1) {
+		print(cerr, "Too many arguments\n");
+		return 1;
+	}
+
+	if (!args.empty())
+		data_dir = args[0];
+
+	LightBTS::Instance bts(data_dir, LightBTS::Instance::Flags::INIT);
+}
+
 static const struct option long_options[] = {
 	{"help", no_argument, nullptr, 'h'},
 	{"verbose", no_argument, nullptr, 'v'},
@@ -91,17 +104,18 @@ static const struct option long_options[] = {
 	{"attach", no_argument, nullptr, 'A'},
 };
 
-struct function {
+struct cli_function {
 	const char *name;
 	int (*function)(const char *, const vector<string> &);
-	friend bool operator<(const struct function &a, const char *b) {
+	friend bool operator<(const struct cli_function &a, const char *b) {
 		return strcmp(a.name, b) < 0;
 	}
 };
 
 // Keep the following list sorted at all times.
-static const function functions[] = {
+static const cli_function functions[] = {
 	{"help", do_help},
+	{"init", do_init},
 	{"list", do_list},
 	{"show", do_show},
 	{"version", do_version},

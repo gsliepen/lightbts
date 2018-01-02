@@ -30,7 +30,7 @@ namespace fs = boost::filesystem;
 namespace LightBTS {
 
 Instance::Instance(const string &path, Flags flags) {
-	init(path);
+	init(path, flags == Flags::INIT);
 }
 
 Instance::~Instance() {
@@ -92,7 +92,7 @@ void Instance::init_index(const fs::path &filename) {
 	}
 }
 
-void Instance::init(const fs::path &start_dir) {
+void Instance::init(const fs::path &start_dir, bool create) {
 	fs::path dir = start_dir;
 
 	if (dir.empty()) {
@@ -104,24 +104,29 @@ void Instance::init(const fs::path &start_dir) {
 	if (dir.empty())
 		dir = fs::current_path();
 
-	while (true) {
+	if (create) {
 		if (fs::exists(dir / ".lightbts" / "config"))
-			break;
+			throw runtime_error("LightBTS instance already exists");
+	} else {
+		while (true) {
+			if (fs::exists(dir / ".lightbts" / "config"))
+				break;
 
-		auto parent = dir.parent_path();
-		if (parent == dir)
-			throw runtime_error("No LightBTS instance found");
-		dir = parent;
-	};
+			auto parent = dir.parent_path();
+			if (parent == dir)
+				throw runtime_error("No LightBTS instance found");
+			dir = parent;
+		};
+	}
 
 	base_dir = dir / ".lightbts";
 
 	config.load(base_dir / "config");
 
 	// Core configuration
-	dbfile = fs::canonical(config.get("core", "index", "index"), base_dir).string();
-	maildir = fs::canonical(config.get("core", "messages", "messages"), base_dir).string();
-	hookdir = fs::canonical(config.get("core", "hooks", "hooks"), base_dir).string();
+	dbfile = fs::weakly_canonical(config.get("core", "index", "index"), base_dir).string();
+	maildir = fs::weakly_canonical(config.get("core", "messages", "messages"), base_dir).string();
+	hookdir = fs::weakly_canonical(config.get("core", "hooks", "hooks"), base_dir).string();
 	project = config.get("core", "project");
 	admin = config.get("core", "admin");
 	respond_to_new = config.get_bool("core", "respond-to-new", true);
