@@ -250,23 +250,29 @@ vector<string> Instance::get_message_ids(const Ticket &ticket) {
 	return result;
 }
 
-void Instance::run_hook(const string &name, const fs::path &path, const string &id) {
+bool Instance::run_hook(const string &name, const fs::path &path, const string &id) {
 	if (no_hooks)
-		return;
+		return true;
 
 	fs::path hook = hookdir / name;
 	if (!fs::exists(hook))
-		return;
+		return true;
 
 	// TODO:
 	fs::current_path(base_dir);
 	string cmd = format("LIGHTBTS_DIR=\"{}\" MESSAGE_FILE=\"{}\" BUG_ID=\"{}\" \"{}\"", base_dir, path, id, hook);
 	FILE *fd = popen(cmd.c_str(), "w");
-	if (!fd)
-		throw runtime_error("Failed to execute hook");
+	if (!fd) {
+		print(cerr, "Failed to execute {} hook: {}\n", name, strerror(errno));
+		return false;
+	}
 	int result = pclose(fd);
-	if (result)
-		throw runtime_error("Error while executing hook");
+	if (result) {
+		print(cerr, "Error while executing {} hook, exit code {}\n", name, WEXITSTATUS(result));
+		return false;
+	}
+
+	return true;
 }
 
 void Instance::parse_metadata(const string &id, const Message &msg) {
@@ -382,6 +388,8 @@ bool Instance::import(const Message &in) {
 	fs::path filename = store(msg);
 
 	// Run the pre-index hook
+	if (!run_hook("pre-index", filename))
+		return false;
 
 	// Store the message in the database
 	try {

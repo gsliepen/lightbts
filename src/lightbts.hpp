@@ -146,7 +146,7 @@ class Instance {
 
 	fs::path store(const Message &msg);
 
-	void run_hook(const string &name, const fs::path &path, const string &id);
+	bool run_hook(const string &name, const fs::path &path, const string &id = {});
 	void parse_metadata(const string &id, const Message &msg);
 
 	public:
