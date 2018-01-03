@@ -28,6 +28,12 @@
 
 namespace LightBTS {
 
+using Mimesis::Message;
+using std::set;
+using std::string;
+using std::vector;
+namespace fs = boost::filesystem;
+
 enum class Status {
 	CLOSED,
 	OPEN,
@@ -89,42 +95,42 @@ static const char *reverse_link_names[] = {
 class Ticket {
 	friend class Instance;
 
-	std::string id;
-	std::string title;
+	string id;
+	string title;
 	Status status;
 	Severity severity;
 
 	public:
-	Ticket(const std::string &id, const std::string &title, Status status, Severity severity): id(id), title(title), status(status), severity(severity) {}
+	Ticket(const string &id, const string &title, Status status, Severity severity): id(id), title(title), status(status), severity(severity) {}
 
-	const std::string &get_id() { return id; };
-	const std::string &get_title() { return title; };
+	const string &get_id() { return id; };
+	const string &get_title() { return title; };
 
-	std::vector<std::string> get_tags();
-	std::string get_milestone();
+	vector<string> get_tags();
+	string get_milestone();
 
 	Severity get_severity() { return severity; }
-	std::string get_severity_name() { return severity_names[static_cast<int>(severity)]; }
+	string get_severity_name() { return severity_names[static_cast<int>(severity)]; }
 	Status get_status() { return status; }
-	std::string get_status_name() { return status_names[static_cast<int>(status)]; }
+	string get_status_name() { return status_names[static_cast<int>(status)]; }
 };
 
 
 class Instance {
-	boost::filesystem::path base_dir;
+	fs::path base_dir;
 
-	boost::filesystem::path dbfile;
-	boost::filesystem::path maildir;
-	boost::filesystem::path hookdir;
-	boost::filesystem::path templatedir;
-	boost::filesystem::path project;
-	boost::filesystem::path admin;
+	fs::path dbfile;
+	fs::path maildir;
+	fs::path hookdir;
+	fs::path templatedir;
+	fs::path project;
+	fs::path admin;
 
-	std::string emailaddress;
-	std::string emailname;
-	std::string smtphost;
-	std::string webroot;
-	std::string staticroot;
+	string emailaddress;
+	string emailname;
+	string smtphost;
+	string webroot;
+	string staticroot;
 
 	bool quiet;
 	bool no_hooks;
@@ -135,8 +141,13 @@ class Instance {
 	SQLite3::database db;
 	Config config;
 
-	void init(const boost::filesystem::path &path, bool create = false);
-	void init_index(const boost::filesystem::path &path);
+	void init(const fs::path &path, bool create = false);
+	void init_index(const fs::path &path);
+
+	fs::path store(const Message &msg);
+
+	void run_hook(const string &name, const fs::path &path, const string &id);
+	void parse_metadata(const string &id, const Message &msg);
 
 	public:
 	enum Flags {
@@ -144,19 +155,21 @@ class Instance {
 		INIT = 1 << 0,
 	};
 
-	Instance(const std::string &path, Flags flags = NONE);
+	Instance(const string &path, Flags flags = NONE);
 	~Instance();
 
-	std::string get_config(const std::string &section, const std::string &variable);
-	void set_config(const std::string &section, const std::string &variable, const std::string &value);
-	std::vector<Ticket> list();
-	Ticket get_ticket(const std::string &id);
-	Ticket get_ticket_from_message_id(const std::string &id);
-	Mimesis::Message get_message(const std::string &id);
+	string get_config(const string &section, const string &variable);
+	void set_config(const string &section, const string &variable, const string &value);
+	vector<Ticket> list();
+	Ticket get_ticket(const string &id);
+	Ticket get_ticket_from_message_id(const string &id);
+	Message get_message(const string &id);
 
-	std::set<std::string> get_tags(const Ticket &ticket);
-	std::string get_milestone(const Ticket &ticket);
-	std::vector<std::string> get_message_ids(const Ticket &ticket);
+	set<string> get_tags(const Ticket &ticket);
+	string get_milestone(const Ticket &ticket);
+	vector<string> get_message_ids(const Ticket &ticket);
+
+	bool import(const Message &msg);
 };
 
 }

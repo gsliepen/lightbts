@@ -20,6 +20,7 @@
 #include <boost/filesystem.hpp>
 #include <fmt/ostream.h>
 #include <blake2.h>
+#include <cstdio>
 
 #include "lightbts.hpp"
 #include "templates.inl"
@@ -185,7 +186,7 @@ Ticket Instance::get_ticket_from_message_id(const string &id) {
 	return get_ticket(db.execute("SELECT bug FROM messages WHERE msgid=?", id).get_string(0));
 }
 
-Mimesis::Message Instance::get_message(const string &id) {
+static string hash_msgid(const string &id) {
 	if (id.size() < 3)
 		throw runtime_error("Invalid Message-ID value");
 
@@ -208,12 +209,25 @@ Mimesis::Message Instance::get_message(const string &id) {
 		result[i * 2 + 1] = hexdigits[id_hash[i] & 0xf];
 	}
 
-	fs::path filename = fs::path(maildir) / result.substr(0, 2) / result.substr(2);
+	return result;
+}
 
-	Mimesis::Message message;
+Message Instance::get_message(const string &id) {
+	string hash = hash_msgid(id);
+
+	fs::path filename = fs::path(maildir) / hash.substr(0, 2) / hash.substr(2);
+
+	Message message;
 	message.load(filename.string());
 
 	return message;
+}
+
+fs::path Instance::store(const Message &msg) {
+	string hash = hash_msgid(msg["Message-ID"]);
+	fs::path filename = fs::path(maildir) / hash.substr(0, 2) / hash.substr(2);
+	msg.save(filename.string());
+	return filename;
 }
 
 set<string> Instance::get_tags(const Ticket &ticket) {
@@ -234,6 +248,185 @@ vector<string> Instance::get_message_ids(const Ticket &ticket) {
 		result.push_back(row.get_string(0));
 
 	return result;
+}
+
+void Instance::run_hook(const string &name, const fs::path &path, const string &id) {
+	if (no_hooks)
+		return;
+
+	fs::path hook = hookdir / name;
+	if (!fs::exists(hook))
+		return;
+
+	// TODO:
+	fs::current_path(base_dir);
+	string cmd = format("LIGHTBTS_DIR=\"{}\" MESSAGE_FILE=\"{}\" BUG_ID=\"{}\" \"{}\"", base_dir, path, id, hook);
+	FILE *fd = popen(cmd.c_str(), "w");
+	if (!fd)
+		throw runtime_error("Failed to execute hook");
+	int result = pclose(fd);
+	if (result)
+		throw runtime_error("Error while executing hook");
+}
+
+void Instance::parse_metadata(const string &id, const Message &msg) {
+	// Metadata variables to extract
+	string status;
+	string severity;
+	string title;
+	vector<string> tags;
+	string version;
+	vector<string> found;
+	vector<string> notfound;
+	vector<string> fixed;
+	vector<string> notfixed;
+	string owner;
+	string progress;
+	string milestone;
+	string deadline;
+
+	// Warnings and error messages
+	string log;
+
+	// Parse email headers
+	status = msg["X-LightBTS-Status"];
+
+	string tag = msg["X-LightBTS-Tag"];
+	if (!tag.empty())
+		tags.push_back(tag);
+
+	// Parse the body as if it is a MIME part.
+	Mimesis::Part body;
+	body.from_string(msg.get_text());
+
+	auto set_and_check = [&log](const string &name, string &variable, const string &value) -> bool {
+		if (!variable.empty() && value != variable)
+			log += "Duplicate " + name + " field.\n";
+		variable = value;
+	};
+
+	for (auto &&header: body.get_headers()) {
+		auto &key = header.first;
+		auto &value = header.second;
+
+		if (key == "status") {
+			set_and_check("status", status, value);
+		} else if (key == "severity") {
+			set_and_check("severity", severity, value);
+		} else if (key == "tags" || key == "tag") {
+			tags.push_back(value);
+		} else if (key == "version") {
+			set_and_check("version", version, value);
+		} else if(key == "found") {
+			found.push_back(value);
+		} else if(key == "notfound") {
+			notfound.push_back(value);
+		} else if(key == "fixed") {
+			fixed.push_back(value);
+		} else if(key == "notfixed") {
+			notfixed.push_back(value);
+		} else if(key == "owner") {
+			set_and_check("owner", owner, value);
+		} else if(key == "progress") {
+			set_and_check("progress", progress, value);
+		} else if(key == "milestone") {
+			set_and_check("milestone", milestone, value);
+		} else if(key == "deadline") {
+			set_and_check("deadline", deadline, value);
+		} else if(key == "title" || key == "topic") {
+			set_and_check("title", title, value);
+		} else {
+			log += "Unknown header field \"" + key + "\".\n";
+		}
+	}
+
+	// Set any variables found
+	if (!status.empty())
+		db.execute("UPDATE bugs SET status=? WHERE id=?", status, id);
+	if (!severity.empty())
+		db.execute("UPDATE bugs SET severity=? WHERE id=?", severity, id);
+	if (!owner.empty())
+		db.execute("UPDATE bugs SET owner=? WHERE id=?", owner, id);
+	if (!progress.empty())
+		db.execute("UPDATE bugs SET progress=? WHERE id=?", progress, id);
+	if (!milestone.empty())
+		db.execute("UPDATE bugs SET milestone=? WHERE id=?", milestone, id);
+	if (!deadline.empty())
+		db.execute("UPDATE bugs SET deadline=? WHERE id=?", deadline, id);
+	if (!title.empty())
+		db.execute("UPDATE bugs SET title=? WHERE id=?", title, id);
+}
+
+bool Instance::import(const Message &in) {
+	// Don't allow messages with the X-LightBTS-Control header set
+	if (!in["X-LightBTS-Control"].empty())
+		throw runtime_error("Denying import of message with X-LightBTS-Control header");
+
+	Message msg = in;
+
+	// Handle missing Message-ID
+	if (msg["Message-ID"].empty())
+		msg.generate_msgid("LightBTS");
+
+	// Add a Received: header
+	msg.add_received("by localhost (LightBTS)");
+
+	// Handle missing Date
+	if (msg["Date"].empty())
+		msg.set_date();
+
+	// Save message
+	string msgid = msg["Message-ID"];
+	string parent = msg["In-Reply-To"];
+	string subject = msg["Subject"];
+	fs::path filename = store(msg);
+
+	// Run the pre-index hook
+
+	// Store the message in the database
+	try {
+		db.execute("INSERT INTO messages (msgid, bug) values (?,?)", msgid, 0);
+	} catch (SQLite3::error &err) {
+		// Ignore duplicates
+		if (err.code == SQLITE_CONSTRAINT_UNIQUE) {
+			print(cerr, "Ignoring duplicate message from {} with Message-ID {}\n", msg["From"], msgid);
+			return false;
+		} else {
+			throw runtime_error("Database error");
+		}
+	}
+
+	// Can we match the message to an existing bug?
+	string id;
+	bool is_new = false;
+
+	if (!parent.empty()) {
+		auto result = db.execute("SELECT bug FROM messages WHERE msgid=?", parent);
+		if (result)
+			id = result.get_string(0);
+	}
+
+	if (id.empty()) {
+		auto result = db.execute("SELECT bug FROM messages WHERE title LIKE ?", "%" + parent);
+		if (result)
+			id = result.get_string(0);
+	}
+
+	if (id.empty()) {
+		db.execute("INSERT INTO bugs (title) VALUES (?)", subject);
+		id = to_string(db.last_insert_rowid());
+		is_new = true;
+	}
+
+	db.execute("UPDATE messages SET bug=? WHERE msgid=?", id, msgid);
+	db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", id, msg["From"]);
+
+	// Handle metadata
+	parse_metadata(id, msg);
+
+	//Run the post-index hook
+	run_hook("post-index", filename, id);
+	return is_new;
 }
 
 }
