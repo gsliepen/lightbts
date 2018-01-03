@@ -23,9 +23,10 @@
 
 namespace SQLite3 {
 	struct error: std::runtime_error {
-		error(::sqlite3 *db): std::runtime_error(sqlite3_errmsg(db)) {}
-		error(int result): std::runtime_error(sqlite3_errstr(result)) {}
-		error(const std::string &what): std::runtime_error(what) {}
+		int code;
+		error(::sqlite3 *db): std::runtime_error(sqlite3_errmsg(db)), code(sqlite3_extended_errcode(db)) {}
+		error(int result): std::runtime_error(sqlite3_errstr(result)), code(result) {}
+		error(const std::string &what): std::runtime_error(what), code(SQLITE_ERROR) {}
 	};
 
 	static inline void check(int result) {
