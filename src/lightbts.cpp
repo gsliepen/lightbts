@@ -255,7 +255,7 @@ bool Instance::run_hook(const string &name, const fs::path &path, const string &
 		return true;
 
 	fs::path hook = hookdir / name;
-	if (!fs::exists(hook))
+	if (!access(hook.string().c_str(), X_OK))
 		return true;
 
 	// TODO:
