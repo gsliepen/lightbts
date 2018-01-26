@@ -31,6 +31,40 @@ namespace fs = boost::filesystem;
 
 namespace LightBTS {
 
+bool is_valid_status(const string &name) {
+	for (auto &&status: status_names)
+		if (status == name)
+			return true;
+	return false;
+}
+
+bool is_valid_severity(const string &name) {
+	for (auto &&severity: severity_names)
+		if (severity == name)
+			return true;
+	return false;
+}
+
+int status_index(const string &name) {
+	int i = 0;
+	for (auto &&status: status_names)
+		if (status == name)
+			return i;
+		else
+			i++;
+	throw runtime_error("Invalid status name");
+}
+
+int severity_index(const string &name) {
+	int i = 0;
+	for (auto &&severity: severity_names)
+		if (severity == name)
+			return i;
+		else
+			i++;
+	throw runtime_error("Invalid severity name");
+}
+
 Instance::Instance(const string &path, Flags flags) {
 	init(path, flags == Flags::INIT);
 }
@@ -165,14 +199,56 @@ void Instance::init(const fs::path &start_dir, bool create) {
 	init_index(dbfile);
 }
 
-vector<Ticket> Instance::list() {
+vector<Ticket> Instance::list(const vector<string> &args, size_t len) {
 	string cmd = "SELECT id, title, status, severity FROM bugs WHERE 1";
 
 	// apply filters
+	int status = 1;
+	vector<int> severities;
+	vector<string> tags;
+
+	for (size_t i = 0; i < len; i++) {
+		if (args[i] == "all") {
+			status = -1;
+		} else if (args[i] == "closed") {
+			status = 0;
+		} else if (args[i] == "open") {
+			status = 1;
+		} else if (is_valid_severity(args[i])) {
+			severities.push_back(severity_index(args[i]));
+		} else {
+			tags.push_back(args[i]);
+		}
+	}
+
+	if (status != -1)
+		cmd += " AND status=?";
+
+	if (!severities.empty()) {
+		cmd += " AND (0";
+		for (auto &&severity: severities)
+			cmd += " OR severity=?";
+		cmd += ")";
+	}
+
+	if (!tags.empty()) {
+		cmd += " AND (0";
+		for (auto &&tag: tags)
+			cmd += " OR EXISTS (SELECT 1 FROM tags WHERE bug=id AND tag=?)";
+		cmd += ")";
+	}
+
+	auto stmt = db.prepare(cmd);
+	if (status != -1)
+		stmt.bind(status);
+	for (auto &&severity: severities)
+		stmt.bind(severity);
+	for (auto &&tag: tags)
+		stmt.bind(tag);
 
 	vector<Ticket> tickets;
-	for(auto &&row: db.execute(cmd))
-		tickets.emplace_back(row.get_string(0), row.get_string(1), static_cast<Status>(row.get_int(2)), static_cast<Severity>(row.get_int(3)));
+	while(stmt.step() == SQLITE_ROW)
+		tickets.emplace_back(stmt.column_string(0), stmt.column_string(1), static_cast<Status>(stmt.column_int(2)), static_cast<Severity>(stmt.column_int(3)));
 
 	return tickets;
 }

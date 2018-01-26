@@ -92,6 +92,12 @@ static const char *reverse_link_names[] = {
 	"blocked by",
 };
 
+bool is_valid_status(const string &name);
+bool is_valid_severity(const string &name);
+
+int status_index(const string &name);
+int severity_index(const string &name);
+
 class Ticket {
 	friend class Instance;
 
@@ -160,7 +166,7 @@ class Instance {
 
 	string get_config(const string &section, const string &variable);
 	void set_config(const string &section, const string &variable, const string &value);
-	vector<Ticket> list();
+	vector<Ticket> list(const vector<string> &args = {}, size_t len = 0);
 	Ticket get_ticket(const string &id);
 	Ticket get_ticket_from_message_id(const string &id);
 	Message get_message(const string &id);

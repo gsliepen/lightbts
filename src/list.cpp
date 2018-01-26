@@ -34,9 +34,9 @@ int do_list(const char *argv0, const vector<string> &args) {
 	bool do_milestones = false;
 	set<string> tags;
 	set<string> milestones;
+	auto len = args.size();
 
 	if (!args.empty()) {
-		auto len = args.size();
 		auto &&last_arg = args[len - 1];
 
 		if (last_arg == "tags") {
@@ -52,7 +52,7 @@ int do_list(const char *argv0, const vector<string> &args) {
 
 	Pager pager(bts.get_config("core", "pager"));
 
-	for(auto &&ticket: bts.list()) {
+	for(auto &&ticket: bts.list(args, len)) {
 		if (do_tags) {
 			for(auto &&tag: bts.get_tags(ticket))
 				tags.insert(tag);
