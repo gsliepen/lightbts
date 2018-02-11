@@ -129,9 +129,9 @@ class Instance {
 	fs::path maildir;
 	fs::path hookdir;
 	fs::path templatedir;
-	fs::path project;
-	fs::path admin;
 
+	string project;
+	string admin;
 	string emailaddress;
 	string emailname;
 	string smtphost;
