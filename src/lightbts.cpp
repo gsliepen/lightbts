@@ -149,6 +149,8 @@ void Instance::init_index(const fs::path &filename) {
 		db.execute("CREATE INDEX versions_bug_index ON versions (bug)");
 		db.execute("CREATE INDEX versions_version_index ON versions (version)");
 		db.execute("PRAGMA user_version=4");
+		if (!tx.commit())
+			throw runtime_error("Failed to create index");
 
 		version = 4;
 	}
@@ -191,7 +193,25 @@ void Instance::init(const fs::path &start_dir, bool create) {
 
 	base_dir = dir / ".lightbts";
 
-	config.load(base_dir / "config");
+	if (create && !fs::exists(base_dir / "config")) {
+		config.set("core", "index", "index");
+		config.set("core", "messages", "messages");
+		config.set("core", "hooks", "hooks");
+		config.set("core", "templates", "templates");
+		config.set("core", "project", "");
+		config.set("core", "admin", "");
+		config.set_bool("core", "respond-to-new", true);
+		config.set_bool("core", "respond-to-reply", true);
+
+		config.set("email", "address", "");
+		config.set("email", "name", "");
+		config.set("email", "smtphost", "");
+
+		config.set("web", "root", "");
+		config.set("web", "static-root", "");
+	} else {
+		config.load(base_dir / "config");
+	}
 
 	// Core configuration
 	dbfile = fs::absolute(config.get("core", "index", "index"), base_dir);
@@ -224,13 +244,25 @@ void Instance::init(const fs::path &start_dir, bool create) {
 	if (create) {
 		for (auto &&tmpl: templates) {
 			auto path = templatedir / tmpl.filename;
-			if (!fs::exists(path))
-				ofstream(path.string()) << tmpl.data;
+			if (!fs::exists(path)) {
+				ofstream out(path.string());
+				if (!out.is_open())
+					throw runtime_error("Could not create template file");
+				out << tmpl.data;
+				out.close();
+				if (out.fail())
+					throw runtime_error("Could not write template file");
+			}
 		}
 	}
 
 	// Initialize the index
 	init_index(dbfile);
+
+	// Store initial configuration
+	if (create) {
+		config.save(base_dir / "config");
+	}
 }
 
 vector<Ticket> Instance::list(const vector<string> &args, size_t len) {
