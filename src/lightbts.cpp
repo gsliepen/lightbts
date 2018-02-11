@@ -31,6 +31,22 @@ using namespace std;
 using namespace fmt;
 namespace fs = boost::filesystem;
 
+static string unquote(const string &in) {
+	if (in.empty())
+		return in;
+	if (in[0] == '<' && in[in.size() - 1] == '>')
+		return in.substr(1, in.size() - 2);
+	return in;
+}
+
+static string quote(const string &in) {
+	if (in.empty())
+		return "<>";
+	if (in[0] == '<' && in[in.size() - 1] == '>')
+		return in;
+	return '<' + in + '>';
+}
+
 namespace LightBTS {
 
 bool is_valid_status(const string &name) {
@@ -537,8 +553,8 @@ bool Instance::import(const Message &in) {
 		msg.set_date();
 
 	// Save message
-	string msgid = msg["Message-ID"];
-	string parent = msg["In-Reply-To"];
+	string msgid = unquote(msg["Message-ID"]);
+	string parent = unquote(msg["In-Reply-To"]);
 	string subject = msg["Subject"];
 	fs::path filename = store(msg);
 
@@ -546,9 +562,11 @@ bool Instance::import(const Message &in) {
 	if (!run_hook("pre-index", filename))
 		return false;
 
+	auto tx = db.begin();
+
 	// Store the message in the database
 	try {
-		db.execute("INSERT INTO messages (msgid, bug) values (?,?)", msgid, 0);
+		db.execute("INSERT INTO messages (msgid, bug) VALUES (?, ?)", msgid, 0);
 	} catch (SQLite3::error &err) {
 		// Ignore duplicates
 		if (err.code == SQLITE_CONSTRAINT_UNIQUE) {
@@ -569,11 +587,17 @@ bool Instance::import(const Message &in) {
 			id = result.get_string(0);
 	}
 
+#if 0
+	// TODO: is there a better way to match a message to an existing bug when there is no good In-Reply-To?
 	if (id.empty()) {
-		auto result = db.execute("SELECT bug FROM messages WHERE title LIKE ?", "%" + parent);
-		if (result)
+		auto result = db.execute("SELECT id FROM bugs WHERE title LIKE ?", "%" + parent);
+		if (result) {
 			id = result.get_string(0);
+			if (result.next())
+				id.clear();
+		}
 	}
+#endif
 
 	if (id.empty()) {
 		db.execute("INSERT INTO bugs (title) VALUES (?)", subject);
@@ -582,10 +606,15 @@ bool Instance::import(const Message &in) {
 	}
 
 	db.execute("UPDATE messages SET bug=? WHERE msgid=?", id, msgid);
+	if (!db.changes())
+		throw runtime_error("Could not update message in index");
 	db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", id, msg["From"]);
 
 	// Handle metadata
 	parse_metadata(id, msg);
+
+	if(!tx.commit())
+		throw runtime_error("Failed to commit transaction");
 
 	//Run the post-index hook
 	run_hook("post-index", filename, id);
