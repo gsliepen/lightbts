@@ -16,6 +16,8 @@
 */
 
 #include <iostream>
+#include <sstream>
+#include <limits.h>
 #include <unistd.h>
 #include <boost/filesystem.hpp>
 #include <fmt/ostream.h>
@@ -444,8 +446,8 @@ void Instance::parse_metadata(const string &id, const Message &msg) {
 		tags.push_back(tag);
 
 	// Parse the body as if it is a MIME part.
-	Mimesis::Part body;
-	body.from_string(msg.get_text());
+	stringstream body(msg.get_text());
+	string line;
 
 	auto set_and_check = [&log](const string &name, string &variable, const string &value) -> bool {
 		if (!variable.empty() && value != variable)
@@ -453,9 +455,19 @@ void Instance::parse_metadata(const string &id, const Message &msg) {
 		variable = value;
 	};
 
-	for (auto &&header: body.get_headers()) {
-		auto &key = header.first;
-		auto &value = header.second;
+	while (getline(body, line)) {
+		if (line.empty())
+			break;
+
+		auto colon = line.find(':');
+		if (colon == line.npos || colon == 0)
+			break;
+
+		if (line.size() <= colon + 2)
+			break;
+
+		auto key = line.substr(0, colon);
+		auto value = line.substr(colon + 2);
 
 		if (key == "status") {
 			set_and_check("status", status, value);
