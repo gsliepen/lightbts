@@ -80,6 +80,40 @@ void Instance::set_config(const string &section, const string &variable, const s
 	return config.set(section, variable, value);
 }
 
+string Instance::get_local_email_address() {
+	// TODO: have Mimesis check that we have/create a valid From address.
+	if (!admin.empty())
+		return admin;
+
+	string address;
+
+	if (getenv("EMAIL"))
+		address = getenv("EMAIL");
+
+	if (address.empty()) {
+		char login_name[LOGIN_NAME_MAX] = "";
+		char host_name[HOST_NAME_MAX] = "";
+		if (getlogin_r(login_name, sizeof login_name) != 0)
+			throw runtime_error("Could not determine login name");
+		if (gethostname(host_name, sizeof host_name) != 0)
+			throw runtime_error("Could not determine host name");
+		address = format("{}@{}", login_name, host_name);
+	} else {
+		if (address.find(" <") != address.npos)
+			return address;
+	}
+
+	string fullname;
+
+	if (getenv("FULLNAME"))
+		fullname = getenv("FULLNAME");
+
+	if (fullname.empty())
+		return address;
+	else
+		return format("{} <{}>", fullname, address);
+}
+
 void Instance::init_index(const fs::path &filename) {
 	db.open(filename.string());
 	db.execute("PRAGMA foreign_key = on");

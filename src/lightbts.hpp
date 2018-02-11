@@ -166,6 +166,7 @@ class Instance {
 
 	string get_config(const string &section, const string &variable);
 	void set_config(const string &section, const string &variable, const string &value);
+	string get_local_email_address();
 	vector<Ticket> list(const vector<string> &args = {}, size_t len = 0);
 	Ticket get_ticket(const string &id);
 	Ticket get_ticket_from_message_id(const string &id);
