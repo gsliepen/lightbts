@@ -94,6 +94,10 @@ void Config::set(const string &section, const string &variable, const string &va
 	db[section][variable] = value;
 }
 
+void Config::set_bool(const string &section, const string &variable, const bool value) {
+	db[section][variable] = value ? "true" : "false";
+}
+
 string Config::get(const string &section, const string &variable, const string &def) {
 	auto sit = db.find(section);
 	if (sit != db.end()) {

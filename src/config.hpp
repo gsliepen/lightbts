@@ -30,5 +30,6 @@ class Config {
 	std::string get(const std::string &section, const std::string &variable, const std::string &def = {});
 	bool get_bool(const std::string &section, const std::string &variable, bool def);
 	void set(const std::string &section, const std::string &variable, const std::string &value);
+	void set_bool(const std::string &section, const std::string &variable, const bool value);
 	bool exists(const std::string &section, const std::string &variable = "");
 };
