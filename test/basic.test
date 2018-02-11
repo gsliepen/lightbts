@@ -1,0 +1,37 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# We should start without a .lightbts directory
+test ! -e .lightbts
+
+# The help and version commands should always work
+$lbts help | grep -q '^Usage: '
+$lbts --help | grep -q '^Usage: '
+$lbts version | grep -q '^LightBTS version '
+$lbts --version | grep -q '^LightBTS version '
+
+# Any query command should not work if there is no .lightbts directory
+! $lbts -d .lightbts list
+
+# Nothing should have created a .lightbts directory so far
+test ! -e .lightbts
+
+# Initialize
+$lbts init
+
+# Check that the initialization created the expected files and directories
+test -w .lightbts/index
+test -w .lightbts/config
+test -x .lightbts/hooks
+test -x .lightbts/messages
+test -x .lightbts/templates
+test -w .lightbts/templates/new.txt
+test -w .lightbts/templates/reply.txt
+test -w .lightbts/templates/main.html
+test -w .lightbts/templates/bug.html
+test -w .lightbts/templates/lightbts.css
+
+# We should get an empty list of bugs
+result=$($lbts list)
+test -z "$result"

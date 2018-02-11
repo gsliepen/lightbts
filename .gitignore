@@ -4,6 +4,8 @@
 *.bak
 *.orig
 *~
+core
+core.*
 __pycache__/
 /dist/
 /build/
@@ -22,6 +24,7 @@ __pycache__/
 /libtool
 /ltmain.sh
 /missing
+/test-driver
 /*.tar.gz
 Makefile
 Makefile.in

@@ -1,0 +1,32 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Initialize
+$lbts init
+
+# Create without arguments should fail
+! $lbts create
+
+# Create a simple bug
+echo "This is the first bug." | $lbts create First bug
+
+# We should now have a list of one bug
+$lbts list > list
+test "$(wc -l < list)" = "1"
+grep -q "First bug" list
+
+# We should be able to show the bug
+$lbts show 1 > 1
+head -1 1 | grep -q "First bug"
+
+# We should be able to show the message that created the bug
+msgid=$(tail -1 1)
+$lbts show "$msgid" >msg
+test "$(tail -1 msg)" = "This is the first bug."
+
+# Create a bug with a given severity
+echo "Second bug." | $lbts create -S important Second bug
+$lbts show 2 | grep -q "^Severity: important$"
+
+
