@@ -26,6 +26,7 @@
 
 #include <fmt/ostream.h>
 
+#include "create.hpp"
 #include "list.hpp"
 #include "show.hpp"
 
@@ -33,9 +34,9 @@ using namespace std;
 using namespace fmt;
 
 #ifdef VERSION
-static const string lightbts_version = VERSION;
+const string lightbts_version = VERSION;
 #else
-static const string lightbts_version = "unknown";
+const string lightbts_version = "unknown";
 #endif
 
 bool help;
@@ -46,6 +47,7 @@ bool batch;
 
 string severity;
 string data_dir;
+string cl_message;
 
 vector<string> tags;
 vector<string> versions;
@@ -114,6 +116,7 @@ struct cli_function {
 
 // Keep the following list sorted at all times.
 static const cli_function functions[] = {
+	{"create", do_create},
 	{"help", do_help},
 	{"init", do_init},
 	{"list", do_list},
@@ -181,7 +184,7 @@ int main(int argc, char *argv[]) {
 	vector<string> args;
 
 	int r;
-	while((r = getopt_long(argc, argv, "-hvd:V:T:S:A:", long_options, nullptr)) != EOF) {
+	while((r = getopt_long(argc, argv, "-hvd:m:V:T:S:A:", long_options, nullptr)) != EOF) {
 		switch (r) {
 		case 'h':
 			help = true;
@@ -205,6 +208,10 @@ int main(int argc, char *argv[]) {
 
 		case 'd':
 			data_dir = optarg;
+			break;
+
+		case 'm':
+			cl_message = optarg;
 			break;
 
 		case 'V':

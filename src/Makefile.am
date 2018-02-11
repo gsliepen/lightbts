@@ -3,6 +3,8 @@ noinst_PROGRAMS = gentemplates
 
 lbts_SOURCES = \
 	cli.cpp cli.hpp \
+	create.cpp create.hpp \
+	edit.cpp edit.hpp \
 	list.cpp list.hpp \
 	lightbts.cpp lightbts.hpp \
 	config.cpp config.hpp \
