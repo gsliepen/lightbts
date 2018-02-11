@@ -369,6 +369,7 @@ Message Instance::get_message(const string &id) {
 
 fs::path Instance::store(const Message &msg) {
 	string hash = hash_msgid(msg["Message-ID"]);
+	fs::create_directory(fs::path(maildir) / hash.substr(0, 2));
 	fs::path filename = fs::path(maildir) / hash.substr(0, 2) / hash.substr(2);
 	msg.save(filename.string());
 	return filename;
