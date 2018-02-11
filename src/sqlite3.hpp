@@ -76,8 +76,8 @@ namespace SQLite3 {
 		~statement() { sqlite3_finalize(stmt); }
 
 		/* Binding arguments */
-		statement &bind(const char *arg) { if (arg) check(sqlite3_bind_text(stmt, ++p, arg, -1, nullptr)); else check(sqlite3_bind_null(stmt, ++p)); return *this;  }
-		statement &bind(const std::string &arg) { check(sqlite3_bind_text(stmt, ++p, arg.data(), arg.size(), nullptr)); return *this;  }
+		statement &bind(const char *arg) { if (arg) check(sqlite3_bind_text(stmt, ++p, arg, -1, SQLITE_TRANSIENT)); else check(sqlite3_bind_null(stmt, ++p)); return *this;  }
+		statement &bind(const std::string &arg) { check(sqlite3_bind_text(stmt, ++p, arg.data(), arg.size(), SQLITE_TRANSIENT)); return *this;  }
 		statement &bind(int arg) { check(sqlite3_bind_int(stmt, ++p, arg)); return *this;  }
 		statement &bind(int64_t arg) { check(sqlite3_bind_int64(stmt, ++p, arg)); return *this;  }
 		statement &bind(double arg) { check(sqlite3_bind_double(stmt, ++p, arg)); return *this;  }
