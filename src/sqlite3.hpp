@@ -238,6 +238,14 @@ namespace SQLite3 {
 		int64_t last_insert_rowid() {
 			return sqlite3_last_insert_rowid(db);
 		}
+
+		int changes() {
+			return sqlite3_changes(db);
+		}
+
+		int total_changes() {
+			return sqlite3_total_changes(db);
+		}
 	};
 
 	static inline database open(const std::string &filename) {
