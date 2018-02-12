@@ -153,6 +153,8 @@ class Instance {
 	fs::path store(const Message &msg);
 
 	bool run_hook(const string &name, const fs::path &path, const string &id = {});
+	void parse_versions(const string &id, const string &str, int status);
+	void parse_tags(const string &id, const string &str);
 	void parse_metadata(const string &id, const Message &msg);
 
 	public:

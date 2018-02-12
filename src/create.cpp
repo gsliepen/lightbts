@@ -46,10 +46,10 @@ int do_create(const char *argv0, const vector<string> &args) {
 	string body;
 	if (!severity.empty())
 		body.append(format("Severity: {}\n", severity));
-	if (!versions.empty())
-		body.append(format("Version: {}\n", boost::algorithm::join(versions, " ")));
-	if (!tags.empty())
-		body.append(format("Tags: {}\n", boost::algorithm::join(tags, " ")));
+	for (auto &&version: versions)
+		body.append(format("Version: {}\n", version));
+	for (auto &&tag: tags)
+		body.append(format("Tags: {}\n", tag));
 	if (!body.empty())
 		body.append("\n");
 

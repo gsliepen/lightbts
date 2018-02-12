@@ -20,6 +20,7 @@
 #include <limits.h>
 #include <unistd.h>
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/string.hpp>
 #include <fmt/ostream.h>
 #include <blake2.h>
 #include <cstdio>
@@ -30,6 +31,7 @@
 using namespace std;
 using namespace fmt;
 namespace fs = boost::filesystem;
+using namespace boost::algorithm;
 
 static string unquote(const string &in) {
 	if (in.empty())
@@ -206,7 +208,7 @@ void Instance::init(const fs::path &start_dir, bool create) {
 			if (parent == dir)
 				throw runtime_error("No LightBTS instance found");
 			dir = parent;
-		};
+		}
 	}
 
 	base_dir = dir / ".lightbts";
@@ -436,13 +438,48 @@ bool Instance::run_hook(const string &name, const fs::path &path, const string &
 	return true;
 }
 
+void Instance::parse_versions(const string &id, const string &str, int status) {
+	vector<string> versions;
+	split(versions, str, boost::is_any_of(", "), boost::token_compress_on);
+	for (auto version: versions)
+		db.execute("INSERT OR REPLACE INTO versions (bug, version, status) VALUES (?, ?, ?)", id, version, status);
+}
+
+void Instance::parse_tags(const string &id, const string &str) {
+	vector<string> tags;
+	split(tags, str, boost::is_any_of(", "), boost::token_compress_on);
+	bool add = true;
+	for (auto tag: tags) {
+		if (tag.empty())
+			continue;
+		if (tag[0] == '-') {
+			add = false;
+			tag.erase(0, 1);
+		} else if (tag[0] == '+') {
+			add = true;
+			tag.erase(0, 1);
+		} else if (tag[0] == '=') {
+			add = true;
+			db.execute("DELETE FROM tags WHERE bug=?", id);
+			tag.erase(0, 1);
+		}
+		if (tag.empty())
+			continue;
+		to_lower(tag);
+		if (add)
+			db.execute("INSERT INTO tags (bug, tag) VALUES (?,?)", id, tag);
+		else
+			db.execute("DELETE FROM tags WHERE bug=? AND tag=?", id, tag);
+	}
+}
+
 void Instance::parse_metadata(const string &id, const Message &msg) {
 	// Metadata variables to extract
 	string status;
 	string severity;
 	string title;
 	vector<string> tags;
-	string version;
+	vector<string> versions;
 	vector<string> found;
 	vector<string> notfound;
 	vector<string> fixed;
@@ -458,9 +495,11 @@ void Instance::parse_metadata(const string &id, const Message &msg) {
 	// Parse email headers
 	status = msg["X-LightBTS-Status"];
 
-	string tag = msg["X-LightBTS-Tag"];
-	if (!tag.empty())
-		tags.push_back(tag);
+	{
+		string tag = msg["X-LightBTS-Tag"];
+		if (!tag.empty())
+			tags.push_back(tag);
+	}
 
 	// Parse the body as if it is a MIME part.
 	stringstream body(msg.get_text());
@@ -483,7 +522,7 @@ void Instance::parse_metadata(const string &id, const Message &msg) {
 		if (line.size() <= colon + 2)
 			break;
 
-		auto key = line.substr(0, colon);
+		auto key = to_lower_copy(line.substr(0, colon));
 		auto value = line.substr(colon + 2);
 
 		if (key == "status") {
@@ -493,7 +532,7 @@ void Instance::parse_metadata(const string &id, const Message &msg) {
 		} else if (key == "tags" || key == "tag") {
 			tags.push_back(value);
 		} else if (key == "version") {
-			set_and_check("version", version, value);
+			versions.push_back(value);
 		} else if(key == "found") {
 			found.push_back(value);
 		} else if(key == "notfound") {
@@ -518,20 +557,44 @@ void Instance::parse_metadata(const string &id, const Message &msg) {
 	}
 
 	// Set any variables found
-	if (!status.empty())
-		db.execute("UPDATE bugs SET status=? WHERE id=?", status, id);
-	if (!severity.empty())
-		db.execute("UPDATE bugs SET severity=? WHERE id=?", severity, id);
+	if (!status.empty()) {
+		to_lower(status);
+		db.execute("UPDATE bugs SET status=? WHERE id=?", status_index(status), id);
+	}
+
+	if (!severity.empty()) {
+		to_lower(severity);
+		db.execute("UPDATE bugs SET severity=? WHERE id=?", severity_index(severity), id);
+	}
+
 	if (!owner.empty())
 		db.execute("UPDATE bugs SET owner=? WHERE id=?", owner, id);
+
 	if (!progress.empty())
 		db.execute("UPDATE bugs SET progress=? WHERE id=?", progress, id);
+
 	if (!milestone.empty())
 		db.execute("UPDATE bugs SET milestone=? WHERE id=?", milestone, id);
+
 	if (!deadline.empty())
 		db.execute("UPDATE bugs SET deadline=? WHERE id=?", deadline, id);
+
 	if (!title.empty())
 		db.execute("UPDATE bugs SET title=? WHERE id=?", title, id);
+
+	for (auto &&tag: tags)
+		parse_tags(id, tag);
+
+	for (auto &&version: fixed)
+		parse_versions(id, version, 0);
+
+	for (auto &&version: versions) {
+		int status = db.execute("SELECT status FROM bugs WHERE id=?", id);
+		parse_versions(id, version, status);
+	}
+
+	for (auto &&version: found)
+		parse_versions(id, version, 1);
 }
 
 bool Instance::import(const Message &in) {
