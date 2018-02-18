@@ -1,3 +1,4 @@
+origcxxflags="$CXXFLAGS"
 AC_PREREQ(2.61)
 AC_INIT([LightBTS], [0.1])
 AM_INIT_AUTOMAKE([1.11 std-options subdir-objects nostdinc silent-rules -Wall])
@@ -14,6 +15,9 @@ PKG_INSTALLDIR
 
 AC_LANG([C++])
 AX_CXX_COMPILE_STDCXX_11
+
+AX_CODE_COVERAGE
+AS_IF([test "x$enable_code_coverage" = "xyes" -a "x$origcxxflags" = "x"], [CXXFLAGS=""])
 
 AX_BOOST_BASE
 AX_BOOST_SYSTEM

@@ -20,7 +20,8 @@ lbts_LDADD = \
 	$(sqlite3_LIBS) \
 	$(BOOST_SYSTEM_LIB) $(BOOST_FILESYSTEM_LIB) \
 	$(b2_LDFLAGS) -lb2 \
-	$(fmt3_LDFLAGS) -lfmt
+	$(fmt3_LDFLAGS) -lfmt \
+	$(CODE_COVERAGE_LIBS)
 
 AM_CPPFLAGS = \
 	$(mimesis_CFLAGS) \
@@ -28,7 +29,11 @@ AM_CPPFLAGS = \
 	$(BOOST_CPPFLAGS) \
 	$(b2_CPPFLAGS) \
 	$(fmt3_CPPFLAGS) \
-	-iquote $(builddir)
+	-iquote $(builddir) \
+	$(CODE_COVERAGE_CPPFLAGS)
+
+AM_CXXFLAGS = \
+	$(CODE_COVERAGE_CXXFLAGS)
 
 gentemplates_SOURCES = \
 	gentemplates.cpp

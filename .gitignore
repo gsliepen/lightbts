@@ -1,11 +1,14 @@
-.*.swp
 *.pyc
 *.o
 *.bak
 *.orig
+*.gc??
 *~
+.*
+!.gitignore
 core
 core.*
+vgcore.*
 __pycache__/
 /dist/
 /build/
@@ -26,6 +29,6 @@ __pycache__/
 /missing
 /test-driver
 /*.tar.gz
+/*-coverage*
 Makefile
 Makefile.in
-
