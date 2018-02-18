@@ -505,7 +505,7 @@ void Instance::parse_metadata(const string &id, const Message &msg) {
 	stringstream body(msg.get_text());
 	string line;
 
-	auto set_and_check = [&log](const string &name, string &variable, const string &value) -> bool {
+	auto set_and_check = [&log](const string &name, string &variable, const string &value) {
 		if (!variable.empty() && value != variable)
 			log += "Duplicate " + name + " field.\n";
 		variable = value;

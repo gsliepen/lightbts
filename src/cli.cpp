@@ -91,6 +91,7 @@ static int do_init(const char *argv0, const vector<string> &args) {
 		data_dir = args[0];
 
 	LightBTS::Instance bts(data_dir, LightBTS::Instance::Flags::INIT);
+	return 0;
 }
 
 static const struct option long_options[] = {
