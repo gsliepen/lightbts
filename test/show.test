@@ -1,0 +1,51 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Initialize
+$lbts init
+
+# We should have no bugs
+test -z "$($lbts list all)"
+
+# Create several bugs
+echo "This is the first bug." | $lbts create First bug
+echo "Tags: foo\n\nThis is the second bug." | $lbts create Second bug
+echo "Severity: minor\n\nThis is the third bug." | $lbts create Third bug
+echo "Status: closed\n\nThis is the fourth bug." | $lbts create Fourth bug
+echo "This is a long text.\n\n\n\n\n\n\n\n\nEnd of long text." | $lbts create Fifth bug
+
+# Test output of show command
+$lbts show 1 > show
+grep -q "^Bug#1: First bug$" show
+grep -q "^Status: open$" show
+grep -q "^Severity: normal$" show
+grep -q "This is the first bug.$" show
+
+# We should also be able to show by Message-ID
+msgid=$(tail -1 show)
+$lbts show "$msgid" > show
+grep -q "^Message-ID: <$msgid>$" show
+grep -q "^This is the first bug.$" show
+
+# Angle brackets are allowed
+$lbts show "<$msgid>" > show2
+cmp show show2
+
+# Verbose show
+$lbts show -v 1 > show
+grep -q "^Bug#1: First bug$" show
+grep -q "^Status: open$" show
+grep -q "^Severity: normal$" show
+grep -q "^Message-ID: <$msgid>$" show
+grep -q "This is the first bug.$" show
+
+# Test whether metadata is shown correctly
+$lbts show 2 | grep -q "^Tags: foo$"
+$lbts show 3 | grep -q "^Severity: minor$"
+$lbts show 4 | grep -q "^Status: closed$"
+
+# Check that long texts are displayed properly
+! $lbts show 5 | grep -q "End of long text."
+$lbts show -v 5 | grep -q "^End of long text.$"
+

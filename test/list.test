@@ -1,0 +1,49 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Initialize
+$lbts init
+
+# We should have no bugs
+test -z "$($lbts list all)"
+
+# Create several bugs
+echo "This is the first bug." | $lbts create First bug
+echo "This is the second bug." | $lbts create Second bug
+echo "This is the third bug." | $lbts create Third bug
+
+# We should now have a list of three open bug
+$lbts list > list
+test "$(wc -l < list)" = "3"
+grep -q "First bug" list
+grep -q "Second bug" list
+grep -q "Third bug" list
+
+test -z "$(lbts list closed)"
+
+# Create a closed bug
+echo "Status: closed" | $lbts create Fourth bug
+$lbts list > list
+test "$(wc -l < list)" = "3"
+! grep -q "Fourth bug" list
+$lbts list closed > list
+test "$(wc -l < list)" = "1"
+grep -q "Fourth bug" list
+
+# Create bugs with tags
+echo "Tags: foo bar" | $lbts create Fifth bug
+echo "Tags: baz quux\nStatus: closed" | $lbts create Sixth bug
+test "$(echo `$lbts list all tags`)" = "bar baz foo quux"
+test "$(echo `$lbts list open tags`)" = "bar foo"
+test "$(echo `$lbts list closed tags`)" = "baz quux"
+$lbts list bar | grep -q "Fifth bug"
+test -z "$($lbts list quux)"
+$lbts list closed quux | grep -q "Sixth bug"
+test -z "$($lbts list closed bar)"
+
+# Create bugs with severities
+echo "Severity: important" | $lbts create Seventh bug
+$lbts list | grep -q "Seventh bug"
+$lbts list important | grep -q "Seventh bug"
+test -z "$($lbts list minor)"
