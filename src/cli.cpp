@@ -1,5 +1,5 @@
 /* LightBTS -- a lightweight issue tracking system
-   Copyright © 2017 Guus Sliepen <guus@lightbts.info>
+   Copyright © 2017-2018 Guus Sliepen <guus@lightbts.info>
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
 #include <fmt/ostream.h>
 
 #include "create.hpp"
+#include "import.hpp"
 #include "list.hpp"
 #include "show.hpp"
 
@@ -119,6 +120,7 @@ struct cli_function {
 static const cli_function functions[] = {
 	{"create", do_create},
 	{"help", do_help},
+	{"import", do_import},
 	{"init", do_init},
 	{"list", do_list},
 	{"show", do_show},

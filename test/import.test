@@ -1,0 +1,87 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Initialize
+$lbts init
+
+# Import without arguments should read stdin
+$lbts import << EOF
+From: test suite
+To: LightBTS
+Subject: First bug
+Message-ID: <1@test>
+
+This is the first bug.
+EOF
+
+# We should now have this bug imported.
+$lbts list | grep -q "First bug"
+
+# Import two files
+cat >msg2 << EOF
+From: test suite
+To: LightBTS
+Subject: Second bug
+Message-ID: <2@test>
+
+This is the second bug.
+EOF
+
+cat >msg3 << EOF
+From: test suite
+To: LightBTS
+Subject: Third bug
+Message-ID: <3@test>
+
+This is the third bug.
+EOF
+
+$lbts import msg2 msg3
+
+$lbts list > list
+test "$(wc -l < list)" = "3"
+grep -q "Second bug" list
+grep -q "Third bug" list
+
+# Duplicate imports should be ignored
+
+$lbts import msg2 msg3
+
+$lbts list > list
+test "$(wc -l < list)" = "3"
+grep -q "Second bug" list
+grep -q "Third bug" list
+
+# Import a message with metadata
+$lbts import << EOF
+From: test suite
+To: LightBTS
+Subject: Fourth bug
+Message-ID: <4@test>
+
+Tags: foo bar
+Severity: minor
+
+This is the fourth bug.
+EOF
+
+$lbts show 4 > bug
+grep -q "^Tags: bar foo$" bug
+grep -q "^Severity: minor$" bug
+
+# Import a reply
+$lbts import << EOF
+From: test suite
+To: LightBTS
+Subject: Re: First bug
+Message-ID: <1r1@test>
+In-Reply-To: <1@test>
+
+This is a reply to the first bug.
+EOF
+
+test "$($lbts list | wc -l)" = "4"
+
+$lbts show 1 > bug
+tail -2 bug | grep -q "^1r1@test$"

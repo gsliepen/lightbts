@@ -1,6 +1,7 @@
 TESTS = \
 	basic.test \
 	create.test \
+	import.test \
 	list.test \
 	show.test
 
