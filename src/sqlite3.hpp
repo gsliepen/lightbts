@@ -138,7 +138,11 @@ namespace SQLite3 {
 		template<typename... Ts>
 		result(::sqlite3 *db, const std::string &sql, Ts... args): stmt(db, sql) {
 			stmt.bind(args...);
-			stmt.step();
+			auto status = stmt.step();
+			if (status != SQLITE_DONE && status != SQLITE_ROW) {
+				sqlite3_finalize(stmt.stmt);
+				throw error(db);
+			}
 		}
 
 		result(result &other) = delete;

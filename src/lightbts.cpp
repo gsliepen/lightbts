@@ -632,11 +632,11 @@ bool Instance::import(const Message &in) {
 		db.execute("INSERT INTO messages (msgid, bug) VALUES (?, ?)", msgid, 0);
 	} catch (SQLite3::error &err) {
 		// Ignore duplicates
-		if (err.code == SQLITE_CONSTRAINT_UNIQUE) {
+		if (err.code == SQLITE_CONSTRAINT_PRIMARYKEY) {
 			print(cerr, "Ignoring duplicate message from {} with Message-ID {}\n", msg["From"], msgid);
 			return false;
 		} else {
-			throw runtime_error("Database error");
+			throw runtime_error(format("Database error: {}", err.what()));
 		}
 	}
 
