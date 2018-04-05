@@ -16,7 +16,6 @@
 */
 
 #include <boost/algorithm/string/join.hpp>
-#include <set>
 #include <fmt/ostream.h>
 #include <iostream>
 
@@ -25,7 +24,6 @@
 #include "cli.hpp"
 #include "edit.hpp"
 #include "lightbts.hpp"
-#include "pager.hpp"
 
 using namespace std;
 using namespace fmt;
