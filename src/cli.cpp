@@ -29,6 +29,7 @@
 #include "create.hpp"
 #include "import.hpp"
 #include "list.hpp"
+#include "reply.hpp"
 #include "show.hpp"
 
 using namespace std;
@@ -123,6 +124,7 @@ static const cli_function functions[] = {
 	{"import", do_import},
 	{"init", do_init},
 	{"list", do_list},
+	{"reply", do_reply},
 	{"show", do_show},
 	{"version", do_version},
 };

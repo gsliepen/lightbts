@@ -3,6 +3,7 @@ TESTS = \
 	create.test \
 	import.test \
 	list.test \
+	reply.test \
 	show.test
 
 dist_check_SCRIPTS = $(TESTS)

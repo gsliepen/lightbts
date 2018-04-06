@@ -1,0 +1,73 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Initialize
+$lbts init
+
+# Reply without arguments should fail
+! $lbts reply
+
+# Create a simple bug
+echo "This is the first bug." | $lbts create First bug
+
+# Reply to the first bug
+echo "This is a reply." | $lbts reply 1
+
+# We should now have a list of one bug
+$lbts list > list
+test "$(wc -l < list)" = "1"
+grep -q "First bug" list
+
+# We should be able to show the bug
+$lbts show 1 > 1
+head -1 1 | grep -q "First bug"
+
+# Check that the reply was added
+msgid=$(tail -1 1)
+$lbts show "$msgid" >msg
+test "$(tail -1 msg)" = "This is a reply."
+
+# Reply to the reply
+echo "This is the second reply." | $lbts reply "$msgid"
+
+# Check that it was added
+$lbts show 1 > 1
+msgid=$(tail -1 1)
+$lbts show "$msgid" >msg
+test "$(tail -1 msg)" = "This is the second reply."
+
+# Assert that the severity is normal
+head -3 1 | grep -q "^Severity: normal$"
+
+# Add a reply that changes the severity
+echo "Changing severity." | $lbts reply 1 -S important
+$lbts show 1 > 1
+head -3 1 | grep -q "^Severity: important$"
+
+# Assert that we don't have tags
+! grep -q "^Tags: " 1
+test "$($lbts list foo | wc -l)" = "0"
+
+# Create a reply with several tags
+echo "Add some tags." | $lbts reply 1 -T foo -T BAR -T baz
+$lbts show 1 > 1
+head -4 1 | grep -q "^Tags: bar baz foo$"
+test "$($lbts list foo | wc -l)" = "1"
+
+# Create a reply with our own pseudo-headers
+$lbts reply 1 << EOF
+Tags: quux - bar
+Severity: minor
+
+Change tags and severity.
+EOF
+
+$lbts show 1 > 1
+head -4 1 | grep -q "^Tags: baz foo quux$"
+grep -q "^Severity: minor$" 1
+
+# Check that the last msgid is the one from the last reply
+msgid=$(tail -1 1)
+$lbts show "$msgid" >msg
+test "$(tail -1 msg)" = "Change tags and severity."

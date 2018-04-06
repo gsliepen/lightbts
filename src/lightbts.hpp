@@ -177,6 +177,7 @@ class Instance {
 	set<string> get_tags(const Ticket &ticket);
 	string get_milestone(const Ticket &ticket);
 	vector<string> get_message_ids(const Ticket &ticket);
+	string get_first_message_id(const Ticket &ticket);
 
 	bool import(const Message &msg);
 };

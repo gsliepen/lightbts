@@ -413,6 +413,10 @@ vector<string> Instance::get_message_ids(const Ticket &ticket) {
 	return result;
 }
 
+string Instance::get_first_message_id(const Ticket &ticket) {
+	return db.execute("SELECT msgid FROM messages WHERE bug=? LIMIT 1", stol(ticket.id)).get_string(0);
+}
+
 bool Instance::run_hook(const string &name, const fs::path &path, const string &id) {
 	if (no_hooks)
 		return true;

@@ -9,6 +9,7 @@ lbts_SOURCES = \
 	list.cpp list.hpp \
 	lightbts.cpp lightbts.hpp \
 	config.cpp config.hpp \
+	reply.cpp reply.hpp \
 	show.cpp show.hpp \
 	pager.cpp pager.hpp \
 	sqlite3.hpp
