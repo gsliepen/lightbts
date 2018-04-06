@@ -1,0 +1,59 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Initialize
+$lbts init
+
+# Config without arguments should fail
+! $lbts config
+
+# Config name should contain a dot (section.variable)
+! $lbts config core
+! $lbts config project
+
+# Config with a non-existing option should fail
+! $lbts config foo.bar
+
+# Test default config
+test -z "$($lbts config core.project)"
+test -z "$($lbts config core.admin)"
+test "$($lbts config core.messages)" = "messages"
+test "$($lbts config core.hooks)" = "hooks"
+test "$($lbts config core.index)" = "index"
+test "$($lbts config core.respond-to-new)" = "true"
+test "$($lbts config core.respond-to-reply)" = "true"
+test "$($lbts config core.templates)" = "templates"
+
+test -z "$($lbts config web.root)"
+test -z "$($lbts config web.static-root)"
+
+test -z "$($lbts config email.address)"
+test -z "$($lbts config email.name)"
+test -z "$($lbts config email.smpthost)"
+
+test -z "$($lbts config cli.editor)"
+test -z "$($lbts config cli.pager)"
+
+# Change a value
+$lbts config core.project Test
+test "$($lbts config core.project)" = "Test"
+$lbts config core.admin The Admin "<admin@example.org>"
+test "$($lbts config core.admin)" = "The Admin <admin@example.org>"
+
+# Set a non-standard value
+$lbts config foo.bar baz
+test "$($lbts config foo.bar)" = "baz"
+
+# Clear a value
+$lbts config foo.bar ""
+test -z "$($lbts config foo.bar)"
+
+# Manually add an option
+cat >>.lightbts/config << EOF
+ [quux]   
+   test   =  1 2  3   
+  #comment = ignored
+EOF
+test "$($lbts config quux.test)" = "1 2  3"
+test -z "$($lbts config quux.#comment)"

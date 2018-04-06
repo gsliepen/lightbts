@@ -1,5 +1,6 @@
 TESTS = \
 	basic.test \
+	config.test \
 	create.test \
 	import.test \
 	list.test \

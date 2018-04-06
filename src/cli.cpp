@@ -26,6 +26,7 @@
 
 #include <fmt/ostream.h>
 
+#include "config.hpp"
 #include "create.hpp"
 #include "import.hpp"
 #include "list.hpp"
@@ -96,6 +97,38 @@ static int do_init(const char *argv0, const vector<string> &args) {
 	return 0;
 }
 
+static int do_config(const char *argv0, const vector<string> &args) {
+	if (args.empty()) {
+		print(cerr, "Not enough arguments\n");
+		return 1;
+	}
+
+	auto dot = args[0].find('.');
+	if (dot == string::npos) {
+		print(cerr, "Invalid option name\n");
+		return 1;
+	}
+
+	auto section = args[0].substr(0, dot);
+	auto variable = args[0].substr(dot + 1);
+
+	LightBTS::Instance bts(data_dir);
+
+	if (args.size() > 1) {
+		auto value = args[1];
+		for (size_t i = 2; i < args.size(); i++) {
+			value.push_back(' ');
+			value.append(args[i]);
+		}
+
+		bts.set_config(section, variable, value);
+		bts.save_config();
+		return 0;
+	}
+
+	print("{}\n", bts.get_config(section, variable));
+}
+
 static const struct option long_options[] = {
 	{"help", no_argument, nullptr, 'h'},
 	{"verbose", no_argument, nullptr, 'v'},
@@ -119,6 +152,7 @@ struct cli_function {
 
 // Keep the following list sorted at all times.
 static const cli_function functions[] = {
+	{"config", do_config},
 	{"create", do_create},
 	{"help", do_help},
 	{"import", do_import},
@@ -179,7 +213,7 @@ int main(int argc, char *argv[]) {
 		show_help(cerr, argv[0]);
 		return 1;
 	}
-	
+
 	if (!strcmp(argv[1], "--version")) {
 		show_version();
 		return 0;
@@ -252,7 +286,7 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 	}
-	
+
 	if (command.empty()) {
 		if (help) {
 			show_help(cout, argv[0]);

@@ -100,6 +100,10 @@ void Instance::set_config(const string &section, const string &variable, const s
 	return config.set(section, variable, value);
 }
 
+void Instance::save_config() {
+	config.save(base_dir / "config");
+}
+
 string Instance::get_local_email_address() {
 	// TODO: have Mimesis check that we have/create a valid From address.
 	if (!admin.empty())
