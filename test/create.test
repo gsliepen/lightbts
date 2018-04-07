@@ -25,10 +25,11 @@ msgid=$(tail -1 1)
 $lbts show "$msgid" >msg
 test "$(tail -1 msg)" = "This is the first bug."
 
-# Create a bug with a given severity
-echo "Second bug." | $lbts create -S important Second bug
-$lbts show 2 > 2
+# Create a bug with a given severity, and use the -m option to pass the body text.
+$lbts create -S important Second bug -m "This is the second bug."
+$lbts show -v 2 > 2
 head -3 2 | grep -q "^Severity: important$"
+test "$(tail -1 2)" = "This is the second bug."
 
 # We should now have two bugs
 $lbts list > list

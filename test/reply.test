@@ -40,10 +40,11 @@ test "$(tail -1 msg)" = "This is the second reply."
 # Assert that the severity is normal
 head -3 1 | grep -q "^Severity: normal$"
 
-# Add a reply that changes the severity
-echo "Changing severity." | $lbts reply 1 -S important
-$lbts show 1 > 1
+# Add a reply that changes the severity, and use the -m option to pass the body text.
+$lbts reply 1 -S important -m "Changing severity."
+$lbts show -v 1 > 1
 head -3 1 | grep -q "^Severity: important$"
+test "$(tail -1 1)" = "Changing severity."
 
 # Assert that we don't have tags
 ! grep -q "^Tags: " 1
