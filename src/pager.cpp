@@ -36,7 +36,7 @@ Pager::Pager(string cmd) {
 			cmd = "less";
 	}
 	
-	if (cmd == "-") {
+	if (cmd.empty() || cmd == "-" || cmd == "cat") {
 		fd = stdout;
 	} else {
 		if (!getenv("LESS"))
