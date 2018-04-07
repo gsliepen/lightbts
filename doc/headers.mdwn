@@ -9,7 +9,7 @@ The former only conform to email-related standards, the latter are specific to L
 Message-ID:
 : This uniquely identifies an email. It must be present, and never reused, except when forwarding the exact same email.
 In-Reply-To:
-: Which email this is a reply to. Is set on outgoing emails, and on incoming emails it is checked against the index to see if there is already a bug that has a message with the given id. If so, the email is automatically assocaited with that bug.
+: Which email this is a reply to. Is set on outgoing emails, and on incoming emails it is checked against the index to see if there is already a bug that has a message with the given id. If so, the email is automatically associated with that bug.
 References:
 : Which emails this email has a relation to. TODO: use this in case In-Reply-To is missing.
 Subject:
