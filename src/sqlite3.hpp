@@ -1,7 +1,7 @@
 #pragma once
 
 /* LightBTS -- a lightweight issue tracking system
-   Copyright © 2017 Guus Sliepen <guus@lightbts.info>
+   Copyright © 2017-2018 Guus Sliepen <guus@lightbts.info>
  
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by

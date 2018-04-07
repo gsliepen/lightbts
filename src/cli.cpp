@@ -59,7 +59,7 @@ vector<string> attachments;
 static void show_version() {
 	print(
 			"LightBTS version {}\n"
-			"Copyright © 2017 Guus Sliepen\n"
+			"Copyright © 2017-2018 Guus Sliepen\n"
 			"\n"
 			"License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.\n"
 			"This is free software: you are free to change and redistribute it.\n"
