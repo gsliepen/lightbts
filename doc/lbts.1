@@ -1,0 +1,146 @@
+.Dd 2018-04-07
+.Dt LBTS 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh Name
+.Nm lbts
+.Nd the command line interface for LightBTS
+.Sh SYNOPSIS
+.Nm
+.Op Fl dh
+.Op Fl -batch
+.Op Fl -data-dir Ar path
+.Op Fl -help
+.Op Fl -no-email
+.Op Fl -no-hooks
+.Op Fl -version
+.Ar command ...
+.Sh DESCRIPTION
+This the command line interface for LightBTS, a light-weight issue tracking system.
+.Sh OPTIONS
+.Bl -tag -width -indent
+.It Fl -batch
+Force batch mode.
+No interactive input will be used, and the output will not be piped through a pager.
+Batch mode is enabled automatically if stdin or stdout is not an interactive terminal.
+.If Fl d, -data-dir Ar path
+Set the path to the LightBTS data.
+This can also be controlled by setting the
+.Ev LIGHTBTS_DIR
+environment variable.
+.It Fl h, -help
+Print the synopsis and a list of the supported commands, then exit.
+.It Fl -no-email
+Disable sending any emails during the execution of the command.
+.It Fl -no-hooks
+Disable running any hooks during the execution of the command.
+.It Fl version
+Print version information and exit.
+.El
+.Sh COMMANDS
+.Bl -tag -width indent
+.It close Ar id
+Close a ticket.
+.It config Ar variable Op Ar value
+Get or set a configuration option.
+.It create Ar title
+Create a new ticket.
+.It deadline Ar id Ar deadline
+Change the deadline of a ticket.
+.It fixed Ar id Ar version
+Record the version where a problem is fixed.
+.It found Ar id Ar version
+Record the version where a problem is found.
+.It help
+Print the synopsis and a list of the supported commands.
+.It import Op Ar file ...
+Import one or more messages into the database.
+.It init Op Ar path
+Initialize a LightBTS instance.
+.It link Ar id1 Ar type Ar id2
+Add a link of the given type between two tickets.
+.It list Op Ar selector ...
+List tickets.
+.It milestone Ar id
+Change the milestone of a ticket
+.It noowner Ar id
+Remove ownership of a ticket.
+.It notfixed Ar id Ar version
+Remove records of where a problem is fixed.
+.It notfound Ar id Ar version
+Remove records of where a problem is found.
+.It owner Ar id Ar name
+Change the ownership of a ticket.
+.It progress Ar id Ar percentage
+Change the progress of a ticket.
+.It reopen Ar id
+Reopen a ticket.
+.It reply Ar id
+Reply to an existing ticket.
+.It retitle Ar id Ar title
+Change the title of a ticket.
+.It severity Ar id Ar severity
+Change the severity of a ticket.
+.It show Ar id
+Show ticket or message details.
+.It tags Ar id Oo +|- Oc Ar tag ...
+Add tags to or remove tags from a ticket.
+.It unlink Ar id1 Ar type Ar id2
+Remove a link of the given type between two tickets.
+.It version
+Print version information.
+.El
+.Sh ENVIRONMENT VARIABLES
+.Bl -tag -width -indent
+.It Ev EDITOR
+Use the given command for interactive editing of messages.
+.It Ev EMAIL
+If set,
+.Nm
+will use the given email address in the "From:" header of the messages it creates.
+.It Ev FULLNAME
+If set,
+.Nm
+will use the given name in the "From:" header of the messages it creates.
+.It Ev LIGHTBTS_DIR
+Set the path to the LightBTS data.
+.It Ev LIGHTBTS_PAGER
+This environment variable overrides
+.Ev PAGER .
+.It Ev PAGER
+Use the given command to pipe output through when running interactively.
+If both
+.Ev PAGER
+and
+.Ev LIGHTBTS_PAGER
+are not set, the default will be to use
+.Xr less 1 .
+If
+.Ev PAGER
+is set to an empty string, to "-" or to "cat",
+.Nm
+will not launch a pager.
+.It Ev VISUAL
+This environment variable overrides
+.Ev EDITOR .
+.It Ev XDG_RUNTIME_DIR
+If set,
+.Nm
+will use the given directory for storing temporary files.
+.Sh FILES
+.Nm
+will store and retrieve files from a directory named
+.Pa .lightbts ,
+unless overridden by the environment variable
+.Ev LIGHTBTS_DIR
+or by the command line option
+.Fl d
+or
+.Fl -data-dir .
+If not overridden, it will first look for
+.Pa .lightbts
+in the current directory.
+If it cannot find it there, it will try if that directory exists in the parent directory,
+and so on until it reaches the root directory.
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

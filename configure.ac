@@ -29,5 +29,5 @@ PKG_CHECK_MODULES([sqlite3], [sqlite3])
 AX_CHECK_LIBRARY([b2], [blake2.h], [b2], [], [AC_MSG_ERROR([Missing required library libb2])])
 AX_CHECK_LIBRARY([fmt3], [fmt/format.h], [fmt], [], [AC_MSG_ERROR([Missing required library libfmt])])
 
-AC_CONFIG_FILES([Makefile src/Makefile test/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile doc/Makefile test/Makefile])
 AC_OUTPUT
