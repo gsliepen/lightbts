@@ -26,6 +26,7 @@
 
 #include <fmt/ostream.h>
 
+#include "action.hpp"
 #include "config.hpp"
 #include "create.hpp"
 #include "import.hpp"
@@ -152,14 +153,33 @@ struct cli_function {
 
 // Keep the following list sorted at all times.
 static const cli_function functions[] = {
+	{"close", do_close},
 	{"config", do_config},
 	{"create", do_create},
+	{"deadline", do_deadline},
+	{"fixed", do_fixed},
+	{"found", do_found},
 	{"help", do_help},
 	{"import", do_import},
 	{"init", do_init},
+	{"link", do_link},
 	{"list", do_list},
+	{"milestone", do_milestone},
+	{"noowner", do_noowner},
+	{"notfixed", do_notfixed},
+	{"notfound", do_notfound},
+	{"owner", do_owner},
+	{"progress", do_progress},
+	{"reopen", do_reopen},
 	{"reply", do_reply},
+	{"retitle", do_retitle},
+	{"severity", do_severity},
 	{"show", do_show},
+	{"subject", do_retitle},
+	{"tag", do_tags},
+	{"tags", do_tags},
+	{"title", do_retitle},
+	{"unlink", do_unlink},
 	{"version", do_version},
 };
 

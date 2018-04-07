@@ -98,6 +98,9 @@ bool is_valid_severity(const string &name);
 int status_index(const string &name);
 int severity_index(const string &name);
 
+bool is_valid_link_type(const string &name);
+int link_type_index(const string &name);
+
 class Ticket {
 	friend class Instance;
 
@@ -171,8 +174,9 @@ class Instance {
 	void save_config();
 	string get_local_email_address();
 	vector<Ticket> list(const vector<string> &args = {}, size_t len = 0);
-	Ticket get_ticket(const string &id);
+	Ticket get_ticket_from_ticket_id(const string &id);
 	Ticket get_ticket_from_message_id(const string &id);
+	Ticket get_ticket(const string &id);
 	Message get_message(const string &id);
 
 	set<string> get_tags(const Ticket &ticket);

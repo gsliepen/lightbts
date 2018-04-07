@@ -2,6 +2,7 @@ bin_PROGRAMS = lbts
 noinst_PROGRAMS = gentemplates
 
 lbts_SOURCES = \
+	action.cpp action.hpp \
 	cli.cpp cli.hpp \
 	create.cpp create.hpp \
 	edit.cpp edit.hpp \

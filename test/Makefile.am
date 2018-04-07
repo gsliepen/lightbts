@@ -1,4 +1,5 @@
 TESTS = \
+	action.test \
 	basic.test \
 	config.test \
 	create.test \

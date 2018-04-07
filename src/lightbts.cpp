@@ -65,6 +65,13 @@ bool is_valid_severity(const string &name) {
 	return false;
 }
 
+bool is_valid_link_type(const string &name) {
+	for (auto &&link_type: link_names)
+		if (link_type == name)
+			return true;
+	return false;
+}
+
 int status_index(const string &name) {
 	int i = 0;
 	for (auto &&status: status_names)
@@ -83,6 +90,16 @@ int severity_index(const string &name) {
 		else
 			i++;
 	throw runtime_error("Invalid severity name");
+}
+
+int link_type_index(const string &name) {
+	int i = 0;
+	for (auto &&link_type: link_names)
+		if (link_type == name)
+			return i;
+		else
+			i++;
+	throw runtime_error("Invalid link type name");
 }
 
 Instance::Instance(const string &path, Flags flags) {
@@ -343,13 +360,20 @@ vector<Ticket> Instance::list(const vector<string> &args, size_t len) {
 	return tickets;
 }
 
-Ticket Instance::get_ticket(const string &id) {
+Ticket Instance::get_ticket_from_ticket_id(const string &id) {
 	auto row = db.execute("SELECT id, title, status, severity FROM bugs WHERE id=?", id);
 	return Ticket(row.get_string(0), row.get_string(1), static_cast<Status>(row.get_int(2)), static_cast<Severity>(row.get_int(3)));
 }
 
 Ticket Instance::get_ticket_from_message_id(const string &id) {
-	return get_ticket(db.execute("SELECT bug FROM messages WHERE msgid=?", id).get_string(0));
+	return get_ticket_from_ticket_id(db.execute("SELECT bug FROM messages WHERE msgid=?", id).get_string(0));
+}
+
+Ticket Instance::get_ticket(const string &id) {
+	if (id.find('@') == string::npos)
+		return get_ticket_from_ticket_id(id);
+	else
+		return get_ticket_from_message_id(id);
 }
 
 static string hash_msgid(const string &id) {

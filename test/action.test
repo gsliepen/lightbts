@@ -1,0 +1,115 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+# Initialize
+$lbts init
+
+# Reply without arguments should fail
+! $lbts reply
+
+# Create a simple bug
+echo "This is the first bug." | $lbts create First bug
+
+# Close
+! $lbts close
+! $lbts close 2
+$lbts close 1
+test -z "$($lbts list open)"
+test -n "$($lbts list closed)"
+
+# Reopen
+! $lbts reopen
+$lbts reopen 1
+test -n "$($lbts list open)"
+test -z "$($lbts list closed)"
+
+# Retitle
+! $lbts retitle
+! $lbts retitle 1
+$lbts retitle 1 Primary ticket
+$lbts list | grep -q "Primary ticket"
+
+# Found
+! $lbts found
+! $lbts found 1
+$lbts found 1 1.0
+
+# Notfound
+! $lbts notfound
+! $lbts notfound 1
+$lbts notfound 1 1.0
+
+# fixed
+! $lbts fixed
+! $lbts fixed 1
+$lbts fixed 1 1.0
+
+# Notfixed
+! $lbts notfixed
+! $lbts notfixed 1
+$lbts notfixed 1 1.0
+
+# Severity
+! $lbts severity
+! $lbts severity 1
+$lbts severity 1 minor 
+$lbts show 1 | grep -q "^Severity: minor$"
+! $lbts severity 1 minor setback
+
+# Link
+! $lbts link
+! $lbts link 1
+! $lbts link 1 blocks
+$lbts link 1 blocks 2
+! $lbts link 1 blocks 2 3
+
+# Unlink
+! $lbts unlink
+! $lbts unlink 1
+! $lbts unlink 1 blocks
+$lbts unlink 1 blocks 2
+! $lbts unlink 1 blocks 2 3
+
+# Tags
+! $lbts tags
+! $lbts tags 1
+$lbts tags 1 foo
+$lbts show 1 | grep -q "^Tags: foo$"
+$lbts tag 1 bar - foo +baz quux
+$lbts show 1 | grep -q "^Tags: bar baz quux$"
+
+# Owner
+! $lbts owner
+! $lbts owner 1
+$lbts owner 1 Firstname Lastname
+
+# Noowner
+! $lbts noowner
+$lbts noowner 1
+! $lbts noowner Firstname Lastname
+
+# Deadline
+! $lbts deadline
+! $lbts deadline 1
+$lbts deadline 1 1970-01-01
+
+# Milestone
+! $lbts milestone
+! $lbts milestone 1
+$lbts milestone 1 alpha
+$lbts show 1 | grep -q "^Milestone: alpha$"
+
+# Progress
+! $lbts progress
+! $lbts progress 1
+$lbts progress 1 99%
+! $lbts progress 1 1% 2% 3%
+
+# Add message
+$lbts close 1 -m "That's all folks!"
+msgid=$($lbts show 1 | tail -1)
+test "$($lbts show $msgid | tail -1)" = "That's all folks!"
