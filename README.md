@@ -8,7 +8,7 @@ directory you want, simply by calling:
 
 From that point on, you can create, modify and close tickets using the command
 line interface from that directory, or any of its subdirectories. If you know
-git, you will fell instantly familiar with this way of working. However,
+git, you will feel instantly familiar with this way of working. However,
 LightBTS itself does not require git in any way. To learn about all the
 commands that the command line interface supports, just type:
 
