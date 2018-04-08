@@ -1,0 +1,45 @@
+.Dd 2018-04-08
+.Dt LBTS-INIT 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts init
+.Nd create an empty LightBTS instance or reinitialize an existing owner
+.Sh SYNOPSIS
+.Nm lbts init
+.Op Ar directory
+.Sh DESCRIPTION
+This command creates an empty LightBTS instance - basically a
+.Pa .lightbts
+directory with subdirectories for
+.Pa hooks
+and
+.Pa messages ,
+and the files
+.Pa config
+and
+.Pa index .
+.Pp
+If the
+.Ev LIGHTBTS_DIR
+environment variable is set then it will be used instead of
+.Pa ./.lightbts
+for the base directory of the LightBTS instance.
+.Pp
+Running
+.Nm lbts init
+inside an existing LightBTS instance is safe; 
+it will not overwrite things that are already there.
+.Sh OPTIONS
+If a
+.Ar directory
+is specified on the command line,
+it will use that instead of
+.Ev LIGHTBTS_DIR
+or
+.Pa ./.lightbts .
+.El
+.Sh SEE ALSO
+.Xr lbts 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info
