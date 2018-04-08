@@ -45,8 +45,8 @@ namespace SQLite3 {
 	 */
 	class statement {
 		friend class result;
-		::sqlite3_stmt *stmt;
-		int p;
+		::sqlite3_stmt *stmt = nullptr;
+		int p = 0;
 		int state;
 
 		public:
@@ -61,7 +61,7 @@ namespace SQLite3 {
 
 		statement(): stmt(nullptr) {}
 
-		statement(::sqlite3 *db, const std::string &sql): p(0) {
+		statement(::sqlite3 *db, const std::string &sql) {
 			const char *str = sql.c_str();
 			size_t size = sql.size();
 			const char *tail;
@@ -73,7 +73,7 @@ namespace SQLite3 {
 		}
 
 		/* Destructor */
-		~statement() { sqlite3_finalize(stmt); }
+		~statement() { if(stmt) sqlite3_finalize(stmt); }
 
 		/* Binding arguments */
 		statement &bind(const char *arg) { if (arg) check(sqlite3_bind_text(stmt, ++p, arg, -1, SQLITE_TRANSIENT)); else check(sqlite3_bind_null(stmt, ++p)); return *this;  }
@@ -141,6 +141,7 @@ namespace SQLite3 {
 			auto status = stmt.step();
 			if (status != SQLITE_DONE && status != SQLITE_ROW) {
 				sqlite3_finalize(stmt.stmt);
+				stmt.stmt = nullptr;
 				throw error(db);
 			}
 		}
@@ -167,7 +168,7 @@ namespace SQLite3 {
 
 	class transaction {
 		::sqlite3 *db;
-		bool finished;
+		bool finished = false;
 
 		public:
 		transaction(transaction &other) = delete;
@@ -177,7 +178,7 @@ namespace SQLite3 {
 			other.finished = true;
 		}
 
-		transaction(::sqlite3 *db): db(db), finished(false) {
+		transaction(::sqlite3 *db): db(db) {
 			statement(db, "BEGIN").step();
 		}
 
