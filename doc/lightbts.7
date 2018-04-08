@@ -1,0 +1,227 @@
+.Dd 2018-04-08
+.Dt LIGHTBTS 7
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm LightBTS
+.Nd a light-weight issue tracker
+.Sh DESCRIPTION
+.Nm
+is an issue tracking system.
+It has two major design goals:
+.Bl -enum
+.It
+Be as simple to use as possible, especially for small projects.
+To this end,
+.Nm
+tries to be like
+.Xr git 1
+where appropriate.
+You can create a LightBTS instance for a project at any time by calling
+.Xr lbts-init 1
+in the base directory of a project.
+The command line interface
+.Xr lbts 1
+allows one to create and manage tickets either interactively in a terminal,
+or call it from scripts to automate things.
+.It
+Have a simple, well defined format for storing data and meta-data.
+Every change is recorded as an RFC2822 compliant message.
+The body of each message can have a pseudo-header that contains meta-data.
+This has the advantage of making it trivial to have an email interface to LightBTS,
+but the well-defined message format also makes it easier to reason about the contents of a LightBTS instance.
+.El
+.Sh TICKETS
+A ticket is a collection of messages that are referring to each other.
+A ticket is created when a message is imported into a LightBTS instance that does not refer to any existing message in the database.
+Messages which refer to existing messages will be assigned to the ticket the existing message is part of.
+.Pp
+Tickets have a state which can be modified by messages added to that ticket.
+The state consists of the following elements:
+.Bl -tag -width -ident
+.It Deadline:
+The deadline of a ticket.
+This can be used to prioritize work on tickets.
+The initial value is empty.
+.It Links:
+These describe binary relations between different tickets.
+There are different types of links possible:
+.Bl -tag -width -ident
+.It Blocks:
+Describes that one ticket is blocking the completion of another ticket.
+.It Depends:
+Describes that one ticket depends on another ticket to be completed first.
+.It Duplicates:
+Describes that one ticket is a duplicate of another (pre-existing) ticket.
+.It Relates:
+A generic link that describes that two tickets are related to each other.
+.El
+The initial set of links is empty.
+.It Milestone:
+The milestone that this ticket is part of.
+This is a free form text value.
+The initial value is empty.
+.It Owner:
+The person or group responsible for the ticket.
+The initial value is empty.
+.It Progress:
+A percentage value that describes how close to completion the issue is.
+Initially the value is 0%.
+.It Severity:
+The severity of a ticket.
+Valid severities are: wishlist, minor, normal, important, serious, critical, grave.
+The initial value is normal.
+.It Status:
+The status of a ticket.
+Valid values are: open, closed.
+The initial value is open.
+.It Tags:
+A set of tags that are applied to a ticket.
+Tags can be added and removed at any point.
+The initial set of tags is empty.
+.It Title:
+The title (or subject) of a ticket.
+Initially, it is set to the Subject: header of the message that created the ticket.
+.It Versions:
+A set of versions that describe how this ticket relates to specific versions of the project.
+Versions can be official release version numbers, git commit hashes, and so on.
+There are two types of version information:
+.Bl -tag -width -ident
+.It Fixed:
+Describes that the issue is fixed in the given version of the project.
+.It Found:
+Describes that the issue was found in the given version of the project.
+.El
+.El
+.Sh MESSAGES
+Messages are RFC2822 compliant.
+They start with a block of headers, followed by a body.
+Messages can optionally make use of MIME (RFC2045) to support arbitrary text encoding,
+and to have (binary) file attachments to messages.
+The most important RFC2822 headers for LightBTS are:
+.Bl -tag -width -ident
+.It From:
+Indicates the sender's name and address.
+.It Subject:
+Is used for the initial title of a ticket.
+.It Message-ID:
+Is used as a unique identifier for a message.
+.It In-Reply-To:
+Is used to link messages to pre-existing messages in the database.
+.El
+.Pp
+Apart from the standard RFC2822 headers,
+LightBTS also has a concept of "pseudo-headers".
+Any block of text at the start of the message body which is formatted exactly like RFC2822 headers
+is treated as pseudo-headers.
+The pseudo-headers generally have the same names as the state elements described in
+.Sx TICKETS .
+Whenever a message is received,
+valid pseudo-headers will be used to update the corresponding state of the ticket that this message belongs to.
+.Pp
+The rest of the body is free-form text that is not interpreted by LightBTS in any way.
+The body of the initial message that created a ticket is used as the ticket's description.
+Subsequent message bodies are considered part of a discussion about the ticket.
+.Ss Example initial message
+.Bd -literal
+From: Some User <user@example.org>
+To: Project issue tracker <lightbts@project.example.org>
+Subject: The frobnicator crashes when the -c options is used
+Message-ID: 1529835@user.example.org
+
+Found: 0.99alpha
+Severity: minor
+
+When the -c option is used, the frobnicator command will crash on startup.
+Here is a backtrace:
+[...]
+.Ed
+.Ss Example response message
+.Bd -literal
+From: A. Developer <adevel@project.example.org>
+To: Project issue tracker <lightbts@project.example.org>
+Subject: Re: The frobnicator crashes when the -c options is used
+Message-ID: 3598125@project.example.org
+In-Reply-To: 1529835@user.example.org
+
+> When the -c option is used, the frobnicator command will crash on startup.
+
+Which version of the compiler have you used to compile the frobnicator with?
+.Ed
+.Ss Example message closing a ticket
+.Bd -literal
+From: Some User <user@example.org>
+To: Project issue tracker <lightbts@project.example.org>
+Subject: Re: The frobnicator crashes when the -c options is used
+Message-ID: 5328528@user.example.org
+In-Reply-To: 3598125@project.example.org
+
+Status: closed
+
+> > When the -c option is used, the frobnicator command will crash on startup.
+> 
+> Which version of the compiler have you used to compile the frobnicator with?
+
+I have updated my compiler and now it runs fine. Thanks!
+.Ed
+.Sh TICKET AND MESSAGE IDENTIFIERS
+Each message is RFC2822 compliant, and therefore has a unique Message-ID.
+This is used to identify messages.
+Since any message in the database is associated with exactly one ticket,
+tickets can be referred to by the Message-ID of any of the messages associated with it.
+.Pp
+Since Message-IDs can be long and are not very user-friendly,
+tickets will also be assigned simple numbers.
+Numbering starts at 1, and is incremented for every new ticket that is created.
+.Pp
+Message-IDs are guaranteed to be unique, even if a LightBTS instance would be split, merged with another instance, or would have its index recreated from the (possibly incomplete set of) messages.
+.Sh THE MESSAGE DATABASE
+.Nm
+stores a copy of all the messages it created and received.
+These messages can be found in
+.Pa .lightbts/messages/ .
+This directory has a similar structure as git's
+.Pa .git/objects/
+directory.
+Message filenames are hexadecimally encoded hashes of their Message-IDs.
+The first two hexadecimal digits of the hash are used for a subdirectory within
+.Pa messages/ ,
+the rest of the hash is used for the filename within that subdirectory.
+This is a scalable way to store a large amount of messages.
+.Pp
+Future versions of LightBTS might add the ability to compress the messages using zstd,
+and/or to store multiple messages in a single pack file.
+.Pp
+Users should not rely on a specific layout of the
+.Pa messages/
+directory, but instead retreive and store messages using the
+.Nm lbts show Ar Message-ID
+and
+.Nm lbts import
+commands.
+.Sh THE INDEX
+To be able to quickly get the status of a given ticket,
+.Nm
+maintains an SQLite3 database that stores the current state of tickets,
+and that contains an index into the message database.
+The SQLite3 database is stored in
+.Pa .lightbts/index .
+.Pp
+Users should not rely on a specific schema used to store information in the index,
+but instead use
+.Xr lbts 1
+to query the LightBTS instance.
+.Sh CONFIGURATION
+The configuration of a LightBTS instance is stored in
+.Pa .lightbts/config
+in INI file format.
+The file can be editted manually,
+but the recommended way is to use the
+.Nm lbts config
+command to get or set configuration variables.
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr git 1 ,
+.Pa https://www.ietf.org/rfc/rfc2822.txt .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info
