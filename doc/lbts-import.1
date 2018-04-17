@@ -1,0 +1,60 @@
+.Dd 2018-04-17
+.Dt LBTS-IMPORT 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts import
+.Nd reply to an existing ticket
+.Sh SYNOPSIS
+.Nm lbts import
+.Op Ar file ...
+.Sh DESCRIPTION
+Import one or messages into the LightBTS instance.
+If no files are specified on the command line, then a message is read from stdin.
+.Pp
+Messages must be RFC2822-compliant.
+Imported messages will be added to the message database and will cause the index to be updated.
+Duplicate messages (any message with a Message-ID header that is the same as one that is already in the message database)
+will be ignored.
+.Sh EMAIL INTEGRATION
+To add email support to LightBTS,
+one simply has to pipe incoming emails through the
+.Nm lbts import
+command.
+Most mail servers make it easy to feed emails to external commands.
+Below are some examples for common email setups.
+.Ss Dot-forward files
+If one has an account on a UNIX machine that can receive incoming email,
+then most likely the mail server will read the
+.Pa $HOME/.forward
+file if it exists.
+This file can contain an email address to forward the incoming email to,
+but if it starts with a pipe symbol it will instead treat the rest of the line as a command to run,
+and will feed the incoming email to the standard input of that command, like so:
+.Bd -literal -offset indent
+|/path/to/lbts -d /path/to/instance import
+.Ed
+.Pp
+Some emailservers allow mail to be sent to username-extension and/or username+extension,
+and will look for
+.Pa $HOME/.forward-extension
+or
+.Pa $HOME/.forward+extension
+respectively.
+This allows you to use a -bugs extension without having to get a new email address or create a new UNIX account.
+.Ss Aliases file
+Most mailservers also read the file
+.Pa /etc/aliases ,
+which is normally used to map email names to account names.
+However, it also supports the pipe syntax, so one could add:
+.Bd -literal -offset indent
+lightbts: |/path/to/lbts -d /path/to/instance import
+.Ed
+.Pp
+However, be aware that this might run the command as user nobody,
+which is probably not what you want.
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lightbts 7 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

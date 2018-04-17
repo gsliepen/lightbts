@@ -1,0 +1,37 @@
+.Dd 2018-04-17
+.Dt LBTS-CREATE 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts create
+.Nd create a new ticket
+.Sh SYNOPSIS
+.Nm lbts create
+.Op Fl V Ar version
+.Op Fl T Ar tag
+.Op Fl S Ar severity
+.Op Fl m Ar message
+.Ar title...
+.Sh DESCRIPTION
+The command creates a new ticket with the given title.
+If the command is run interactively, then an editor will be invoked where the details of the ticket can be filled in.
+Otherwise, a message is expected to be given using the
+.Fl m
+option or to be provided via stdin.
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl V Ar version
+Record the version where the issue was found.
+This option can be specified multiple times.
+.It Fl T Ar tag
+Set the given tag for this issue.
+This option can be specified multiple times.
+.It Fl S Ar severity
+Specify the severity of the issue.
+.It Fl m Ar message
+Use the given message instead of invoking an editor or reading one from stdin.
+.El
+.Sh SEE ALSO
+.Xr lbts 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info
