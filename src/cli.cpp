@@ -74,17 +74,6 @@ static int do_version(const char *argv0, const vector<string> &args) {
 	return 0;
 }
 
-static int do_help(const char *argv0, const vector<string> &args) {
-	print(
-			"Usage: {} help [<command>]\n"
-			"\n"
-			"Shows a help message for the given <command>. If no <command> is given,\n"
-			"shows a list of possible commands.\n",
-			argv0
-		  );
-	return 0;
-}
-
 static int do_init(const char *argv0, const vector<string> &args) {
 	if (args.size() > 1) {
 		print(cerr, "Too many arguments\n");
@@ -151,38 +140,6 @@ struct cli_function {
 	}
 };
 
-// Keep the following list sorted at all times.
-static const cli_function functions[] = {
-	{"close", do_close},
-	{"config", do_config},
-	{"create", do_create},
-	{"deadline", do_deadline},
-	{"fixed", do_fixed},
-	{"found", do_found},
-	{"help", do_help},
-	{"import", do_import},
-	{"init", do_init},
-	{"link", do_link},
-	{"list", do_list},
-	{"milestone", do_milestone},
-	{"noowner", do_noowner},
-	{"notfixed", do_notfixed},
-	{"notfound", do_notfound},
-	{"owner", do_owner},
-	{"progress", do_progress},
-	{"reopen", do_reopen},
-	{"reply", do_reply},
-	{"retitle", do_retitle},
-	{"severity", do_severity},
-	{"show", do_show},
-	{"subject", do_retitle},
-	{"tag", do_tags},
-	{"tags", do_tags},
-	{"title", do_retitle},
-	{"unlink", do_unlink},
-	{"version", do_version},
-};
-
 static void show_help(ostream &out, const char *argv0) {
 	print(out,
 			"Usage: {} [options] command [arguments]\n"
@@ -227,6 +184,57 @@ static void show_help(ostream &out, const char *argv0) {
 			"  fsck        Perform an integrity check.\n"
 			, argv0);
 }
+
+static int do_help(const char *argv0, const vector<string> &args) {
+	if (args.empty()) {
+		show_help(cout, argv0);
+		return 0;
+	}
+
+
+	for (auto c: args[0]) {
+		if (!isalnum(c) && c != '-') {
+			print(cerr, "{0}: invalid command '{1}'\n", argv0, args[0]);
+			show_help(cerr, argv0);
+			return 1;
+		}
+	}
+
+	string command = "/usr/bin/man lbts-" + args[0];
+	return system(command.c_str());
+}
+
+// Keep the following list sorted at all times.
+static const cli_function functions[] = {
+	{"close", do_close},
+	{"config", do_config},
+	{"create", do_create},
+	{"deadline", do_deadline},
+	{"fixed", do_fixed},
+	{"found", do_found},
+	{"help", do_help},
+	{"import", do_import},
+	{"init", do_init},
+	{"link", do_link},
+	{"list", do_list},
+	{"milestone", do_milestone},
+	{"noowner", do_noowner},
+	{"notfixed", do_notfixed},
+	{"notfound", do_notfound},
+	{"owner", do_owner},
+	{"progress", do_progress},
+	{"reopen", do_reopen},
+	{"reply", do_reply},
+	{"retitle", do_retitle},
+	{"severity", do_severity},
+	{"show", do_show},
+	{"subject", do_retitle},
+	{"tag", do_tags},
+	{"tags", do_tags},
+	{"title", do_retitle},
+	{"unlink", do_unlink},
+	{"version", do_version},
+};
 
 int main(int argc, char *argv[]) {
 	if (argc <= 1) {
@@ -297,10 +305,6 @@ int main(int argc, char *argv[]) {
 		default:
 			if (command.empty()) {
 				command = optarg;
-				if (!help && command == "help") {
-					help = true;
-					command.clear();
-				}
 			} else {
 				args.push_back(optarg);
 			}
@@ -316,6 +320,11 @@ int main(int argc, char *argv[]) {
 			print(cerr, "{0}: missing command\nTry '{0} --help' for more information.\n", argv[0]);
 			return 1;
 		}
+	}
+
+	if (help) {
+		args.insert(args.begin(), command);
+		command = "help";
 	}
 
 	if (!isatty(0) || !isatty(1))

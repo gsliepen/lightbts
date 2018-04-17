@@ -1,4 +1,4 @@
-.Dd 2018-04-07
+.Dd 2018-04-17
 .Dt LBTS 1
 .\" Manual page created by:
 .\" Guus Sliepen <guus@lightbts.info>
@@ -51,8 +51,11 @@ Change the deadline of a ticket.
 Record the version where a problem is fixed.
 .It found Ar id Ar version
 Record the version where a problem is found.
-.It help
-Print the synopsis and a list of the supported commands.
+.It help Op Ar command
+If a
+.Ar command
+is specified, show the manual page for the given command.
+Otherwise, print the synopsis and a list of the supported commands.
 .It import Op Ar file ...
 Import one or more messages into the database.
 .It init Op Ar directory
