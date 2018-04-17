@@ -101,16 +101,13 @@ class Ticket {
 	public:
 	Ticket(const string &id, const string &title, Status status, Severity severity): id(id), title(title), status(status), severity(severity) {}
 
-	const string &get_id() { return id; };
-	const string &get_title() { return title; };
+	const string &get_id() const { return id; };
+	const string &get_title() const { return title; };
 
-	vector<string> get_tags();
-	string get_milestone();
-
-	Severity get_severity() { return severity; }
-	string get_severity_name() { return severity_names[static_cast<int>(severity)]; }
-	Status get_status() { return status; }
-	string get_status_name() { return status_names[static_cast<int>(status)]; }
+	Severity get_severity() const { return severity; }
+	string get_severity_name() const { return severity_names[static_cast<int>(severity)]; }
+	Status get_status() const { return status; }
+	string get_status_name() const { return status_names[static_cast<int>(status)]; }
 };
 
 

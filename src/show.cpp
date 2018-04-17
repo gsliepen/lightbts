@@ -17,25 +17,7 @@
 using namespace std;
 using namespace fmt;
 
-static int do_show_message(const string &id) {
-	LightBTS::Instance bts(data_dir);
-
-	auto message = bts.get_message(id);
-
-	Pager pager(bts.get_config("core", "pager"));
-
-	print(pager, "{}", message.to_string());
-
-	return 0;
-}
-
-static int do_show_bug(const string &id) {
-	LightBTS::Instance bts(data_dir);
-
-	auto ticket = bts.get_ticket(id);
-
-	Pager pager(bts.get_config("core", "pager"));
-
+static void show_bug_header(LightBTS::Instance &bts, Pager &pager, const LightBTS::Ticket &ticket) {
 	print(pager, "Bug#{}: {}\n", ticket.get_id(), ticket.get_title());
 	print(pager, "Status: {}\n", ticket.get_status_name());
 	auto tags = bts.get_tags(ticket);
@@ -51,6 +33,33 @@ static int do_show_bug(const string &id) {
 		print(pager, "Milestone: {}\n", milestone);
 
 	print(pager, "\n");
+}
+
+static int do_show_message(const string &id) {
+	LightBTS::Instance bts(data_dir);
+
+	auto message = bts.get_message(id);
+
+	Pager pager(bts.get_config("core", "pager"));
+
+	if (verbose) {
+		auto ticket = bts.get_ticket(id);
+		show_bug_header(bts, pager, ticket);
+	}
+
+	print(pager, "{}", message.to_string());
+
+	return 0;
+}
+
+static int do_show_bug(const string &id) {
+	LightBTS::Instance bts(data_dir);
+
+	auto ticket = bts.get_ticket(id);
+
+	Pager pager(bts.get_config("core", "pager"));
+
+	show_bug_header(bts, pager, ticket);
 
 	bool first = true;
 	for (auto &&message_id: bts.get_message_ids(ticket)) {
