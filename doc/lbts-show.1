@@ -1,0 +1,28 @@
+.Dd 2018-04-17
+.Dt LBTS-SHOW 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts show
+.Nd show ticket or message details
+.Sh SYNOPSIS
+.Nm lbts show
+.Op Fl v | -verbose
+.Ar id
+.Sh DESCRIPTION
+If a ticket ID is given, then this command will print the current status of the ticket,
+and a list of message IDs that are associated with the ticket.
+.Pp
+If a message ID is given, then this command will print the given message in its entirety.
+.Sh OPTIONS
+If the
+.Fl v
+or
+.Fl -verbose
+flag is used, then for a ticket ID, the full contents of all messages associated with the ticket will be printed.
+If a message ID is given, then the current status of the ticket that the message is associated with will be printed
+above the contents of the message.
+.Sh SEE ALSO
+.Xr lbts 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info
