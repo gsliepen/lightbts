@@ -33,6 +33,12 @@ static int do_action(const string &id, const string &action) {
 	LightBTS::Instance bts(data_dir);
 
 	auto ticket = bts.get_ticket(id);
+	auto first_message_id = bts.get_first_message_id(ticket);
+
+	if (first_message_id.empty()) {
+		print(cerr, "No message ID found for ticket {}!\n", ticket.get_id());
+		return 1;
+	}
 
 	LightBTS::Message msg;
 	msg.set_crlf(false);

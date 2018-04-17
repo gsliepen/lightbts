@@ -64,6 +64,11 @@ int do_reply(const char *argv0, const vector<string> &args) {
 	if (id.find('@') == id.npos) {
 		auto ticket = bts.get_ticket(id);
 		id = bts.get_first_message_id(ticket);
+
+		if (id.empty()) {
+			print(cerr, "No message ID found for ticket {}!\n", ticket.get_id());
+			return 1;
+		}
 	}
 
 	auto parent = bts.get_message(id);
