@@ -20,7 +20,7 @@ Hooks are called without arguments, information is passed solely via environment
 Output to stdout and stderr is ignored.
 The exit code of a hook can influence the behavior of LightBTS.
 .Sh HOOKS
-.Bl -tag -width -indent
+.Bl -tag -width indent
 .It Pa pre-index
 This is called when a new message is to be imported into the database.
 If this hook exits with a non-zero exit code, the message will be rejected.
@@ -28,7 +28,7 @@ If this hook exits with a non-zero exit code, the message will be rejected.
 This is called when a new message has been imported and indexed into the database.
 The exit code is ignored.
 .Sh ENVIRONMENT VARIABLES
-.Bl -tag -width -indent
+.Bl -tag -width indent
 .It Ev MESSAGE_FILE
 This contains the full path to the message file.
 It is strongly recommended that you do not modify, move or delete the file in any way.

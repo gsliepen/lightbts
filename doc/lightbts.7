@@ -38,7 +38,7 @@ Messages which refer to existing messages will be assigned to the ticket the exi
 .Pp
 Tickets have a state which can be modified by messages added to that ticket.
 The state consists of the following elements:
-.Bl -tag -width -ident
+.Bl -tag -width indent
 .It Deadline:
 The deadline of a ticket.
 This can be used to prioritize work on tickets.
@@ -46,7 +46,7 @@ The initial value is empty.
 .It Links:
 These describe binary relations between different tickets.
 There are different types of links possible:
-.Bl -tag -width -ident
+.Bl -tag -width indent
 .It Blocks:
 Describes that one ticket is blocking the completion of another ticket.
 .It Depends:
@@ -86,7 +86,7 @@ Initially, it is set to the Subject: header of the message that created the tick
 A set of versions that describe how this ticket relates to specific versions of the project.
 Versions can be official release version numbers, git commit hashes, and so on.
 There are two types of version information:
-.Bl -tag -width -ident
+.Bl -tag -width indent
 .It Fixed:
 Describes that the issue is fixed in the given version of the project.
 .It Found:
