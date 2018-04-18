@@ -1,0 +1,32 @@
+.Dd 2018-04-18
+.Dt LBTS-FIXED 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts fixed
+.Nd record versions where an issue was fixed
+.Sh SYNOPSIS
+.Nm lbts fixed
+.Op Fl m Ar message
+.Ar id
+.Ar version...
+.Sh DESCRIPTION
+The command records versions where the issue reported in an existing ticket is fixed.
+The
+.Ar id
+can either be a ticket or a message ID.
+If the command is run interactively, then an editor will be invoked where the details of the ticket can be filled in.
+Otherwise, a message is expected to be given using the
+.Fl m
+option or to be provided via stdin.
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl m Ar message
+Use the given message instead of invoking an editor or reading one from stdin.
+.El
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-found 1 ,
+.Xr lbts-notfixed 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

@@ -1,0 +1,56 @@
+.Dd 2018-04-18
+.Dt LBTS-LINK 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts link
+.Nd add a link between two tickets
+.Sh SYNOPSIS
+.Nm lbts link
+.Op Fl m Ar message
+.Ar id1
+.Ar link-type
+.Ar id2
+.Sh DESCRIPTION
+The command adds a link of the given type between two tickets.
+Valid link types are:
+.Bl -tag -width indent
+.It relates
+This indicates that the two tickets are loosely related to each other.
+.It depends
+This indicates that the ticket with
+.Ar id1
+depends on the ticket with
+.Ar id2
+to be completed first.
+.It blocks
+This indicates that the ticket with
+.Ar id1
+will block the completion of the ticket with
+.Ar id2 .
+This is the reverse of the "depends" link type.
+.It duplicates
+This indicates that the ticket with
+.Ar id1
+is a duplicate of the pre-existing ticket with
+.Ar id2 .
+.El
+.Pp
+.Ar id1
+and
+.Ar id2
+can either be ticket or message IDs.
+If the command is run interactively, then an editor will be invoked where the details of the ticket can be filled in.
+Otherwise, a message is expected to be given using the
+.Fl m
+option or to be provided via stdin.
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl m Ar message
+Use the given message instead of invoking an editor or reading one from stdin.
+.El
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-unlink 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

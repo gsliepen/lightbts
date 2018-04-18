@@ -1,0 +1,33 @@
+.Dd 2018-04-18
+.Dt LBTS-UNLINK 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts unlink
+.Nd removes a link between two tickets
+.Sh SYNOPSIS
+.Nm lbts unlink
+.Op Fl m Ar message
+.Ar id1
+.Ar link-type
+.Ar id2
+.Sh DESCRIPTION
+The command removes an existing link of the given type between two tickets.
+.Ar id1
+and
+.Ar id2
+can either be ticket or message IDs.
+If the command is run interactively, then an editor will be invoked where the details of the ticket can be filled in.
+Otherwise, a message is expected to be given using the
+.Fl m
+option or to be provided via stdin.
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl m Ar message
+Use the given message instead of invoking an editor or reading one from stdin.
+.El
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-link 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info
