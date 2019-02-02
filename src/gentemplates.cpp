@@ -6,8 +6,10 @@
 
 #include <fstream>
 #include <iostream>
+#include <boost/filesystem.hpp>
 
 using namespace std;
+namespace fs = boost::filesystem;
 
 int main(int argc, char *argv[]) {
 	if (argc < 2) {
@@ -24,7 +26,7 @@ int main(int argc, char *argv[]) {
 			"} templates[] = {\n";
 
 	for (int i = 1; i < argc; i++) {
-		out << "\t{\"" << argv[i] << "\", R\"__TEMPLATE__(";
+		out << "\t{\"" << fs::path(argv[i]).filename().string() << "\", R\"__TEMPLATE__(";
 		ifstream in(argv[i]);
 		out << in.rdbuf();
 		out << ")__TEMPLATE__\"},\n";

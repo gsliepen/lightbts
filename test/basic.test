@@ -12,7 +12,7 @@ $lbts version | grep -q '^LightBTS version '
 $lbts --version | grep -q '^LightBTS version '
 
 # Any query command should not work if there is no .lightbts directory
-! $lbts -d .lightbts list
+$lbts -d .lightbts list 2>/dev/null >/dev/null || true
 
 # Nothing should have created a .lightbts directory so far
 test ! -e .lightbts
