@@ -106,6 +106,7 @@ static int do_config(const char *argv0, const vector<string> &args) {
 	}
 
 	print("{}\n", bts.get_config(section, variable));
+	return 0;
 }
 
 static const struct option long_options[] = {
