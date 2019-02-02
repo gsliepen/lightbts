@@ -26,12 +26,25 @@ static int import_one_file(LightBTS::Instance &bts, istream &file) {
 int do_import(const char *argv0, const vector<string> &args) {
 	LightBTS::Instance bts(data_dir);
 
+	int result = 0;
+
 	if (args.empty()) {
 		import_one_file(bts, cin);
 	} else {
 		for (auto &&filename: args) {
 			ifstream file(filename);
-			import_one_file(bts, file);
+			if (!file.is_open()) {
+				print(cerr, "Could not open {}: {}\n", filename, strerror(errno));
+				result = 1;
+				continue;
+			}
+			try {
+				import_one_file(bts, file);
+			} catch (runtime_error &e) {
+				print(cerr, "Error parsing {}: {}\n", filename, e.what());
+				result = 1;
+				continue;
+			}
 		}
 	}
 
