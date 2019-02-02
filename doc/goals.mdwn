@@ -1,0 +1,113 @@
+Long term goals
+---------------
+
+The goal is to make LightBTS a good choice for a wide range of use cases.
+
+Main developer
+--------------
+
+For the main developer of a project, LightBTS should scale with the size of their project.
+Even before writing a single line or code, or even creating a version control repository,
+a developer should be able to start a LightBTS instance for their project as easily as possible.
+This is why one can immediately start with:
+
+    lbts init project
+
+Once a project is made public, one might want to make the LightBTS instance public as well.
+Similar to git, it should be possible to clone, push and pull.
+However, the semantics are probably going to be different.
+In git, every clone is its own branch.
+It makes sense for a developer to work on a bug/feature, and only push the results when the developer thinks they are in a good shape.
+For tickets this is different, there is little reason to hold back on pushing or pulling anything.
+
+Messages in LightBTS are very much like objects in a git repository.
+They are unique, and have a unique idenfitier.
+Pushing and pulling just objects between two git repositories should always be perfectly fine.
+What is more important in git when pushing/pulling is that the branch heads are being updated.
+In LightBTS, there is no concept of a branch like in git.
+Instead, it has the concept of tickets, which are DAGs of messages.
+Tickets are globally uniquely defined by the root message's ID,
+and locally uniquely by a ticket ID (which is just a small number).
+The only issue to consider when syncing two LightBTS instances is the ticket IDs.
+
+Contributors
+------------
+
+Contributors to a project may want to have a local copy of the LightBTS instance,
+so they can read and respond to tickets quickly even if they have a slow or non-existing Internet connection.
+Also, to make it easy for contributors to start using LightBTS for projects that are published via git (or any other VCS),
+it should be possible to add a file to the VCS that lets LightBTS know where to find the upstream instance.
+For example, this could be a file called `.lightbts-remote` that contains a URL, like:
+
+    https://project.example.com/tickets/
+
+This assumes there is a webinterface for LightBTS that allows such a thing.
+A call to `lbts init` should see this file and make a clone of the upstream instance.
+
+Alternatively, since only thing that really matters is the collection of messages (the index can be rebuilt using them),
+one could store the messages in the project's git (or other VCS) repository
+(see `getting-started.mdwn`, section "Integration with git").
+
+Users
+-----
+
+For users of a project that have no intention of working on any tickets,
+the only thing that is necessary is a way to submit tickets.
+This could be done by having the same `.lightbts-remote` file,
+and allowing regular `lbts` commands like `create` and `reply` work directly via an API on the remote instance.
+Apart from queries (`list`, `search`, `show`) that need some sophistication of this API,
+most commands are just composing a message that needs to be indexed, so the composing can be done locally, and the message
+can then be sent using a simple HTTP POST or just by regular email.
+
+Email interface
+---------------
+
+There are two ways envisioned to report tickets via email.
+The first is to have a dedicated email address for tickets,
+for example `bugs@projects.example.org`.
+Sending a new issue to that email address should result in an immediate reply that a new ticket has been created.
+Any new messages received for a given ticket should result in bounces being sent to all people who replied to that ticket in the past.
+So in effect, each ticket is its own mini mailing list.
+This keeps all persons interested in a ticket up to date.
+
+The other way is to use a public discussion list.
+Here LightBTS should stay much more quiet, and assume any messages received on the list are already bounced to all other list members.
+Also, not everything discussed will need to be a ticket.
+So there should be some way to elevate a mail thread to a ticket.
+Either LightBTS does not store any emails unless they are replies, and an admin must manually let LightBTS index an email that the admin deems the start of a ticket,
+or LightBTS should store all emails, but retroactively index related emails into a ticket once it becomes clear it is a ticket; again that could be because of an admin action, or by a reply to an existing email with the pseudo-header `Status: open`.
+
+Web interface
+-------------
+
+It should be easy to start a web interface for a LightBTS instance.
+Similar to `gitweb.cgi`, there could be a `lbtsweb.cgi` that allows one to quickly set up a web interface using any web server supporting CGI.
+For scalability, a FastCGI interface is desirable, and one could have multiple `lbtsweb.cgi` instances running.
+
+The web interface should provide a REST API, as well as a regular interface for humans.
+
+Access control and authentication
+---------------------------------
+
+LightBTS should have a way to quarantine updates from new users until it has verified their email address.
+Also, the admin might want to prevent regular users from updating certain metadata for tickets,
+such as severity, milestones, tags et cetera.
+
+Scalability
+-----------
+
+The main limit to scalability is how fast the index can be updated.
+The messages themselves are just a bunch of files, easily replicated and passed around.
+Updates are just new messages, they can be queued while waiting to be indexed.
+It is expected that the index should hundreds of updates per second comfortably.
+By the time a project gets to deal with this kind of update rate, one should probably split it into subprojects,
+with one LightBTS instance per subproject.
+
+Disaster recovery
+-----------------
+
+The best way to keep a LightBTS instance safe is to make sure all messages it has indexed are backed up regularly,
+or better yet mirrored on-line.
+It is less important to back up/mirror the index itself, since it should always be possible to recreate it from the messages.
+The best way is probably to snapshot the index (using `sqlite3 .lightbts/index .backup path/to/backup`) at regular times,
+then only messages received after the snapshot need to be reindexed.
