@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	ofstream out("templates.inl");
+	ostream &out = cout;
 
 	out << "// This is an automatically generated file, DO NOT EDIT!\n\n"
 			"static struct {\n"
