@@ -38,4 +38,5 @@ executable('lbts',
 		mimesis,
 		sqlite3,
 	],
+	install: true
 )
