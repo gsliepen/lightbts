@@ -1,0 +1,3 @@
+[submodule "external/mimesis"]
+	path = external/mimesis
+	url = ../mimesis.git
