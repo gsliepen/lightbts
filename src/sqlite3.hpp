@@ -2,12 +2,15 @@
 
 /* LightBTS -- a lightweight issue tracking system
    Copyright © 2017-2018 Guus Sliepen <guus@lightbts.info>
- 
+
    SPDX-License-Identifier: GPL-3.0+
 */
 
 #include <sqlite3.h>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace SQLite3 {
@@ -18,13 +21,13 @@ namespace SQLite3 {
 		error(const std::string &what): std::runtime_error(what), code(SQLITE_ERROR) {}
 	};
 
-	static inline void check(int result) {
-		if (result)
+	inline void check(int result) {
+		if (result != SQLITE_OK)
 			throw error(result);
 	}
 
-	static inline void check(::sqlite3 *db, int result) {
-		if (result)
+	inline void check(::sqlite3 *db, int result) {
+		if (result != SQLITE_OK)
 			throw error(db);
 	}
 
@@ -33,90 +36,107 @@ namespace SQLite3 {
 	 * and a row of results.
 	 */
 	class statement {
-		friend class result;
 		::sqlite3_stmt *stmt = nullptr;
-		int p = 0;
-		int state;
+		int parameter = 0;
+		int state = SQLITE_OK;
+
+		void check_row() const {
+			if (state != SQLITE_ROW)
+				throw error("no row available");
+		}
 
 		public:
 		/* Constructors */
+		statement() = default;
 		statement(const statement &other) = delete;
+		statement &operator=(const statement &other) = delete;
 
-		statement(statement &&other) {
-			stmt = other.stmt;
-			p = other.p;
-			other.stmt = nullptr;
+		statement(statement &&other) noexcept:
+			stmt(std::exchange(other.stmt, nullptr)),
+			parameter(other.parameter),
+			state(other.state) {}
+
+		statement &operator=(statement &&other) noexcept {
+			std::swap(stmt, other.stmt);
+			std::swap(parameter, other.parameter);
+			std::swap(state, other.state);
+			return *this;
 		}
 
-		statement(): stmt(nullptr) {}
-
-		statement(::sqlite3 *db, const std::string &sql) {
-			const char *str = sql.c_str();
-			size_t size = sql.size();
+		statement(::sqlite3 *db, std::string_view sql) {
 			const char *tail;
+			check(db, sqlite3_prepare_v2(db, sql.data(), sql.size(), &stmt, &tail));
 
-			check(db, sqlite3_prepare(db, str, size + 1, &stmt, &tail));
-
-			if (tail != str + size)
+			if (tail != sql.data() + sql.size()) {
+				sqlite3_finalize(stmt);
 				throw error("statement was not fully processed");
+			}
 		}
 
 		/* Destructor */
-		~statement() { if(stmt) sqlite3_finalize(stmt); }
+		~statement() { sqlite3_finalize(stmt); }
 
 		/* Binding arguments */
-		statement &bind(const char *arg) { if (arg) check(sqlite3_bind_text(stmt, ++p, arg, -1, SQLITE_TRANSIENT)); else check(sqlite3_bind_null(stmt, ++p)); return *this;  }
-		statement &bind(const std::string &arg) { check(sqlite3_bind_text(stmt, ++p, arg.data(), arg.size(), SQLITE_TRANSIENT)); return *this;  }
-		statement &bind(int arg) { check(sqlite3_bind_int(stmt, ++p, arg)); return *this;  }
-		statement &bind(int64_t arg) { check(sqlite3_bind_int64(stmt, ++p, arg)); return *this;  }
-		statement &bind(double arg) { check(sqlite3_bind_double(stmt, ++p, arg)); return *this;  }
-		statement &bind(std::nullptr_t arg) { check(sqlite3_bind_null(stmt, ++p)); return *this;  }
+		statement &bind(const char *arg) { return arg ? bind(std::string_view(arg)) : bind(nullptr); }
+		statement &bind(std::string_view arg) { check(sqlite3_bind_text64(stmt, ++parameter, arg.data(), arg.size(), SQLITE_TRANSIENT, SQLITE_UTF8)); return *this; }
+		statement &bind(int arg) { check(sqlite3_bind_int(stmt, ++parameter, arg)); return *this; }
+		statement &bind(std::int64_t arg) { check(sqlite3_bind_int64(stmt, ++parameter, arg)); return *this; }
+		statement &bind(double arg) { check(sqlite3_bind_double(stmt, ++parameter, arg)); return *this; }
+		statement &bind(std::nullptr_t) { check(sqlite3_bind_null(stmt, ++parameter)); return *this; }
 
-		template<typename T, typename... Ts>
-		statement &bind(T arg, Ts... rest) { bind(arg); bind(rest...); return *this;  }
-		statement &bind() { return *this; }
+		template<typename... Ts>
+		statement &bind_all(const Ts &...args) { (bind(args), ...); return *this; }
 
 		/* Step and reset */
-		int step() { return state = sqlite3_step(stmt); }
-		void reset() { check(sqlite3_reset(stmt)); state = 0; }
+		int step() {
+			state = sqlite3_step(stmt);
+			if (state != SQLITE_ROW && state != SQLITE_DONE)
+				throw error(sqlite3_db_handle(stmt));
+			return state;
+		}
+
+		void reset() { check(sqlite3_reset(stmt)); parameter = 0; state = SQLITE_OK; }
+
+		bool has_row() const { return state == SQLITE_ROW; }
 
 		/* Get column values */
-		int column_int(int col) { return sqlite3_column_int(stmt, col); }
-		int64_t column_int64(int col) { return sqlite3_column_int64(stmt, col); }
-		const char *column_c_str(int col) { return (const char *)sqlite3_column_text(stmt, col); }
-		std::string column_string(int col) { auto str = (const char *)sqlite3_column_text(stmt, col); return str ? str : ""; }
-		double column_double(int col) { return sqlite3_column_double(stmt, col); }
-		int column_type(int col) { return sqlite3_column_type(stmt, col); }
-		std::string column_name(int col) { return sqlite3_column_name(stmt, col); }
-		int column_count() { return sqlite3_column_count(stmt); }
+		int column_int(int col) const { check_row(); return sqlite3_column_int(stmt, col); }
+		std::int64_t column_int64(int col) const { check_row(); return sqlite3_column_int64(stmt, col); }
+		const char *column_c_str(int col) const { check_row(); return reinterpret_cast<const char *>(sqlite3_column_text(stmt, col)); }
+		std::string column_string(int col) const { auto str = column_c_str(col); return str ? str : ""; }
+		double column_double(int col) const { check_row(); return sqlite3_column_double(stmt, col); }
+		int column_type(int col) const { check_row(); return sqlite3_column_type(stmt, col); }
+		std::string column_name(int col) const { return sqlite3_column_name(stmt, col); }
+		int column_count() const { return sqlite3_column_count(stmt); }
 	};
 
 	class row {
-		statement *stmt;
+		const statement *stmt;
 
 		public:
-		row(statement *stmt): stmt(stmt) {}
+		row(const statement *stmt): stmt(stmt) {}
 
-		int get_int(int col) { return stmt->column_int(col); }
-		int64_t get_int64(int col) { return stmt->column_int64(col); }
-		const char *get_c_str(int col) { return stmt->column_c_str(col); }
-		std::string get_string(int col) { return stmt->column_string(col); }
-		double get_double(int col) { return stmt->column_double(col); }
-		int get_type(int col) { return stmt->column_type(col); }
-		std::string get_name(int col) { return stmt->column_name(col); }
-		int count() { return stmt->column_count(); }
+		int get_int(int col) const { return stmt->column_int(col); }
+		std::int64_t get_int64(int col) const { return stmt->column_int64(col); }
+		const char *get_c_str(int col) const { return stmt->column_c_str(col); }
+		std::string get_string(int col) const { return stmt->column_string(col); }
+		double get_double(int col) const { return stmt->column_double(col); }
+		int get_type(int col) const { return stmt->column_type(col); }
+		std::string get_name(int col) const { return stmt->column_name(col); }
+		int count() const { return stmt->column_count(); }
 	};
 
 	class row_iterator {
-		statement *stmt;
+		statement *stmt = nullptr;
 
 		public:
-		row_iterator(): stmt(nullptr) {}
+		row_iterator() = default;
 		row_iterator(statement &stmt): stmt(&stmt) {}
 
 		row_iterator &operator++() { if (stmt->step() != SQLITE_ROW) stmt = nullptr; return *this; }
-		bool operator!=(row_iterator &other) { return stmt != other.stmt; }
-		row operator*() { return row(stmt); }
+		bool operator==(const row_iterator &other) const { return stmt == other.stmt; }
+		bool operator!=(const row_iterator &other) const { return stmt != other.stmt; }
+		row operator*() const { return row(stmt); }
 	};
 
 	/* This class is basically a statement AFTER it has executed. */
@@ -125,103 +145,92 @@ namespace SQLite3 {
 
 		public:
 		template<typename... Ts>
-		result(::sqlite3 *db, const std::string &sql, Ts... args): stmt(db, sql) {
-			stmt.bind(args...);
-			auto status = stmt.step();
-			if (status != SQLITE_DONE && status != SQLITE_ROW) {
-				sqlite3_finalize(stmt.stmt);
-				stmt.stmt = nullptr;
-				throw error(db);
-			}
+		result(::sqlite3 *db, std::string_view sql, const Ts &...args): stmt(db, sql) {
+			stmt.bind_all(args...);
+			stmt.step();
 		}
 
-		result(result &other) = delete;
-		result(result &&other): stmt(std::move(other.stmt)) {}
+		explicit operator bool() const { return stmt.has_row(); }
 
-		operator bool() { return stmt.state == SQLITE_ROW; }
-
-		row_iterator begin() { if (stmt.state == SQLITE_ROW) return row_iterator(stmt); else return row_iterator(); }
+		row_iterator begin() { return stmt.has_row() ? row_iterator(stmt) : row_iterator(); }
 		row_iterator end() { return row_iterator(); }
 
 		/* Get current column values */
-		int next() { return stmt.step() == SQLITE_ROW; }
-		int get_int(int col) { return stmt.column_int(col); }
-		int64_t get_int64(int col) { return stmt.column_int64(col); }
-		const char *get_c_str(int col) { return stmt.column_c_str(col); }
-		std::string get_string(int col) { return stmt.column_string(col); }
-		double get_double(int col) { return stmt.column_double(col); }
-		int get_type(int col) { return stmt.column_type(col); }
-		std::string get_name(int col) { return stmt.column_name(col); }
-		int column_count() { return stmt.column_count(); }
+		bool next() { return stmt.step() == SQLITE_ROW; }
+		int get_int(int col) const { return stmt.column_int(col); }
+		std::int64_t get_int64(int col) const { return stmt.column_int64(col); }
+		const char *get_c_str(int col) const { return stmt.column_c_str(col); }
+		std::string get_string(int col) const { return stmt.column_string(col); }
+		double get_double(int col) const { return stmt.column_double(col); }
+		int get_type(int col) const { return stmt.column_type(col); }
+		std::string get_name(int col) const { return stmt.column_name(col); }
+		int column_count() const { return stmt.column_count(); }
 	};
 
+	/* Rolls back automatically unless commit() succeeded. */
 	class transaction {
 		::sqlite3 *db;
 		bool finished = false;
 
 		public:
-		transaction(transaction &other) = delete;
-
-		transaction(transaction &&other) {
-			db = other.db;
-			other.finished = true;
-		}
+		transaction(const transaction &other) = delete;
+		transaction &operator=(const transaction &other) = delete;
 
 		transaction(::sqlite3 *db): db(db) {
-			statement(db, "BEGIN").step();
+			check(db, sqlite3_exec(db, "BEGIN", nullptr, nullptr, nullptr));
 		}
 
-		~transaction() {
-			if (!finished)
-				abort();
-		}
+		~transaction() { abort(); }
 
-		bool commit() {
+		void commit() {
 			if (finished)
 				throw error("Trying to commit to an already finished transaction");
-			if (statement(db, "COMMIT").step() == SQLITE_DONE)
-				finished = true;
-			return finished;
+			check(db, sqlite3_exec(db, "COMMIT", nullptr, nullptr, nullptr));
+			finished = true;
 		}
 
-		void abort() {
+		void abort() noexcept {
 			if (!finished) {
-				statement(db, "ROLLBACK").step();
+				sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);
 				finished = true;
 			}
 		}
 	};
 
 	class database {
-		::sqlite3 *db;
+		::sqlite3 *db = nullptr;
 
 		public:
-		database(): db(nullptr) {}
-
-		void open(const std::string &filename) {
-			if (sqlite3_open(filename.c_str(), &db))
-				throw error("could not open database");
-		}
+		database() = default;
+		database(const database &other) = delete;
+		database &operator=(const database &other) = delete;
 
 		database(const std::string &filename) {
 			open(filename);
 		}
 
+		~database() { close(); }
+
+		void open(const std::string &filename) {
+			close();
+			if (sqlite3_open(filename.c_str(), &db) != SQLITE_OK) {
+				error failure(db ? error(db) : error(SQLITE_NOMEM));
+				close();
+				throw failure;
+			}
+		}
+
 		void close() {
-			sqlite3_close(db);
+			sqlite3_close_v2(db);
 			db = nullptr;
 		}
 
-		~database() {
-			close();
-		}
-
-		statement prepare(const std::string &sql) {
+		statement prepare(std::string_view sql) {
 			return statement(db, sql);
 		}
 
 		template<typename... Ts>
-		result execute(const std::string &sql, Ts... args) {
+		result execute(std::string_view sql, const Ts &...args) {
 			return result(db, sql, args...);
 		}
 
@@ -229,20 +238,8 @@ namespace SQLite3 {
 			return transaction(db);
 		}
 
-		int64_t last_insert_rowid() {
-			return sqlite3_last_insert_rowid(db);
-		}
-
-		int changes() {
-			return sqlite3_changes(db);
-		}
-
-		int total_changes() {
-			return sqlite3_total_changes(db);
-		}
+		std::int64_t last_insert_rowid() const { return sqlite3_last_insert_rowid(db); }
+		int changes() const { return sqlite3_changes(db); }
+		int total_changes() const { return sqlite3_total_changes(db); }
 	};
-
-	static inline database open(const std::string &filename) {
-		return database(filename);
-	}
 }

@@ -179,8 +179,7 @@ void Instance::init_index(const fs::path &filename) {
 		db.execute("CREATE INDEX versions_bug_index ON versions (bug)");
 		db.execute("CREATE INDEX versions_version_index ON versions (version)");
 		db.execute("PRAGMA user_version=4");
-		if (!tx.commit())
-			throw runtime_error("Failed to create index");
+		tx.commit();
 
 		version = 4;
 	}
@@ -351,11 +350,16 @@ vector<Ticket> Instance::list(const vector<string> &args, size_t len) {
 
 Ticket Instance::get_ticket_from_ticket_id(const string &id) {
 	auto row = db.execute("SELECT id, title, status, severity FROM bugs WHERE id=?", id);
+	if (!row)
+		throw runtime_error(format("No ticket with ID {}", id));
 	return Ticket(row.get_string(0), row.get_string(1), static_cast<Status>(row.get_int(2)), static_cast<Severity>(row.get_int(3)));
 }
 
 Ticket Instance::get_ticket_from_message_id(const string &id) {
-	return get_ticket_from_ticket_id(db.execute("SELECT bug FROM messages WHERE msgid=?", id).get_string(0));
+	auto row = db.execute("SELECT bug FROM messages WHERE msgid=?", unquote(id));
+	if (!row)
+		throw runtime_error(format("No message with ID {}", id));
+	return get_ticket_from_ticket_id(row.get_string(0));
 }
 
 Ticket Instance::get_ticket(const string &id) {
@@ -431,7 +435,8 @@ vector<string> Instance::get_message_ids(const Ticket &ticket) {
 }
 
 string Instance::get_first_message_id(const Ticket &ticket) {
-	return db.execute("SELECT msgid FROM messages WHERE bug=? LIMIT 1", stol(ticket.id)).get_string(0);
+	auto row = db.execute("SELECT msgid FROM messages WHERE bug=? ORDER BY rowid LIMIT 1", stol(ticket.id));
+	return row ? row.get_string(0) : string{};
 }
 
 bool Instance::run_hook(const string &name, const fs::path &path, const string &id) {
@@ -610,8 +615,8 @@ void Instance::parse_metadata(const string &id, const Message &msg) {
 		parse_versions(id, version, 0);
 
 	for (auto &&version: versions) {
-		int status = db.execute("SELECT status FROM bugs WHERE id=?", id);
-		parse_versions(id, version, status);
+		int ticket_status = db.execute("SELECT status FROM bugs WHERE id=?", id).get_int(0);
+		parse_versions(id, version, ticket_status);
 	}
 
 	for (auto &&version: found)
@@ -697,8 +702,7 @@ bool Instance::import(const Message &in) {
 	// Handle metadata
 	parse_metadata(id, msg);
 
-	if(!tx.commit())
-		throw runtime_error("Failed to commit transaction");
+	tx.commit();
 
 	//Run the post-index hook
 	run_hook("post-index", filename, id);
