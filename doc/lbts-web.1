@@ -1,0 +1,109 @@
+.Dd 2026-11-07
+.Dt LBTS-WEB 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts-web
+.Nd read-only web interface for LightBTS
+.Sh SYNOPSIS
+.Nm
+.Op Fl d Ar path
+.Op Fl l Ar host : Ns Ar port
+.Op Fl -fastcgi Ns Op = Ns Ar socket
+.Sh DESCRIPTION
+.Nm
+serves a read-only web interface for a LightBTS instance.
+It shows the list of tickets, which can be filtered by status, severity and tag,
+the details and messages of each ticket, and the raw messages.
+.Pp
+The interface works without JavaScript.
+If JavaScript is enabled, htmx is used to update the ticket list without reloading the page.
+.Pp
+.Nm
+can run in three ways:
+.Bl -tag -width indent
+.It Stand-alone
+By default,
+.Nm
+serves HTTP itself on the address given with
+.Fl l .
+There is no TLS support, so use a reverse proxy if the interface should be reachable from other hosts.
+.It FastCGI
+If standard input is a FastCGI socket, which is the case when
+.Nm
+is started by a web server or by
+.Xr spawn-fcgi 1 ,
+or if the
+.Fl -fastcgi
+option is given, FastCGI requests are served.
+.It CGI
+If the
+.Ev GATEWAY_INTERFACE
+environment variable is set,
+.Nm
+handles a single CGI request and exits.
+.El
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl d , Fl -data-dir Ar path
+Use the LightBTS instance in the given directory or one of its parents.
+.It Fl l , Fl -listen Ar host : Ns Ar port
+Serve HTTP on the given address.
+The default is 127.0.0.1:8080.
+If the port is 0, a free port is chosen.
+The address actually used is printed on standard error.
+.It Fl -fastcgi Ns Op = Ns Ar socket
+Serve FastCGI requests on standard input, or on the given socket.
+The socket can be the path of a UNIX socket, or :port to listen on a TCP port.
+.It Fl h , Fl -help
+Show a help message.
+.It Fl -version
+Show version information.
+.El
+.Sh PAGES
+.Bl -tag -width indent
+.It /
+The list of tickets.
+The query parameters
+.Va status
+(open, closed or all),
+.Va severity
+and
+.Va tag
+filter the list.
+.It /ticket/ Ns Ar number
+The details and messages of a ticket.
+.It /message?id= Ns Ar message-id
+A raw message.
+.It /static/
+The style sheet and htmx.
+.El
+.Sh CONFIGURATION
+.Bl -tag -width indent
+.It Va web.root
+The URL of the ticket list, used to create links.
+By default, the script name passed by the web server is used, or / when running stand-alone.
+.It Va web.static-root
+The URL of the static files.
+By default, this is
+.Pa static/
+below
+.Va web.root .
+.El
+.Pp
+The HTML templates in
+.Pa .lightbts/templates
+can be changed to customize the pages.
+If a template file does not exist, a built-in one is used.
+.Sh ENVIRONMENT VARIABLES
+.Bl -tag -width indent
+.It Ev LIGHTBTS_DIR
+Set the path to the LightBTS data, if
+.Fl d
+is not given.
+.El
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lightbts 7 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

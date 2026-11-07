@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<link rel="stylesheet" href="{{static_root}}lightbts.css">
+{{#htmx}}
+<meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+<script defer src="{{static_root}}htmx.min.js"></script>
+{{/htmx}}
+</head>
+<body hx-boost="true">
+<header>
+	<h1><a href="{{root}}">{{project}}</a></h1>
+</header>
+<main>
+{{{content}}}
+</main>
+<footer>
+	<p>LightBTS {{version}}</p>
+</footer>
+</body>
+</html>

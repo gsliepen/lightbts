@@ -1,0 +1,13 @@
+{{#tickets}}
+		<tr class="status-{{status}} severity-{{severity}}">
+			<td class="id"><a href="{{root}}ticket/{{id}}">{{id}}</a></td>
+			<td class="status">{{status}}</td>
+			<td class="severity">{{severity}}</td>
+			<td class="title"><a href="{{root}}ticket/{{id}}">{{title}}</a>{{#tags}} <span class="tag">{{.}}</span>{{/tags}}</td>
+		</tr>
+{{/tickets}}
+{{^tickets}}
+		<tr>
+			<td colspan="4">No tickets found.</td>
+		</tr>
+{{/tickets}}

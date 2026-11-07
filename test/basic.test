@@ -28,8 +28,9 @@ test -x .lightbts/messages
 test -x .lightbts/templates
 test -w .lightbts/templates/new.txt
 test -w .lightbts/templates/reply.txt
-test -w .lightbts/templates/main.html
-test -w .lightbts/templates/bug.html
+test -w .lightbts/templates/layout.html
+test -w .lightbts/templates/list.html
+test -w .lightbts/templates/ticket.html
 test -w .lightbts/templates/lightbts.css
 
 # We should get an empty list of bugs

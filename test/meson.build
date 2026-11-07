@@ -10,6 +10,11 @@ unit_tests = {
 	'config': core,
 }
 
+if build_web
+	unit_tests += {'web-handler': web}
+	test('web', files('web.test'), depends: lbts_web, workdir: meson.project_build_root())
+endif
+
 foreach name, dependency: unit_tests
 	test(name + '-unit', executable(name.underscorify() + '_test', name.underscorify() + '_test.cpp', dependencies: dependency))
 endforeach

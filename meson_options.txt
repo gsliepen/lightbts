@@ -1,0 +1,2 @@
+option('web', type: 'feature', value: 'auto', description: 'Build the lbts-web web server (requires cpp-httplib, libfcgi and kainjow-mustache)')
+option('htmx', type: 'string', value: '/usr/share/javascript/htmx/htmx.min.js', description: 'Path to htmx.min.js to embed in lbts-web, or an empty string to build without htmx')

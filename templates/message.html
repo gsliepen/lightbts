@@ -1,0 +1,18 @@
+<details class="message" id="message-{{index}}"{{#open}} open{{/open}}>
+	<summary><span class="from">{{from}}</span> <span class="date">{{date}}</span></summary>
+	<dl class="headers">
+		<dt>From</dt><dd>{{from}}</dd>
+		<dt>To</dt><dd>{{to}}</dd>
+		<dt>Subject</dt><dd>{{subject}}</dd>
+		<dt>Date</dt><dd>{{date}}</dd>
+		<dt>Message-ID</dt><dd><a href="{{root}}message?id={{message_id_url}}" hx-boost="false">{{message_id}}</a></dd>
+	</dl>
+	<pre class="body">{{body}}</pre>
+{{#has_attachments}}
+	<ul class="attachments">
+	{{#attachments}}
+		<li>{{name}} ({{type}})</li>
+	{{/attachments}}
+	</ul>
+{{/has_attachments}}
+</details>

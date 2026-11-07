@@ -24,3 +24,7 @@ install_man(
 	'lbts-hooks.5',
 	'lightbts.7',
 )
+
+if build_web
+	install_man('lbts-web.1')
+endif

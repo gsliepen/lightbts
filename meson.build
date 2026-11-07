@@ -25,6 +25,13 @@ if not mimesis.found()
 	)
 endif
 
+# Dependencies of the web server
+web_option = get_option('web')
+httplib = dependency('cpp-httplib', required: web_option)
+fastcgi = dependency('fcgi', required: web_option)
+has_mustache = cpp.has_header('kainjow/mustache.hpp', required: web_option)
+build_web = httplib.found() and fastcgi.found() and has_mustache
+
 subdir('src')
 subdir('test')
 subdir('doc')

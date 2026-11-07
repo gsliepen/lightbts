@@ -1,0 +1,35 @@
+<form class="filter" action="{{root}}" method="get" hx-get="{{root}}" hx-target="#ticket-rows" hx-trigger="input delay:300ms, submit" hx-push-url="true">
+	<label>Status
+		<select name="status">
+		{{#statuses}}
+			<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>
+		{{/statuses}}
+		</select>
+	</label>
+	<label>Severity
+		<select name="severity">
+		{{#severities}}
+			<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>
+		{{/severities}}
+		</select>
+	</label>
+	<label>Tag
+		<input type="search" name="tag" value="{{tag}}" list="known-tags">
+	</label>
+	<datalist id="known-tags">
+	{{#known_tags}}
+		<option value="{{.}}">
+	{{/known_tags}}
+	</datalist>
+	<button type="submit">Filter</button>
+</form>
+<table class="tickets">
+	<thead>
+		<tr>
+			<th class="id">#</th><th class="status">Status</th><th class="severity">Severity</th><th class="title">Title</th>
+		</tr>
+	</thead>
+	<tbody id="ticket-rows">
+{{> ticket-rows.html}}
+	</tbody>
+</table>

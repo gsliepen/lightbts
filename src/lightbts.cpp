@@ -392,6 +392,13 @@ std::set<std::string> Instance::get_tags(const Ticket &ticket) {
 	return tags;
 }
 
+std::set<std::string> Instance::get_all_tags() {
+	std::set<std::string> tags;
+	for (auto &&row: db.execute("SELECT DISTINCT tag FROM tags"))
+		tags.insert(row.get_string(0));
+	return tags;
+}
+
 std::string Instance::get_milestone(const Ticket &ticket) {
 	return db.execute("SELECT milestone FROM bugs WHERE id = ?", ticket.id).get_string(0);
 }
@@ -411,6 +418,10 @@ std::string Instance::get_first_message_id(const Ticket &ticket) {
 fs::path Instance::message_path(std::string_view message_id) const {
 	auto hash = hash_message_id(message_id);
 	return maildir / hash.substr(0, 2) / hash.substr(2);
+}
+
+bool Instance::has_message(std::string_view message_id) {
+	return static_cast<bool>(db.execute("SELECT 1 FROM messages WHERE msgid = ?", unquote_message_id(message_id)));
 }
 
 Message Instance::get_message(std::string_view message_id) const {

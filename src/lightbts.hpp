@@ -163,12 +163,15 @@ class Instance {
 	TicketDetails get_details(const Ticket &ticket);
 
 	std::set<std::string> get_tags(const Ticket &ticket);
+	/// Gets all tags that are used by any ticket.
+	std::set<std::string> get_all_tags();
 	std::string get_milestone(const Ticket &ticket);
 	/// Gets the Message-IDs of all messages of a ticket, in the order they were imported.
 	std::vector<std::string> get_message_ids(const Ticket &ticket);
 	/// \return The Message-ID of the first message of the ticket, or an empty string if there are none.
 	std::string get_first_message_id(const Ticket &ticket);
 
+	bool has_message(std::string_view message_id);
 	Message get_message(std::string_view message_id) const;
 
 	ImportResult import(const Message &message);

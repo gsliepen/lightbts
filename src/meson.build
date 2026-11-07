@@ -9,11 +9,14 @@ version_header = configure_file(
 gentemplates = executable('gentemplates', 'gentemplates.cpp', native: true)
 
 template_files = files(
-	'../templates/bug.html',
+	'../templates/layout.html',
 	'../templates/lightbts.css',
-	'../templates/main.html',
+	'../templates/list.html',
+	'../templates/message.html',
 	'../templates/new.txt',
 	'../templates/reply.txt',
+	'../templates/ticket-rows.html',
+	'../templates/ticket.html',
 )
 
 templates = custom_target('gen-templates',
@@ -52,3 +55,7 @@ lbts = executable('lbts',
 	dependencies: core,
 	install: true,
 )
+
+if build_web
+	subdir('web')
+endif

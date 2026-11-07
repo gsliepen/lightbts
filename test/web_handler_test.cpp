@@ -1,0 +1,142 @@
+/* LightBTS -- a lightweight issue tracking system
+   Copyright © 2026 Guus Sliepen <guus@lightbts.info>
+
+   SPDX-License-Identifier: GPL-3.0+
+*/
+
+#include <filesystem>
+#include <unistd.h>
+
+#include "check.hpp"
+#include "handler.hpp"
+#include "lightbts.hpp"
+
+namespace fs = std::filesystem;
+using namespace LightBTS;
+using namespace LightBTS::Web;
+
+static Message make_message(std::string_view subject, std::string_view message_id, std::string_view text, std::string_view in_reply_to = {}) {
+	Message message;
+	message.set_crlf(false);
+	message.set_header("From", "Test <test@example.org>");
+	message.set_header("Subject", subject);
+	message.set_header("Message-ID", message_id);
+	if (!in_reply_to.empty())
+		message.set_header("In-Reply-To", in_reply_to);
+	message.set_plain(text);
+	return message;
+}
+
+static Response get(const Handler &handler, std::string path, std::multimap<std::string, std::string> query = {}, std::map<std::string, std::string> headers = {}) {
+	return handler.handle({.path = std::move(path), .query = std::move(query), .headers = std::move(headers)});
+}
+
+static std::string header(const Response &response, std::string_view name) {
+	for (auto &[key, value]: response.headers)
+		if (key == name)
+			return value;
+	return {};
+}
+
+int main() {
+	auto dir = fs::temp_directory_path() / ("lightbts-web-test-" + std::to_string(getpid()));
+	fs::create_directories(dir);
+
+	{
+		Instance bts(dir, Instance::Mode::create);
+		bts.import(make_message("First <script>alert(1)</script>", "<1@test>", "Tags: foo\nSeverity: important\n\nThe first bug.\n"));
+		bts.import(make_message("Second bug", "<2@test>", "Status: closed\n\nThe second bug.\n"));
+		bts.import(make_message("Re: First", "<3@test>", "Blocks: 2\n\nA reply.\n", "<1@test>"));
+	}
+
+	Handler handler(dir);
+
+	// The ticket list shows open tickets by default, and escapes HTML
+	auto list = get(handler, "/");
+	CHECK(list.status == 200);
+	CHECK(list.body.contains("<!DOCTYPE html>"));
+	CHECK(list.body.contains("First &lt;script&gt;"));
+	CHECK(!list.body.contains("<script>alert"));
+	CHECK(!list.body.contains("Second bug"));
+	CHECK(header(list, "Vary") == "HX-Target");
+	CHECK(header(list, "Content-Security-Policy").contains("script-src 'self'"));
+	CHECK(header(list, "X-Content-Type-Options") == "nosniff");
+
+	// Filters
+	CHECK(get(handler, "/", {{"status", "closed"}}).body.contains("Second bug"));
+	CHECK(!get(handler, "/", {{"status", "closed"}}).body.contains("First &lt;"));
+	CHECK(get(handler, "/", {{"status", "all"}, {"tag", "foo"}}).body.contains("First &lt;"));
+	CHECK(!get(handler, "/", {{"status", "all"}, {"tag", "foo"}}).body.contains("Second bug"));
+	CHECK(get(handler, "/", {{"severity", "important"}}).body.contains("First &lt;"));
+	CHECK(get(handler, "/", {{"status", "bogus"}}).status == 400);
+	CHECK(get(handler, "/", {{"severity", "bogus"}}).status == 400);
+
+	// htmx only gets the table rows
+	auto rows = get(handler, "/", {{"status", "all"}}, {{"hx-request", "true"}, {"hx-target", "ticket-rows"}});
+	CHECK(rows.status == 200);
+	CHECK(!rows.body.contains("<html"));
+	CHECK(rows.body.contains("<tr class=\"status-closed"));
+
+	// Boosted navigation gets full pages
+	CHECK(get(handler, "/", {}, {{"hx-request", "true"}, {"hx-boosted", "true"}}).body.contains("<html"));
+
+	// Ticket pages
+	auto ticket = get(handler, "/ticket/1");
+	CHECK(ticket.status == 200);
+	CHECK(ticket.body.contains("The first bug."));
+	CHECK(ticket.body.contains("A reply."));
+	CHECK(ticket.body.contains("Blocks"));
+	CHECK(ticket.body.contains("href=\"/ticket/2\""));
+	CHECK(ticket.body.contains("message?id=1%40test"));
+	CHECK(get(handler, "/ticket/2").body.contains("Blocked by"));
+	CHECK(get(handler, "/ticket/99").status == 404);
+	CHECK(get(handler, "/ticket/abc").status == 404);
+	CHECK(get(handler, "/ticket/").status == 404);
+
+	// Raw messages
+	auto message = get(handler, "/message", {{"id", "1@test"}});
+	CHECK(message.status == 200);
+	CHECK(message.content_type.starts_with("text/plain"));
+	CHECK(message.body.contains("Message-ID: <1@test>"));
+	CHECK(get(handler, "/message", {{"id", "<2@test>"}}).status == 200);
+	CHECK(get(handler, "/message", {{"id", "unknown@test"}}).status == 404);
+	CHECK(get(handler, "/message").status == 400);
+
+	// Static files and unknown pages
+	CHECK(get(handler, "/static/lightbts.css").content_type.starts_with("text/css"));
+	CHECK(get(handler, "/nonexistent").status == 404);
+
+	// Only GET and HEAD are allowed
+	auto post = handler.handle({.method = "POST"});
+	CHECK(post.status == 405);
+	CHECK(header(post, "Allow") == "GET, HEAD");
+	CHECK(handler.handle({.method = "HEAD"}).status == 200);
+
+	// URLs are relative to the script name or the configured root
+	CHECK(handler.handle({.script_name = "/cgi-bin/lbts"}).body.contains("href=\"/cgi-bin/lbts/ticket/1\""));
+	{
+		Instance bts(dir);
+		bts.set_config("web", "root", "/bugs");
+		bts.set_config("web", "static-root", "https://static.example.org/lbts");
+		bts.save_config();
+	}
+	auto configured = get(handler, "/");
+	CHECK(configured.body.contains("href=\"/bugs/ticket/1\""));
+	CHECK(configured.body.contains("href=\"https://static.example.org/lbts/lightbts.css\""));
+	CHECK(header(configured, "Content-Security-Policy").contains("style-src 'self' https://static.example.org;"));
+
+	// A missing instance results in an error, not a crash
+	CHECK(Handler(fs::temp_directory_path() / ("lightbts-missing-" + std::to_string(getpid()))).handle({}).status == 500);
+
+	// Query string parsing
+	auto query = parse_query("a=1&b=two+words&c=%41%2f&a=2&empty&bad=%zz");
+	CHECK(query.count("a") == 2);
+	CHECK(query.find("b")->second == "two words");
+	CHECK(query.find("c")->second == "A/");
+	CHECK(query.find("empty")->second.empty());
+	CHECK(query.find("bad")->second == "%zz");
+	CHECK(url_encode("a b@c/<d>") == "a%20b%40c%2F%3Cd%3E");
+
+	fs::remove_all(dir);
+	return check_result();
+}

@@ -1,0 +1,40 @@
+<h2><span class="id">#{{id}}</span> {{title}}</h2>
+<dl class="details">
+	<dt>Status</dt><dd class="status-{{status}}">{{status}}</dd>
+	<dt>Severity</dt><dd class="severity-{{severity}}">{{severity}}</dd>
+{{#submitter}}
+	<dt>Reported by</dt><dd>{{submitter}}</dd>
+{{/submitter}}
+{{#date}}
+	<dt>Reported on</dt><dd>{{date}}</dd>
+{{/date}}
+{{#owner}}
+	<dt>Owner</dt><dd>{{owner}}</dd>
+{{/owner}}
+{{#milestone}}
+	<dt>Milestone</dt><dd>{{milestone}}</dd>
+{{/milestone}}
+{{#progress}}
+	<dt>Progress</dt><dd><progress max="100" value="{{progress}}">{{progress}}%</progress> {{progress}}%</dd>
+{{/progress}}
+{{#deadline}}
+	<dt>Deadline</dt><dd>{{deadline}}</dd>
+{{/deadline}}
+{{#has_tags}}
+	<dt>Tags</dt><dd>{{#tags}}<a class="tag" href="{{root}}?status=all&amp;tag={{query}}">{{name}}</a> {{/tags}}</dd>
+{{/has_tags}}
+{{#found}}
+	<dt>Found in</dt><dd>{{found}}</dd>
+{{/found}}
+{{#fixed}}
+	<dt>Fixed in</dt><dd>{{fixed}}</dd>
+{{/fixed}}
+{{#links}}
+	<dt>{{relation}}</dt><dd><a href="{{root}}ticket/{{id}}">#{{id}}</a> {{title}}</dd>
+{{/links}}
+</dl>
+<section class="messages">
+{{#messages}}
+{{> message.html}}
+{{/messages}}
+</section>

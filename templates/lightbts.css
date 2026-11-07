@@ -1,51 +1,167 @@
-header {
-	border-bottom: 1px solid black;
+:root {
+	color-scheme: light dark;
+	--background: #fdfdfd;
+	--foreground: #1d1d1f;
+	--muted: #6b6b70;
+	--border: #d8d8dc;
+	--accent: #2459a8;
+	--stripe: #f2f3f5;
+	--tag: #e4ecf7;
+	--closed: #6b6b70;
+	--severe: #b3261e;
 }
 
-table {
-	border-collapse: collapse;
+@media (prefers-color-scheme: dark) {
+	:root {
+		--background: #17181a;
+		--foreground: #e6e6e8;
+		--muted: #9a9aa0;
+		--border: #3a3b3f;
+		--accent: #8ab4f8;
+		--stripe: #1f2023;
+		--tag: #263248;
+		--closed: #9a9aa0;
+		--severe: #f28b82;
+	}
 }
 
-table, th, td {
-	border: 1px solid #548;
+body {
+	margin: 0 auto;
+	max-width: 70rem;
+	padding: 0 1rem;
+	font-family: system-ui, sans-serif;
+	line-height: 1.45;
+	background: var(--background);
+	color: var(--foreground);
 }
 
-th {
-	text-align: left;
+a {
+	color: var(--accent);
 }
 
-table#buglist {
-	width: 100%;
-}
-
-#buglist th {
-	background-color: #548;
-	color: white;
-}
-
-#buglist col.id { width: 6em; text-align: right; }
-#buglist col.status { width: 6em; }
-#buglist col.severity { width: 10em; }
-
-#buglist tr:hover {
-	background-color: #caf;
-}
-
-#buglist td:first-child {
-	text-align: right;
-}
-
-.message {
-	border-top: 1px solid black;
-}
-
-.header {
-	background: #caf;
+header h1 a {
+	color: inherit;
+	text-decoration: none;
 }
 
 footer {
-	margin-top: 1em;
-	border-top: 1px solid black;
-	font-style: italic;
-	font-size: small;
+	margin-top: 2rem;
+	border-top: 1px solid var(--border);
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+form.filter {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1rem;
+	align-items: end;
+	margin-bottom: 1rem;
+}
+
+form.filter label {
+	display: flex;
+	flex-direction: column;
+	font-size: 0.85rem;
+	color: var(--muted);
+}
+
+table.tickets {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+table.tickets th {
+	text-align: left;
+	border-bottom: 2px solid var(--border);
+}
+
+table.tickets td, table.tickets th {
+	padding: 0.3rem 0.5rem;
+}
+
+table.tickets tbody tr:nth-child(even) {
+	background: var(--stripe);
+}
+
+table.tickets .id {
+	width: 4rem;
+	text-align: right;
+}
+
+table.tickets .status, table.tickets .severity {
+	width: 6rem;
+}
+
+.status-closed, tr.status-closed a {
+	color: var(--closed);
+}
+
+.severity-serious, .severity-critical, .severity-grave {
+	color: var(--severe);
+	font-weight: bold;
+}
+
+.tag {
+	display: inline-block;
+	padding: 0 0.4rem;
+	border-radius: 0.6rem;
+	background: var(--tag);
+	font-size: 0.8rem;
+	text-decoration: none;
+}
+
+h2 .id {
+	color: var(--muted);
+}
+
+dl.details {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 0.2rem 1rem;
+}
+
+dl.details dt {
+	color: var(--muted);
+}
+
+dl.details dd {
+	margin: 0;
+}
+
+details.message {
+	border: 1px solid var(--border);
+	border-radius: 0.3rem;
+	margin: 1rem 0;
+	padding: 0.5rem 1rem;
+}
+
+details.message summary {
+	cursor: pointer;
+}
+
+details.message .date {
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+dl.headers {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 0 1rem;
+	font-size: 0.85rem;
+}
+
+dl.headers dt {
+	color: var(--muted);
+}
+
+dl.headers dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+pre.body {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
