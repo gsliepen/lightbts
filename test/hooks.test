@@ -1,0 +1,49 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+$lbts init
+
+# A pre-index hook that rejects messages whose subject contains "spam"
+cat > .lightbts/hooks/pre-index << 'HOOK'
+#!/bin/sh
+! grep -qi '^Subject:.*spam' "$MESSAGE_FILE"
+HOOK
+
+# A post-index hook that records its environment
+cat > .lightbts/hooks/post-index << 'HOOK'
+#!/bin/sh
+echo "$BUG_ID $LIGHTBTS_DIR $(pwd)" >> post-index.log
+HOOK
+
+chmod +x .lightbts/hooks/pre-index .lightbts/hooks/post-index
+
+echo "Hello." | $lbts create First bug
+test "$(cat .lightbts/post-index.log)" = "1 $PWD $PWD/.lightbts"
+
+# Rejected messages must not be imported, and the command must fail
+! $lbts create -m "Buy now" Cheap spam
+test "$($lbts list | wc -l)" = "1"
+test "$(find .lightbts/messages -type f | wc -l)" = "1"
+
+# Hooks must not change the working directory of lbts itself
+mkdir sub
+cat > sub/msg1 << 'MSG'
+From: test suite
+To: LightBTS
+Subject: Second bug
+Message-ID: <hook1@test>
+
+Second.
+MSG
+sed -e 's/Second/Third/' -e 's/hook1/hook2/' sub/msg1 > sub/msg2
+(cd sub && $lbts import msg1 msg2)
+test "$($lbts list | wc -l)" = "3"
+
+# --no-hooks disables hooks
+$lbts --no-hooks create -m "Not spam" Spam allowed
+test "$($lbts list | wc -l)" = "4"
+test "$(wc -l < .lightbts/post-index.log)" = "3"

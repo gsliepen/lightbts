@@ -57,3 +57,13 @@ cat >>.lightbts/config << EOF
 EOF
 test "$($lbts config quux.test)" = "1 2  3"
 test -z "$($lbts config quux.#comment)"
+
+# Hand-edited options without spaces around the equals sign
+cat >>.lightbts/config << EOF
+[hand]
+key=value
+EOF
+test "$($lbts config hand.key)" = "value"
+
+# Options that don't exist
+! $lbts config hand.missing

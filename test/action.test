@@ -14,9 +14,14 @@ $lbts init
 # Create a simple bug
 echo "This is the first bug." | $lbts create First bug
 
+# Unknown tickets give an error message, not a crash
+! $lbts close 2 2> error
+grep -q "No ticket with number 2" error
+! $lbts close abc 2> error
+grep -q "Invalid ticket number" error
+
 # Close
 ! $lbts close
-! $lbts close 2
 $lbts close 1
 test -z "$($lbts list open)"
 test -n "$($lbts list closed)"
@@ -37,21 +42,31 @@ $lbts list | grep -q "Primary ticket"
 ! $lbts found
 ! $lbts found 1
 $lbts found 1 1.0
+$lbts show 1 | grep -q "^Found in: 1.0$"
 
 # Notfound
 ! $lbts notfound
 ! $lbts notfound 1
 $lbts notfound 1 1.0
+! $lbts show 1 | grep -q "^Found in:"
 
 # fixed
 ! $lbts fixed
 ! $lbts fixed 1
 $lbts fixed 1 1.0
+$lbts show 1 | grep -q "^Fixed in: 1.0$"
 
 # Notfixed
 ! $lbts notfixed
 ! $lbts notfixed 1
 $lbts notfixed 1 1.0
+! $lbts show 1 | grep -q "^Fixed in:"
+
+# Versions get the status of the ticket
+$lbts close -V 2.0 1
+$lbts show 1 | grep -q "^Fixed in: 2.0$"
+$lbts reopen -V 2.1 1
+$lbts show 1 | grep -q "^Found in: 2.1$"
 
 # Severity
 ! $lbts severity
@@ -60,18 +75,33 @@ $lbts severity 1 minor
 $lbts show 1 | grep -q "^Severity: minor$"
 ! $lbts severity 1 minor setback
 
+# An invalid severity is reported, but the action is still recorded
+$lbts severity 1 extreme 2> error
+grep -q 'Invalid severity "extreme"' error
+$lbts show 1 | grep -q "^Severity: minor$"
+
 # Link
 ! $lbts link
 ! $lbts link 1
 ! $lbts link 1 blocks
+! $lbts link 1 nonsense 2
+echo "This is the second bug." | $lbts create Second bug
 $lbts link 1 blocks 2
+$lbts show 1 | grep -q "^This bug blocks bug#2: Second bug$"
+$lbts show 2 | grep -q "^This bug is blocked by bug#1: Primary ticket$"
 ! $lbts link 1 blocks 2 3
+
+# Links to unknown tickets are reported
+$lbts link 1 relates 99 2> error
+grep -q 'Invalid ticket number "99"' error
 
 # Unlink
 ! $lbts unlink
 ! $lbts unlink 1
 ! $lbts unlink 1 blocks
 $lbts unlink 1 blocks 2
+! $lbts show 1 | grep -q "^This bug blocks"
+! $lbts show 2 | grep -q "blocked by"
 ! $lbts unlink 1 blocks 2 3
 
 # Tags
@@ -82,20 +112,32 @@ $lbts show 1 | grep -q "^Tags: foo$"
 $lbts tag 1 bar - foo +baz quux
 $lbts show 1 | grep -q "^Tags: bar baz quux$"
 
+# Adding an existing tag is not an error
+$lbts tags 1 bar
+$lbts show 1 | grep -q "^Tags: bar baz quux$"
+$lbts tags 1 =only
+$lbts show 1 | grep -q "^Tags: only$"
+
 # Owner
 ! $lbts owner
 ! $lbts owner 1
 $lbts owner 1 Firstname Lastname
+$lbts show 1 | grep -q "^Owner: Firstname Lastname$"
 
 # Noowner
 ! $lbts noowner
 $lbts noowner 1
+! $lbts show 1 | grep -q "^Owner:"
 ! $lbts noowner Firstname Lastname
 
 # Deadline
 ! $lbts deadline
 ! $lbts deadline 1
 $lbts deadline 1 1970-01-01
+$lbts show 1 | grep -q "^Deadline: 1970-01-01$"
+$lbts deadline 1 tomorrow 2> error
+grep -q "Invalid deadline" error
+$lbts show 1 | grep -q "^Deadline: 1970-01-01$"
 
 # Milestone
 ! $lbts milestone
@@ -107,6 +149,7 @@ $lbts show 1 | grep -q "^Milestone: alpha$"
 ! $lbts progress
 ! $lbts progress 1
 $lbts progress 1 99%
+$lbts show 1 | grep -q "^Progress: 99%$"
 ! $lbts progress 1 1% 2% 3%
 
 # Add message

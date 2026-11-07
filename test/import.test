@@ -85,3 +85,44 @@ test "$($lbts list | wc -l)" = "4"
 
 $lbts show 1 > bug
 tail -2 bug | grep -q "^1r1@test$"
+
+# CRLF line endings
+printf 'From: test suite\r\nTo: LightBTS\r\nSubject: CRLF bug\r\nMessage-ID: <crlf@test>\r\n\r\nStatus: closed\r\nSeverity: minor\r\n\r\nWith CRLF.\r\n' | $lbts import
+$lbts show crlf@test >/dev/null
+$lbts list closed | grep -q "CRLF bug"
+$lbts list closed minor | grep -q "CRLF bug"
+
+# Importing files that don't exist or can't be parsed fails, but other files are still imported
+cat >msg5 << EOF2
+From: test suite
+To: LightBTS
+Subject: Fifth bug
+Message-ID: <5@test>
+
+This is the fifth bug.
+EOF2
+! $lbts import nonexistent msg5
+$lbts list | grep -q "Fifth bug"
+printf 'Not a header line\n\nBody\n' > broken
+! $lbts import broken
+
+# Messages with an X-LightBTS-Control header are refused
+! $lbts import << EOF2
+From: test suite
+Subject: Control
+Message-ID: <control@test>
+X-LightBTS-Control: yes
+
+Status: closed
+EOF2
+
+# A duplicate does not overwrite the original message
+$lbts import << EOF2
+From: someone else
+To: LightBTS
+Subject: Not the second bug
+Message-ID: <2@test>
+
+Overwritten?
+EOF2
+$lbts show 2@test | grep -q "This is the second bug."
