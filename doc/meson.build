@@ -14,6 +14,7 @@ install_man(
 	'lbts-notfound.1',
 	'lbts-owner.1',
 	'lbts-progress.1',
+	'lbts-reindex.1',
 	'lbts-reopen.1',
 	'lbts-reply.1',
 	'lbts-retitle.1',

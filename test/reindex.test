@@ -1,0 +1,144 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+$lbts init
+
+# Writes the output of list and show for all tickets to the given file.
+snapshot() {
+	{
+		$lbts list all
+		$lbts list all tags
+		for id in $($lbts list all | awk '{print $1}'); do
+			$lbts show -v "$id"
+		done
+	} > "$1"
+}
+
+# Prints the number of the ticket a message belongs to.
+ticket_of() {
+	$lbts show -v "$1" | sed -n '1s/^Bug#\([0-9]*\):.*/\1/p'
+}
+
+# Create tickets with replies and actions, all within a short time, so that
+# many messages have the same date.
+echo "First." | $lbts create First bug
+echo "Second." | $lbts create -T foo -S minor Second bug
+echo "Third." | $lbts create Third bug
+echo "A reply." | $lbts reply 1
+$lbts tags 1 bar baz
+$lbts tags 1 - bar
+$lbts link 1 blocks 2
+$lbts close -V 1.0 2
+$lbts reopen 2
+$lbts close 2
+$lbts owner 3 Some One
+$lbts milestone 3 beta
+$lbts severity 1 important
+$lbts retitle 3 Third ticket
+
+snapshot before
+
+# Reindexing must not change anything
+$lbts reindex 2> output
+grep -q "^Indexed 14 messages in 3 tickets.$" output
+snapshot after
+cmp before after
+
+# Not even when the index is gone
+rm .lightbts/index
+$lbts reindex 2> output
+grep -q "^Indexed 14 messages in 3 tickets.$" output
+snapshot after
+cmp before after
+
+# When a ticket's only message is gone, its number is not reused
+echo "Lonely." | $lbts create Lonely bug
+rm "$(find .lightbts/messages -type f -exec grep -l '^Subject: Lonely bug' {} +)"
+$lbts reindex 2> output
+grep -q "^Ticket 4 no longer exists" output
+snapshot after
+cmp before after
+$lbts reindex
+echo "Fifth." | $lbts create Fifth bug 2> output
+grep -q "assigned number 5$" output
+
+# A reply received before the message it replies to is added to its ticket
+$lbts import << EOF
+From: test suite
+Subject: Re: Sixth bug
+Message-ID: <reply@test>
+In-Reply-To: <parent@test>
+
+Reply to the sixth bug.
+EOF
+$lbts import << EOF
+From: test suite
+Subject: Sixth bug
+Message-ID: <parent@test>
+
+The sixth bug.
+EOF
+reply_ticket=$(ticket_of reply@test)
+parent_ticket=$(ticket_of parent@test)
+test "$reply_ticket" != "$parent_ticket"
+
+$lbts reindex 2> output
+grep -q "^Ticket $reply_ticket no longer exists" output
+grep -q "^Indexed 17 messages in 5 tickets.$" output
+test "$(ticket_of reply@test)" = "$parent_ticket"
+$lbts show "$parent_ticket" | grep -q "^reply@test$"
+
+# Without the precise time, the Received header is used, and without that the Date header
+file=$(find .lightbts/messages -type f | head -1)
+sed '/^X-LightBTS-Received:/d' "$file" > edited
+mv edited "$file"
+$lbts reindex 2> output
+grep -q "^Indexed 17 messages in 5 tickets.$" output
+sed '/^Received: by localhost (LightBTS)/d' "$file" > edited
+mv edited "$file"
+! grep -q "^Received:" "$file"
+$lbts reindex 2> output
+grep -q "^Indexed 17 messages in 5 tickets.$" output
+
+# Messages without any date can't be ordered
+sed '/^Date:/d' "$file" > edited
+cp "$file" with-date
+mv edited "$file"
+! $lbts reindex 2> output
+grep -q "unknown date" output
+mv with-date "$file"
+
+# Broken files are reported, and the other messages are still indexed
+echo "Not a message" > .lightbts/messages/broken
+! $lbts reindex 2> output
+grep -q "^Error: .*broken" output
+grep -q "^Indexed 17 messages in 5 tickets.$" output
+rm .lightbts/messages/broken
+
+# Files stored under the wrong name are reported
+cp "$file" .lightbts/messages/misplaced
+! $lbts reindex 2> output
+grep -q "^Error: .*misplaced: should be stored as" output
+rm .lightbts/messages/misplaced
+
+# Hidden files and directories are ignored
+echo "Not a message" > .lightbts/messages/.hidden
+mkdir .lightbts/messages/.git
+echo "Not a message" > .lightbts/messages/.git/config
+$lbts reindex
+
+# Hooks are not run
+cat > .lightbts/hooks/post-index << 'HOOK'
+#!/bin/sh
+touch hook-was-run
+HOOK
+chmod +x .lightbts/hooks/post-index
+$lbts reindex
+test ! -e .lightbts/hook-was-run
+
+# Extra arguments are refused
+! $lbts reindex now

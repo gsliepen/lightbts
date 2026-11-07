@@ -13,11 +13,14 @@
 #include <cstdlib>
 #include <format>
 #include <fstream>
+#include <deque>
 #include <iostream>
+#include <map>
 #include <print>
 #include <pwd.h>
 #include <sstream>
 #include <stdexcept>
+#include <tuple>
 #include <unistd.h>
 
 #include "embedded.hpp"
@@ -55,8 +58,72 @@ std::string hash_message_id(std::string_view message_id) {
 	return result;
 }
 
-std::int64_t current_unix_time() {
-	return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+/// The start of the Received header that LightBTS adds to every message it imports.
+constexpr std::string_view received_text = "by localhost (LightBTS)";
+
+/// A header with the precise time a message was imported, which is needed to replay messages in the
+/// right order when reindexing. The Received header only has a resolution of one second.
+constexpr std::string_view received_time_header = "X-LightBTS-Received";
+
+using Microseconds = std::chrono::sys_time<std::chrono::microseconds>;
+
+std::int64_t to_unix_time(std::chrono::system_clock::time_point time) {
+	return std::chrono::floor<std::chrono::seconds>(time).time_since_epoch().count();
+}
+
+/// Parses an RFC 5322 date, like "Sat, 07 Nov 2026 22:42:03 +0000".
+std::optional<Microseconds> parse_date(std::string_view text) {
+	std::string date(trim(text.substr(0, text.find('('))));
+
+	if (auto comma = date.find(','); comma != date.npos)
+		date = trim(std::string_view(date).substr(comma + 1));
+
+	for (auto zone: {" GMT", " UT", " UTC", " Z"}) {
+		if (date.ends_with(zone)) {
+			date.resize(date.size() - std::string_view(zone).size());
+			date += " +0000";
+		}
+	}
+
+	for (auto format: {"%d %b %Y %H:%M:%S %z", "%d %b %Y %H:%M %z"}) {
+		std::chrono::sys_seconds time;
+		std::istringstream in(date);
+		in >> std::chrono::parse(format, time);
+		if (in)
+			return time;
+	}
+
+	return std::nullopt;
+}
+
+std::string format_precise_time(std::chrono::system_clock::time_point time) {
+	return std::format("{:%FT%T}Z", std::chrono::floor<std::chrono::microseconds>(time));
+}
+
+std::optional<Microseconds> parse_precise_time(std::string_view text) {
+	Microseconds time;
+	std::istringstream in{std::string(trim(text))};
+	in >> std::chrono::parse("%FT%TZ", time);
+	if (!in)
+		return std::nullopt;
+	return time;
+}
+
+/// The time at which LightBTS imported a message, from the headers it added.
+std::optional<Microseconds> get_received_time(const Message &message) {
+	if (auto precise = parse_precise_time(message.get_header(received_time_header)))
+		return precise;
+
+	for (auto &[field, value]: message.get_headers()) {
+		if (to_lower(field) != "received" || !trim(value).starts_with(received_text))
+			continue;
+		auto semicolon = value.rfind(';');
+		if (semicolon == value.npos)
+			return std::nullopt;
+		return parse_date(std::string_view(value).substr(semicolon + 1));
+	}
+
+	return std::nullopt;
 }
 
 std::optional<std::int64_t> parse_integer(std::string_view text) {
@@ -206,22 +273,7 @@ void Instance::init_index(Mode mode) {
 		std::println(std::cerr, "Creating index...");
 
 		auto transaction = db.begin();
-		db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER, deadline INTEGER, progress INTEGER NOT NULL DEFAULT 0, milestone TEXT)");
-		db.execute("CREATE TABLE links (a INTEGER, b INTEGER, type INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))");
-		db.execute("CREATE INDEX links_a_index ON links (a)");
-		db.execute("CREATE INDEX links_b_index ON links (b)");
-		db.execute("CREATE TABLE messages (msgid PRIMARY KEY, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, date INTEGER, FOREIGN KEY(bug) REFERENCES bugs(id))");
-		db.execute("CREATE TABLE recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))");
-		db.execute("CREATE INDEX recipients_bug_index ON recipients (bug)");
-		db.execute("CREATE INDEX recipients_address_index ON recipients (address)");
-		db.execute("CREATE TABLE tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))");
-		db.execute("CREATE INDEX tags_bug_index ON tags (bug)");
-		db.execute("CREATE INDEX tags_tag_index ON tags (tag)");
-		db.execute("CREATE TABLE versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))");
-		db.execute("CREATE INDEX versions_bug_index ON versions (bug)");
-		db.execute("CREATE INDEX versions_version_index ON versions (version)");
-		db.execute(std::format("PRAGMA application_id = {}", application_id));
-		db.execute(std::format("PRAGMA user_version = {}", index_version));
+		create_schema();
 		transaction.commit();
 	} else if (version < index_version) {
 		throw std::runtime_error(std::format("Unsupported index version {}, use the Python prototype of LightBTS to upgrade it to version {}", version, index_version));
@@ -230,6 +282,31 @@ void Instance::init_index(Mode mode) {
 	}
 
 	db.execute("PRAGMA foreign_keys = ON");
+}
+
+void Instance::create_schema() {
+	db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER, deadline INTEGER, progress INTEGER NOT NULL DEFAULT 0, milestone TEXT)");
+	db.execute("CREATE TABLE links (a INTEGER, b INTEGER, type INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))");
+	db.execute("CREATE INDEX links_a_index ON links (a)");
+	db.execute("CREATE INDEX links_b_index ON links (b)");
+	db.execute("CREATE TABLE messages (msgid PRIMARY KEY, bug INTEGER, spam INTEGER NOT NULL DEFAULT 0, date INTEGER, FOREIGN KEY(bug) REFERENCES bugs(id))");
+	db.execute("CREATE TABLE recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))");
+	db.execute("CREATE INDEX recipients_bug_index ON recipients (bug)");
+	db.execute("CREATE INDEX recipients_address_index ON recipients (address)");
+	db.execute("CREATE TABLE tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))");
+	db.execute("CREATE INDEX tags_bug_index ON tags (bug)");
+	db.execute("CREATE INDEX tags_tag_index ON tags (tag)");
+	db.execute("CREATE TABLE versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))");
+	db.execute("CREATE INDEX versions_bug_index ON versions (bug)");
+	db.execute("CREATE INDEX versions_version_index ON versions (version)");
+	db.execute(std::format("PRAGMA application_id = {}", application_id));
+	db.execute(std::format("PRAGMA user_version = {}", index_version));
+}
+
+void Instance::drop_schema() {
+	// Tables referring to other tables must be dropped first, because of the foreign keys.
+	for (auto table: {"links", "messages", "recipients", "tags", "versions", "bugs"})
+		db.execute(std::format("DROP TABLE IF EXISTS {}", table));
 }
 
 bool Instance::has_config(const std::string &section, const std::string &variable) const {
@@ -661,6 +738,203 @@ void Instance::apply_metadata(std::int64_t ticket, const Message &message, std::
 		apply_links(ticket, type, targets, false, warnings);
 }
 
+namespace {
+
+struct StoredMessage {
+	Message message;
+	std::string id;
+	std::string parent;
+	Microseconds received;
+	std::size_t previous_position; ///< The position in the previous index, used to order messages received in the same second.
+};
+
+}
+
+ReindexResult Instance::reindex() {
+	ReindexResult result;
+	auto transaction = db.begin(true);
+
+	// Remember the order of the messages and the numbers of the tickets in the current index.
+	std::map<std::string, std::size_t> previous_positions;
+	std::map<std::string, std::int64_t> previous_ticket_numbers; // The first message of each ticket, and its number
+	std::set<std::int64_t> seen_tickets;
+	std::int64_t next_ticket_number = 1;
+
+	for (auto &&row: db.execute("SELECT msgid, bug FROM messages ORDER BY date, rowid")) {
+		auto message_id = row.get_string(0);
+		auto ticket = row.get_int64(1);
+		previous_positions.emplace(message_id, previous_positions.size());
+		if (seen_tickets.insert(ticket).second)
+			previous_ticket_numbers.emplace(message_id, ticket);
+	}
+
+	// Numbers of tickets that were removed by an earlier reindex are only remembered in sqlite_sequence.
+	if (auto row = db.execute("SELECT max(id) FROM bugs"))
+		next_ticket_number = std::max(next_ticket_number, row.get_int64(0) + 1);
+	if (auto row = db.execute("SELECT seq FROM sqlite_sequence WHERE name = 'bugs'"))
+		next_ticket_number = std::max(next_ticket_number, row.get_int64(0) + 1);
+
+	// Load all messages.
+	std::vector<StoredMessage> messages;
+	std::error_code error;
+
+	for (fs::recursive_directory_iterator it(maildir, error), end; it != end; it.increment(error)) {
+		auto &path = it->path();
+		if (path.filename().string().starts_with('.')) {
+			if (it->is_directory())
+				it.disable_recursion_pending();
+			continue;
+		}
+
+		if (!it->is_regular_file())
+			continue;
+
+		StoredMessage stored;
+		try {
+			stored.message.load(path);
+		} catch (const std::exception &load_error) {
+			result.errors.push_back(std::format("{}: {}", path.string(), load_error.what()));
+			continue;
+		}
+
+		stored.id = unquote_message_id(stored.message.get_header("Message-ID"));
+		if (stored.id.empty()) {
+			result.errors.push_back(std::format("{}: no Message-ID", path.string()));
+			continue;
+		}
+
+		if (message_path(stored.id) != path) {
+			result.errors.push_back(std::format("{}: should be stored as {} according to its Message-ID", path.string(), message_path(stored.id).string()));
+			continue;
+		}
+
+		auto received = get_received_time(stored.message);
+		if (!received)
+			received = parse_date(stored.message.get_header_value("Date"));
+		if (!received) {
+			result.errors.push_back(std::format("{}: unknown date", path.string()));
+			continue;
+		}
+
+		stored.received = *received;
+		stored.parent = unquote_message_id(stored.message.get_header("In-Reply-To"));
+		auto position = previous_positions.find(stored.id);
+		stored.previous_position = position == previous_positions.end() ? previous_positions.size() : position->second;
+		messages.push_back(std::move(stored));
+	}
+
+	if (error)
+		throw std::runtime_error(std::format("Could not read {}: {}", maildir.string(), error.message()));
+
+	std::ranges::sort(messages, {}, [](const StoredMessage &stored) {
+		return std::tie(stored.received, stored.previous_position, stored.id);
+	});
+
+	drop_schema();
+	create_schema();
+
+	// Index all messages, but replies only after the message they reply to.
+	std::set<std::string> all_ids;
+	for (auto &stored: messages)
+		all_ids.insert(stored.id);
+
+	std::set<std::string> indexed_ids;
+	std::multimap<std::string, std::size_t> waiting_for_parent;
+	std::set<std::int64_t> used_ticket_numbers;
+	std::vector<bool> done(messages.size());
+
+	auto index_one = [&](std::size_t i) {
+		auto &stored = messages[i];
+		auto previous_number = previous_ticket_numbers.find(stored.id);
+		auto number = previous_number == previous_ticket_numbers.end() ? next_ticket_number : previous_number->second;
+
+		ImportResult indexed{.kind = ImportResult::Kind::created, .message_id = stored.id};
+		index_message(stored.message, to_unix_time(stored.received), number, indexed);
+
+		result.messages++;
+		for (auto &warning: indexed.warnings)
+			result.warnings.push_back(std::format("{}: {}", stored.id, warning));
+
+		if (indexed.kind == ImportResult::Kind::created) {
+			result.tickets++;
+			used_ticket_numbers.insert(indexed.ticket);
+			if (indexed.ticket == next_ticket_number)
+				next_ticket_number++;
+		}
+	};
+
+	// Indexes a message, followed by the replies that were waiting for it.
+	auto index = [&](std::size_t first) {
+		std::deque<std::size_t> queue{first};
+		while (!queue.empty()) {
+			auto i = queue.front();
+			queue.pop_front();
+			if (done[i])
+				continue;
+			done[i] = true;
+			index_one(i);
+			indexed_ids.insert(messages[i].id);
+
+			auto [begin, end] = waiting_for_parent.equal_range(messages[i].id);
+			for (auto it = begin; it != end; ++it)
+				queue.push_back(it->second);
+			waiting_for_parent.erase(begin, end);
+		}
+	};
+
+	for (std::size_t i = 0; i < messages.size(); i++) {
+		auto &parent = messages[i].parent;
+		if (!parent.empty() && parent != messages[i].id && all_ids.contains(parent) && !indexed_ids.contains(parent))
+			waiting_for_parent.emplace(parent, i);
+		else
+			index(i);
+	}
+
+	// Only messages whose replies form a cycle can be left over.
+	for (std::size_t i = 0; i < messages.size(); i++)
+		index(i);
+
+	// Never reuse the numbers of tickets that no longer exist.
+	db.execute("DELETE FROM sqlite_sequence WHERE name = 'bugs'");
+	db.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('bugs', ?)", next_ticket_number - 1);
+
+	transaction.commit();
+
+	for (auto &[message_id, number]: previous_ticket_numbers)
+		if (!used_ticket_numbers.contains(number))
+			result.removed_tickets.push_back(number);
+	std::ranges::sort(result.removed_tickets);
+
+	return result;
+}
+
+void Instance::index_message(const Message &message, std::int64_t received, std::optional<std::int64_t> new_ticket_number, ImportResult &result) {
+	auto parent = unquote_message_id(message.get_header("In-Reply-To"));
+	auto from = message.get_header_value("From");
+
+	result.ticket = 0;
+	if (!parent.empty())
+		if (auto row = db.execute("SELECT bug FROM messages WHERE msgid = ?", parent))
+			result.ticket = row.get_int64(0);
+
+	if (result.ticket) {
+		result.kind = ImportResult::Kind::appended;
+	} else {
+		auto title = message.get_header_value("Subject");
+		if (new_ticket_number)
+			db.execute("INSERT INTO bugs (id, title, submitter, date) VALUES (?, ?, ?, ?)", *new_ticket_number, title, from, received);
+		else
+			db.execute("INSERT INTO bugs (title, submitter, date) VALUES (?, ?, ?)", title, from, received);
+		result.ticket = db.last_insert_rowid();
+		result.kind = ImportResult::Kind::created;
+	}
+
+	db.execute("INSERT INTO messages (msgid, bug, date) VALUES (?, ?, ?)", result.message_id, result.ticket, received);
+	db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", result.ticket, from);
+
+	apply_metadata(result.ticket, message, result.warnings);
+}
+
 ImportResult Instance::import(const Message &incoming) {
 	// Don't allow messages with the X-LightBTS-Control header set
 	if (!incoming.get_header("X-LightBTS-Control").empty())
@@ -671,13 +945,15 @@ ImportResult Instance::import(const Message &incoming) {
 	if (message.get_header("Message-ID").empty())
 		message.generate_msgid("LightBTS");
 
-	message.add_received("by localhost (LightBTS)");
+	auto now = std::chrono::system_clock::now();
+	message.add_received(received_text, now);
+	message.erase_header(received_time_header);
+	message.prepend_header(received_time_header, format_precise_time(now));
 
 	if (message.get_header("Date").empty())
 		message.set_date();
 
 	ImportResult result{.kind = ImportResult::Kind::duplicate, .message_id = unquote_message_id(message.get_header("Message-ID"))};
-	auto parent = unquote_message_id(message.get_header("In-Reply-To"));
 
 	// Check for duplicates before storing anything, so the original message is never overwritten.
 	if (db.execute("SELECT 1 FROM messages WHERE msgid = ?", result.message_id))
@@ -692,26 +968,7 @@ ImportResult Instance::import(const Message &incoming) {
 	}
 
 	auto transaction = db.begin();
-	auto now = current_unix_time();
-	auto from = message.get_header_value("From");
-
-	if (!parent.empty())
-		if (auto row = db.execute("SELECT bug FROM messages WHERE msgid = ?", parent))
-			result.ticket = row.get_int64(0);
-
-	if (result.ticket) {
-		result.kind = ImportResult::Kind::appended;
-	} else {
-		db.execute("INSERT INTO bugs (title, submitter, date) VALUES (?, ?, ?)", message.get_header_value("Subject"), from, now);
-		result.ticket = db.last_insert_rowid();
-		result.kind = ImportResult::Kind::created;
-	}
-
-	db.execute("INSERT INTO messages (msgid, bug, date) VALUES (?, ?, ?)", result.message_id, result.ticket, now);
-	db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", result.ticket, from);
-
-	apply_metadata(result.ticket, message, result.warnings);
-
+	index_message(message, to_unix_time(now), std::nullopt, result);
 	transaction.commit();
 
 	run_hook("post-index", filename, result.ticket);

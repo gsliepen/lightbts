@@ -1,0 +1,44 @@
+.Dd 2026-11-07
+.Dt LBTS-REINDEX 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts reindex
+.Nd rebuild the index from the stored messages
+.Sh SYNOPSIS
+.Nm lbts reindex
+.Sh DESCRIPTION
+The command rebuilds the index of a LightBTS instance from the messages stored in
+.Pa .lightbts/messages .
+All information about tickets is contained in these messages,
+the index only allows LightBTS to find it quickly.
+.Pp
+Messages are indexed in the order they were originally imported,
+which is recorded in the X-LightBTS-Received header,
+or with less precision in the Received header that LightBTS adds.
+For messages that have neither, the Date header is used.
+A reply is always indexed after the message it replies to.
+.Pp
+Tickets keep the numbers they have in the current index.
+If the first message of a ticket is gone, or it now belongs to another ticket,
+the ticket no longer exists, and its number will not be reused.
+If there is no index, tickets are numbered in the order they were created.
+.Pp
+The index is rebuilt in a single transaction:
+if anything goes wrong, the current index stays as it is.
+No hooks are run.
+.Pp
+If the index is damaged, or has a version that this version of LightBTS does not support,
+remove the file
+.Pa .lightbts/index
+and run this command to create a new one.
+.Sh EXIT STATUS
+The command exits with status 1 if any message file could not be indexed,
+for example because it is not a valid message,
+or because it is not stored under the name that its Message-ID determines.
+The other messages are still indexed.
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-import 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

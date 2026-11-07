@@ -94,6 +94,7 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  progress    Change the progress level of a ticket.\n"
 		"  milestone   Change the milestone of a ticket.\n"
 		"  deadline    Change the deadline of a ticket.\n"
+		"  reindex     Rebuild the index from the stored messages.\n"
 		"  version     Show version information.\n",
 		program_name);
 }
@@ -189,6 +190,7 @@ constexpr Command commands[] = {
 	{"notfound", do_notfound},
 	{"owner", do_owner},
 	{"progress", do_progress},
+	{"reindex", do_reindex},
 	{"reopen", do_reopen},
 	{"reply", do_reply},
 	{"retitle", do_retitle},

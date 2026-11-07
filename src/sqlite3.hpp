@@ -176,8 +176,9 @@ namespace SQLite3 {
 		transaction(const transaction &other) = delete;
 		transaction &operator=(const transaction &other) = delete;
 
-		transaction(::sqlite3 *db): db(db) {
-			check(db, sqlite3_exec(db, "BEGIN", nullptr, nullptr, nullptr));
+		/// \param immediate Whether to lock the database for writing right away, instead of at the first write.
+		transaction(::sqlite3 *db, bool immediate = false): db(db) {
+			check(db, sqlite3_exec(db, immediate ? "BEGIN IMMEDIATE" : "BEGIN", nullptr, nullptr, nullptr));
 		}
 
 		~transaction() { abort(); }
@@ -239,8 +240,8 @@ namespace SQLite3 {
 			return result(db, sql, args...);
 		}
 
-		transaction begin() {
-			return transaction(db);
+		transaction begin(bool immediate = false) {
+			return transaction(db, immediate);
 		}
 
 		std::int64_t last_insert_rowid() const { return sqlite3_last_insert_rowid(db); }

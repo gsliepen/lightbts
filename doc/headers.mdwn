@@ -28,6 +28,8 @@ X-Autorespond:
 : For incoming email, if this header is present, the email is ignored.
 X-LightBTS-Status:
 : If this header is present, it is interpreted the same way as the "Status:" pseudo-header. It is set by lightbts-email when the --close or --reopen option is used.
+X-LightBTS-Received:
+: The time at which LightBTS imported the message, in UTC with microsecond precision, for example "2026-11-07T23:26:39.381900Z". It is added to every imported message, together with a Received header, and replaces any existing X-LightBTS-Received header. It is used to replay messages in the right order when rebuilding the index.
 X-LightBTS-Tag:
 : If this header is present, it is interpreted the same way as the "Tags:" pseudo-header. It is set by lightbts-email when the --tag option is used.
 

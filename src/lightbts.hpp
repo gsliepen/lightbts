@@ -122,6 +122,14 @@ struct ImportResult {
 	std::vector<std::string> warnings; ///< Problems with the pseudo-headers in the message.
 };
 
+struct ReindexResult {
+	std::size_t messages = 0;
+	std::size_t tickets = 0;
+	std::vector<std::string> errors;            ///< Message files that could not be indexed.
+	std::vector<std::string> warnings;          ///< Problems with the pseudo-headers in messages.
+	std::vector<std::int64_t> removed_tickets;  ///< Tickets that existed before, but whose first message is gone or now belongs to another ticket.
+};
+
 struct InstanceOptions {
 	bool no_hooks = false;
 };
@@ -176,6 +184,10 @@ class Instance {
 
 	ImportResult import(const Message &message);
 
+	/// Rebuilds the index from the stored messages, keeping the numbers of existing tickets.
+	/// Messages are indexed in the order they were imported. No hooks are run.
+	ReindexResult reindex();
+
 	private:
 	fs::path project_dir;
 	fs::path base_dir;
@@ -192,10 +204,16 @@ class Instance {
 	void set_default_config();
 	void install_templates() const;
 	void init_index(Mode mode);
+	void create_schema();
+	void drop_schema();
 
 	fs::path message_path(std::string_view message_id) const;
 	fs::path store(const Message &message) const;
 	bool run_hook(std::string_view name, const fs::path &message_file, std::int64_t ticket = 0);
+
+	/// Adds a message to the index, which must be done inside a transaction.
+	/// \param new_ticket_number The number to give the ticket if the message creates one, or nothing to use the next free number.
+	void index_message(const Message &message, std::int64_t received, std::optional<std::int64_t> new_ticket_number, ImportResult &result);
 
 	bool ticket_exists(std::int64_t id);
 	void apply_metadata(std::int64_t ticket, const Message &message, std::vector<std::string> &warnings);
