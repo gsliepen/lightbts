@@ -26,6 +26,7 @@ int do_milestone(const Options &options, const Arguments &args);
 int do_progress(const Options &options, const Arguments &args);
 
 int do_create(const Options &options, const Arguments &args);
+int do_fsck(const Options &options, const Arguments &args);
 int do_import(const Options &options, const Arguments &args);
 int do_list(const Options &options, const Arguments &args);
 int do_reindex(const Options &options, const Arguments &args);

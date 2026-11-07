@@ -9,6 +9,10 @@
 
 #include "commands.hpp"
 
+static std::string count(std::size_t number, std::string_view noun) {
+	return std::format("{} {}{}", number, noun, number == 1 ? "" : "s");
+}
+
 int do_reindex(const Options &options, const Arguments &args) {
 	if (!args.empty()) {
 		std::println(std::cerr, "Too many arguments");
@@ -25,12 +29,12 @@ int do_reindex(const Options &options, const Arguments &args) {
 		for (auto &warning: result.warnings)
 			std::println(std::cerr, "Warning: {}", warning);
 	else if (!result.warnings.empty())
-		std::println(std::cerr, "{} messages have problems with their pseudo-headers, use -v to show them.", result.warnings.size());
+		std::println(std::cerr, "There are {} with the pseudo-headers of messages, use -v to show them.", count(result.warnings.size(), "problem"));
 
 	for (auto ticket: result.removed_tickets)
-		std::println(std::cerr, "Ticket {} no longer exists, its first message is missing or belongs to another ticket.", ticket);
+		std::println(std::cerr, "Ticket {} no longer exists, no message creates it anymore.", ticket);
 
-	std::println(std::cerr, "Indexed {} messages in {} tickets.", result.messages, result.tickets);
+	std::println(std::cerr, "Indexed {} in {}.", count(result.messages, "message"), count(result.tickets, "ticket"));
 
 	return result.errors.empty() ? 0 : 1;
 }

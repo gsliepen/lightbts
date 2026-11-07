@@ -127,7 +127,15 @@ struct ReindexResult {
 	std::size_t tickets = 0;
 	std::vector<std::string> errors;            ///< Message files that could not be indexed.
 	std::vector<std::string> warnings;          ///< Problems with the pseudo-headers in messages.
-	std::vector<std::int64_t> removed_tickets;  ///< Tickets that existed before, but whose first message is gone or now belongs to another ticket.
+	std::vector<std::int64_t> removed_tickets;  ///< Tickets that existed before, but that no message creates anymore.
+};
+
+struct FsckResult {
+	std::vector<std::string> file_problems;     ///< Message files that cannot be indexed.
+	std::vector<std::string> database_problems; ///< Problems found by SQLite's own integrity checks.
+	std::vector<std::string> index_problems;    ///< Differences between the index and what the messages produce.
+
+	bool ok() const { return file_problems.empty() && database_problems.empty() && index_problems.empty(); }
 };
 
 struct InstanceOptions {
@@ -188,6 +196,9 @@ class Instance {
 	/// Messages are indexed in the order they were imported. No hooks are run.
 	ReindexResult reindex();
 
+	/// Checks the messages and the index, without changing anything.
+	FsckResult fsck();
+
 	private:
 	fs::path project_dir;
 	fs::path base_dir;
@@ -206,6 +217,8 @@ class Instance {
 	void init_index(Mode mode);
 	void create_schema();
 	void drop_schema();
+	/// Rebuilds the index, which must be done inside a transaction.
+	ReindexResult rebuild_index();
 
 	fs::path message_path(std::string_view message_id) const;
 	fs::path store(const Message &message) const;

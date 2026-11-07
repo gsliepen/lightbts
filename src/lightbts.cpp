@@ -15,6 +15,7 @@
 #include <fstream>
 #include <deque>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <print>
 #include <pwd.h>
@@ -303,10 +304,28 @@ void Instance::create_schema() {
 	db.execute(std::format("PRAGMA user_version = {}", index_version));
 }
 
+namespace {
+
+struct IndexTable {
+	std::string_view name;
+	std::size_t key_columns; ///< The number of leading columns that form the primary key.
+};
+
+/// All tables in the index. Tables referring to other tables come first, because of the foreign keys.
+constexpr IndexTable index_tables[] = {
+	{"links", 2},
+	{"messages", 1},
+	{"recipients", 2},
+	{"tags", 2},
+	{"versions", 2},
+	{"bugs", 1},
+};
+
+}
+
 void Instance::drop_schema() {
-	// Tables referring to other tables must be dropped first, because of the foreign keys.
-	for (auto table: {"links", "messages", "recipients", "tags", "versions", "bugs"})
-		db.execute(std::format("DROP TABLE IF EXISTS {}", table));
+	for (auto &table: index_tables)
+		db.execute(std::format("DROP TABLE IF EXISTS {}", table.name));
 }
 
 bool Instance::has_config(const std::string &section, const std::string &variable) const {
@@ -751,22 +770,30 @@ struct StoredMessage {
 }
 
 ReindexResult Instance::reindex() {
-	ReindexResult result;
 	auto transaction = db.begin(true);
+	auto result = rebuild_index();
+	transaction.commit();
+	return result;
+}
 
-	// Remember the order of the messages and the numbers of the tickets in the current index.
+ReindexResult Instance::rebuild_index() {
+	ReindexResult result;
+
+	// Remember the order of the messages, and which ticket they belonged to in the current index.
 	std::map<std::string, std::size_t> previous_positions;
-	std::map<std::string, std::int64_t> previous_ticket_numbers; // The first message of each ticket, and its number
-	std::set<std::int64_t> seen_tickets;
+	std::map<std::string, std::int64_t> previous_tickets;
+	std::set<std::int64_t> previous_ticket_numbers;
 	std::int64_t next_ticket_number = 1;
 
 	for (auto &&row: db.execute("SELECT msgid, bug FROM messages ORDER BY date, rowid")) {
 		auto message_id = row.get_string(0);
-		auto ticket = row.get_int64(1);
 		previous_positions.emplace(message_id, previous_positions.size());
-		if (seen_tickets.insert(ticket).second)
-			previous_ticket_numbers.emplace(message_id, ticket);
+		previous_tickets.emplace(message_id, row.get_int64(1));
+		previous_ticket_numbers.insert(row.get_int64(1));
 	}
+
+	for (auto &&row: db.execute("SELECT id FROM bugs"))
+		previous_ticket_numbers.insert(row.get_int64(0));
 
 	// Numbers of tickets that were removed by an earlier reindex are only remembered in sqlite_sequence.
 	if (auto row = db.execute("SELECT max(id) FROM bugs"))
@@ -844,9 +871,12 @@ ReindexResult Instance::reindex() {
 	std::vector<bool> done(messages.size());
 
 	auto index_one = [&](std::size_t i) {
+		// A message that creates a ticket gets the number of the ticket it belonged to, if that is still free.
 		auto &stored = messages[i];
-		auto previous_number = previous_ticket_numbers.find(stored.id);
-		auto number = previous_number == previous_ticket_numbers.end() ? next_ticket_number : previous_number->second;
+		auto previous_ticket = previous_tickets.find(stored.id);
+		auto number = next_ticket_number;
+		if (previous_ticket != previous_tickets.end() && !used_ticket_numbers.contains(previous_ticket->second))
+			number = previous_ticket->second;
 
 		ImportResult indexed{.kind = ImportResult::Kind::created, .message_id = stored.id};
 		index_message(stored.message, to_unix_time(stored.received), number, indexed);
@@ -898,13 +928,138 @@ ReindexResult Instance::reindex() {
 	db.execute("DELETE FROM sqlite_sequence WHERE name = 'bugs'");
 	db.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('bugs', ?)", next_ticket_number - 1);
 
-	transaction.commit();
+	std::ranges::set_difference(previous_ticket_numbers, used_ticket_numbers, std::back_inserter(result.removed_tickets));
 
-	for (auto &[message_id, number]: previous_ticket_numbers)
-		if (!used_ticket_numbers.contains(number))
-			result.removed_tickets.push_back(number);
-	std::ranges::sort(result.removed_tickets);
+	return result;
+}
 
+namespace {
+
+struct TableContents {
+	std::vector<std::string> columns;
+	std::map<std::vector<std::string>, std::vector<std::string>> rows; ///< Rows by their primary key.
+};
+
+std::string format_value(const SQLite3::statement &statement, int column) {
+	switch (statement.column_type(column)) {
+	case SQLITE_NULL:
+		return "NULL";
+	case SQLITE_INTEGER:
+	case SQLITE_FLOAT:
+		return statement.column_string(column);
+	default:
+		return std::format("\"{}\"", statement.column_string(column));
+	}
+}
+
+TableContents read_table(SQLite3::database &db, const IndexTable &table) {
+	auto statement = db.prepare(std::format("SELECT * FROM {}", table.name));
+
+	TableContents contents;
+	for (int i = 0; i < statement.column_count(); i++)
+		contents.columns.push_back(statement.column_name(i));
+
+	while (statement.step() == SQLITE_ROW) {
+		std::vector<std::string> row;
+		for (int i = 0; i < statement.column_count(); i++)
+			row.push_back(format_value(statement, i));
+		std::vector<std::string> key(row.begin(), row.begin() + table.key_columns);
+		contents.rows.emplace(std::move(key), std::move(row));
+	}
+
+	return contents;
+}
+
+std::string without_quotes(std::string_view value) {
+	if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+		value = value.substr(1, value.size() - 2);
+	return std::string(value);
+}
+
+/// Shows enumerations by their names instead of their numbers.
+std::string describe_value(std::string_view table, std::string_view column, const std::string &value) {
+	auto number = parse_integer(value);
+	if (table == "bugs" && column == "status" && number && *number >= 0 && *number < std::ssize(status_names))
+		return std::string(status_names[*number]);
+	if (table == "bugs" && column == "severity" && number && *number >= 0 && *number < std::ssize(severity_names))
+		return std::string(severity_names[*number]);
+	if (table == "links" && column == "type" && number && *number >= 0 && *number < std::ssize(link_names))
+		return std::string(link_names[*number]);
+	return value;
+}
+
+std::string describe_row(const IndexTable &table, const TableContents &contents, const std::vector<std::string> &row) {
+	std::string text;
+	for (std::size_t i = 0; i < row.size(); i++)
+		text += std::format("{}{} = {}", i ? ", " : "", contents.columns[i], describe_value(table.name, contents.columns[i], row[i]));
+	return std::format("{} ({})", table.name, text);
+}
+
+/// What a row is about: a ticket or a message for the bugs and messages tables, otherwise the whole row.
+std::string describe_subject(const IndexTable &table, const TableContents &contents, const std::vector<std::string> &row) {
+	if (table.name == "bugs")
+		return std::format("Ticket {}", row[0]);
+	if (table.name == "messages")
+		return std::format("Message {}", without_quotes(row[0]));
+	return std::format("The row {}", describe_row(table, contents, row));
+}
+
+std::string_view not_produced_reason(const IndexTable &table) {
+	if (table.name == "bugs")
+		return "no message creates it";
+	if (table.name == "messages")
+		return "there is no file for it";
+	return "the messages do not produce it";
+}
+
+void compare_table(const IndexTable &table, const TableContents &index, const TableContents &expected, std::vector<std::string> &problems) {
+	for (auto &[key, row]: index.rows) {
+		auto subject = describe_subject(table, index, row);
+		auto other = expected.rows.find(key);
+
+		if (other == expected.rows.end()) {
+			problems.push_back(std::format("{} is in the index, but {}", subject, not_produced_reason(table)));
+			continue;
+		}
+
+		for (std::size_t i = table.key_columns; i < row.size(); i++) {
+			auto &column = index.columns[i];
+			if (row[i] != other->second[i])
+				problems.push_back(std::format("{}: {} is {} in the index, but {} according to the messages", subject, column, describe_value(table.name, column, row[i]), describe_value(table.name, column, other->second[i])));
+		}
+	}
+
+	for (auto &[key, row]: expected.rows)
+		if (!index.rows.contains(key))
+			problems.push_back(std::format("{} is missing from the index", describe_subject(table, expected, row)));
+}
+
+}
+
+FsckResult Instance::fsck() {
+	FsckResult result;
+
+	for (auto &&row: db.execute("PRAGMA integrity_check"))
+		if (auto message = row.get_string(0); message != "ok")
+			result.database_problems.push_back(message);
+
+	for (auto &&row: db.execute("PRAGMA foreign_key_check"))
+		result.database_problems.push_back(std::format("Row {} of table {} refers to a missing row in table {}", row.get_int64(1), row.get_string(0), row.get_string(2)));
+
+	// Rebuild the index inside a transaction that is rolled back, and compare it with the current one.
+	auto transaction = db.begin(true);
+
+	std::vector<TableContents> index;
+	for (auto &table: index_tables)
+		index.push_back(read_table(db, table));
+
+	auto rebuilt = rebuild_index();
+	result.file_problems = rebuilt.errors;
+
+	for (std::size_t i = 0; i < std::size(index_tables); i++)
+		compare_table(index_tables[i], index[i], read_table(db, index_tables[i]), result.index_problems);
+
+	transaction.abort();
 	return result;
 }
 

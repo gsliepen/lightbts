@@ -5,6 +5,7 @@ install_man(
 	'lbts-deadline.1',
 	'lbts-fixed.1',
 	'lbts-found.1',
+	'lbts-fsck.1',
 	'lbts-help.1',
 	'lbts-import.1',
 	'lbts-init.1',

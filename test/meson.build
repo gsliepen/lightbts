@@ -1,4 +1,4 @@
-shell_tests = ['basic', 'config', 'create', 'import', 'reply', 'list', 'show', 'action', 'hooks', 'reindex']
+shell_tests = ['basic', 'config', 'create', 'import', 'reply', 'list', 'show', 'action', 'hooks', 'reindex', 'fsck']
 
 foreach name: shell_tests
 	test(name, files(name + '.test'), depends: lbts, workdir: meson.project_build_root())
@@ -8,6 +8,7 @@ unit_tests = {
 	'sqlite3': core,
 	'pseudoheaders': core,
 	'config': core,
+	'fsck': core,
 }
 
 if build_web

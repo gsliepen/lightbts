@@ -95,6 +95,7 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  milestone   Change the milestone of a ticket.\n"
 		"  deadline    Change the deadline of a ticket.\n"
 		"  reindex     Rebuild the index from the stored messages.\n"
+		"  fsck        Check the messages and the index for problems.\n"
 		"  version     Show version information.\n",
 		program_name);
 }
@@ -179,6 +180,7 @@ constexpr Command commands[] = {
 	{"deadline", do_deadline},
 	{"fixed", do_fixed},
 	{"found", do_found},
+	{"fsck", do_fsck},
 	{"help", do_help},
 	{"import", do_import},
 	{"init", do_init},

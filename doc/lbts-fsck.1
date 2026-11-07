@@ -1,0 +1,46 @@
+.Dd 2026-11-07
+.Dt LBTS-FSCK 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts fsck
+.Nd check the messages and the index for problems
+.Sh SYNOPSIS
+.Nm lbts fsck
+.Sh DESCRIPTION
+The command checks a LightBTS instance for problems, without changing anything.
+It reports:
+.Bl -bullet
+.It
+Message files that cannot be indexed,
+for example because they are not valid messages,
+or because they are not stored under the name that their Message-ID determines.
+These have to be fixed or removed by hand.
+.It
+Problems found by SQLite's own integrity checks of the index,
+including references to tickets that do not exist.
+.It
+Differences between the index and what rebuilding it from the messages would produce,
+for example messages that are not in the index,
+messages in the index whose file is missing,
+and tickets whose status, tags or links differ.
+.El
+.Pp
+The last two kinds of problems are fixed by running
+.Nm lbts reindex .
+In fact,
+.Nm lbts fsck
+finds the differences by rebuilding the index inside a transaction that is then rolled back,
+so it reports exactly what
+.Nm lbts reindex
+would change.
+.Pp
+Problems are printed on stdout, one per line,
+prefixed with "Message file:", "Database:" or "Index:".
+.Sh EXIT STATUS
+The command exits with status 0 if no problems were found, and with status 1 otherwise.
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-reindex 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

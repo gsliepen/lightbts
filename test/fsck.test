@@ -1,0 +1,68 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+$lbts init
+
+# Prints the file of the first message with the given subject.
+message_file() {
+	find .lightbts/messages -type f -exec grep -l "^Subject: $1\$" {} + | xargs grep -L '^In-Reply-To' | head -1
+}
+
+echo "First." | $lbts create -T foo First bug
+echo "Second." | $lbts create -S minor Second bug
+echo "Third." | $lbts create Third bug
+$lbts link 1 blocks 2
+$lbts close 3
+
+# A consistent instance
+$lbts fsck 2> output
+grep -q "^No problems found.$" output
+
+# A message file that is missing
+rm "$(message_file 'Third bug')"
+$lbts list all > list-before
+! $lbts fsck > problems 2> output
+grep -q "^Index: Message .* is in the index, but there is no file for it$" problems
+grep -q "^Run lbts reindex" output
+
+# fsck does not change the index
+$lbts list all > list-after
+cmp list-before list-after
+
+# A message file that is not in the index
+mkdir other
+(cd other && $lbts init && echo "Elsewhere." | $lbts create Other bug) 2>/dev/null
+file=$(cd other && find .lightbts/messages -type f)
+mkdir -p "$(dirname ".lightbts/messages/${file#.lightbts/messages/}")"
+cp "other/$file" ".lightbts/messages/${file#.lightbts/messages/}"
+! $lbts fsck > problems
+grep -q "^Index: Message .* is missing from the index$" problems
+grep -q "^Index: Ticket 4 is missing from the index$" problems
+
+# A message file that was changed
+file=$(message_file 'Second bug')
+sed 's/^Severity: minor$/Severity: grave/' "$file" > edited
+mv edited "$file"
+! $lbts fsck > problems
+grep -q "^Index: Ticket 2: severity is minor in the index, but grave according to the messages$" problems
+
+# Reindexing fixes the index
+$lbts reindex 2>/dev/null
+$lbts fsck 2> output
+grep -q "^No problems found.$" output
+$lbts show 2 | grep -q "^Severity: grave$"
+
+# Broken message files can't be fixed by reindexing
+echo "Not a message" > .lightbts/messages/broken
+! $lbts fsck > problems 2> output
+grep -q "^Message file: .*broken" problems
+grep -q "fixed or removed by hand" output
+rm .lightbts/messages/broken
+$lbts fsck
+
+# Extra arguments are refused
+! $lbts fsck now

@@ -19,8 +19,10 @@ or with less precision in the Received header that LightBTS adds.
 For messages that have neither, the Date header is used.
 A reply is always indexed after the message it replies to.
 .Pp
-Tickets keep the numbers they have in the current index.
-If the first message of a ticket is gone, or it now belongs to another ticket,
+Tickets keep the numbers they have in the current index:
+a message that creates a ticket gets the number of the ticket it belonged to, if that number is still free.
+If no message creates a ticket anymore,
+for example because its first message is gone, or it now belongs to another ticket,
 the ticket no longer exists, and its number will not be reused.
 If there is no index, tickets are numbered in the order they were created.
 .Pp
