@@ -1,74 +1,103 @@
 /* LightBTS -- a lightweight issue tracking system
-   Copyright © 2017-2018 Guus Sliepen <guus@lightbts.info>
+   Copyright © 2017-2026 Guus Sliepen <guus@lightbts.info>
 
    SPDX-License-Identifier: GPL-3.0+
 */
 
 #include "edit.hpp"
 
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
+#include <format>
+#include <fstream>
 #include <iostream>
-#include <fmt/ostream.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include <print>
+#include <sstream>
 #include <unistd.h>
 
-#include "lightbts.hpp"
+#include "process.hpp"
+#include "strings.hpp"
 
-using namespace std;
-using namespace fmt;
+namespace fs = std::filesystem;
 
-bool edit_interactive(LightBTS::Instance &bts, LightBTS::Message &msg, const string &hint) {
-	string editor = bts.get_config("cli", "editor");
-	if (editor.empty() && getenv("VISUAL"))
-		editor = getenv("VISUAL");
-	if (editor.empty() && getenv("EDITOR"))
-		editor = getenv("EDITOR");
-	if (editor.empty())
-		editor = "edit";
+namespace {
 
-	string tmpdir;
-	if (getenv("XDG_RUNTIME_DIR"))
-		tmpdir = getenv("XDG_RUNTIME_DIR");
-	else
-		tmpdir = "/tmp";
-	string tmpl = tmpdir + "/lightbts-" + hint + "-XXXXXX.eml";
-	int fd = mkstemps((char *)tmpl.c_str(), 4);
-	if (fd == -1) {
-		print(cerr, "Could not create temporary file {}: {}\n", tmpl, strerror(errno));
-		return false;
-	}
+/// A file created with mkstemps() that is removed when it goes out of scope.
+class TemporaryFile {
+	std::string path;
 
-	string buf = msg.to_string();
-	if(write(fd, buf.data(), buf.size()) != buf.size()) {
-		unlink(tmpl.c_str());
+	public:
+	TemporaryFile(std::string pattern, int suffix_length): path(std::move(pattern)) {
+		int fd = mkstemps(path.data(), suffix_length);
+		if (fd == -1)
+			throw std::runtime_error(std::format("Could not create temporary file {}: {}", path, std::strerror(errno)));
 		close(fd);
-		throw runtime_error("Error writing to temporary file\n");
 	}
 
-	close(fd);
+	~TemporaryFile() { unlink(path.c_str()); }
 
-	struct stat stat_before, stat_after;
+	TemporaryFile(const TemporaryFile &) = delete;
+	TemporaryFile &operator=(const TemporaryFile &) = delete;
 
-	stat(tmpl.c_str(), &stat_before);
+	const std::string &get_path() const { return path; }
+};
 
-	string command = editor + " + " + tmpl;
-	if(system(command.c_str()) != 0) {
-		print(cerr, "{} returned with a non-zero exit code\n", editor);
-		unlink(tmpl.c_str());
+std::string get_editor(const LightBTS::Instance &bts) {
+	if (auto editor = bts.get_config("cli", "editor"); !editor.empty())
+		return editor;
+	for (auto variable: {"VISUAL", "EDITOR"})
+		if (auto editor = std::getenv(variable); editor && *editor)
+			return editor;
+	return "vi";
+}
+
+fs::path get_temporary_directory() {
+	if (auto dir = std::getenv("XDG_RUNTIME_DIR"); dir && *dir)
+		return dir;
+	return fs::temp_directory_path();
+}
+
+std::string read_file(const std::string &path) {
+	std::ifstream file(path, std::ios::binary);
+	std::stringstream contents;
+	contents << file.rdbuf();
+	return contents.str();
+}
+
+}
+
+bool edit_interactive(const LightBTS::Instance &bts, LightBTS::Message &message, std::string_view hint, bool require_change) {
+	auto editor = get_editor(bts);
+	TemporaryFile file((get_temporary_directory() / std::format("lightbts-{}-XXXXXX.eml", hint)).string(), 4);
+
+	auto original = message.to_string();
+	{
+		std::ofstream out(file.get_path(), std::ios::binary);
+		out << original;
+		out.close();
+		if (!out)
+			throw std::runtime_error(std::format("Error writing to temporary file {}", file.get_path()));
+	}
+
+	// Let the shell split the editor command, so it can contain arguments.
+	if (int exit_code = LightBTS::run_process({"sh", "-c", editor + " \"$1\"", "sh", file.get_path()})) {
+		std::println(std::cerr, "{} returned with exit code {}", editor, exit_code);
 		return false;
 	}
 
-	stat(tmpl.c_str(), &stat_after);
+	auto edited = read_file(file.get_path());
 
-	if (stat_before.st_mtime == stat_after.st_mtime && stat_before.st_size == stat_after.st_size) {
-		print(cerr, "Message was not edited.\n");
-		unlink(tmpl.c_str());
+	if (LightBTS::trim(edited).empty()) {
+		std::println(std::cerr, "Message is empty.");
 		return false;
 	}
 
-	msg.clear();
-	msg.load(tmpl);
-	unlink(tmpl.c_str());
+	if (require_change && edited == original) {
+		std::println(std::cerr, "Message was not edited.");
+		return false;
+	}
 
+	message.from_string(edited);
 	return true;
 }

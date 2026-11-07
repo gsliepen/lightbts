@@ -1,8 +1,5 @@
-test('basic', files('basic.test'))
-test('config', files('config.test'))
-test('create', files('create.test'))
-test('import', files('import.test'))
-test('reply', files('reply.test'))
-test('list', files('list.test'))
-test('show', files('show.test'))
-test('action', files('action.test'))
+shell_tests = ['basic', 'config', 'create', 'import', 'reply', 'list', 'show', 'action']
+
+foreach name: shell_tests
+	test(name, files(name + '.test'), depends: lbts, workdir: meson.project_build_root())
+endforeach

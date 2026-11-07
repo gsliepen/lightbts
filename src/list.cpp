@@ -1,64 +1,88 @@
 /* LightBTS -- a lightweight issue tracking system
-   Copyright © 2017-2018 Guus Sliepen <guus@lightbts.info>
+   Copyright © 2017-2026 Guus Sliepen <guus@lightbts.info>
 
    SPDX-License-Identifier: GPL-3.0+
 */
 
+#include <print>
+#include <span>
 #include <set>
-#include <fmt/ostream.h>
 
-#include "list.hpp"
-
-#include "cli.hpp"
-#include "lightbts.hpp"
+#include "commands.hpp"
 #include "pager.hpp"
 
-using namespace std;
-using namespace fmt;
+namespace {
 
-int do_list(const char *argv0, const vector<string> &args) {
-	LightBTS::Instance bts(data_dir);
+enum class What {
+	tickets,
+	tags,
+	milestones,
+};
 
-	bool do_tags = false;
-	bool do_milestones = false;
-	set<string> tags;
-	set<string> milestones;
-	auto len = args.size();
+LightBTS::Filter parse_filter(std::span<const std::string> words) {
+	LightBTS::Filter filter;
 
-	if (!args.empty()) {
-		auto &&last_arg = args[len - 1];
-
-		if (last_arg == "tags") {
-			do_tags = true;
-			len--;
-		} else if(last_arg == "milestones") {
-			do_milestones = true;
-			len--;
-		} else if(last_arg == "bugs") {
-			len--;
-		}
+	for (auto &word: words) {
+		if (word == "all")
+			filter.status.reset();
+		else if (auto status = LightBTS::parse_status(word))
+			filter.status = status;
+		else if (auto severity = LightBTS::parse_severity(word))
+			filter.severities.push_back(*severity);
+		else
+			filter.tags.push_back(word);
 	}
 
-	Pager pager(bts.get_config("core", "pager"));
+	return filter;
+}
 
-	for(auto &&ticket: bts.list(args, len)) {
-		if (do_tags) {
-			for(auto &&tag: bts.get_tags(ticket))
+}
+
+int do_list(const Options &options, const Arguments &args) {
+	auto bts = options.open_instance();
+
+	std::span<const std::string> words = args;
+	auto what = What::tickets;
+
+	if (!words.empty()) {
+		if (words.back() == "tags")
+			what = What::tags;
+		else if (words.back() == "milestones")
+			what = What::milestones;
+
+		if (what != What::tickets || words.back() == "bugs")
+			words = words.first(words.size() - 1);
+	}
+
+	auto tickets = bts.list(parse_filter(words));
+	Pager pager(options, bts.get_config("cli", "pager"));
+
+	switch (what) {
+	case What::tickets:
+		for (auto &ticket: tickets)
+			std::print(pager, "{:>6} {:6} {:9}  {}\n", ticket.id, name(ticket.status), name(ticket.severity), ticket.title);
+		break;
+
+	case What::tags: {
+		std::set<std::string> tags;
+		for (auto &ticket: tickets)
+			for (auto &tag: bts.get_tags(ticket))
 				tags.insert(tag);
-		} else if (do_milestones) {
-			milestones.insert(bts.get_milestone(ticket));
-		} else {
-			print(pager, "{:>6} {:6} {:9}  {}\n", ticket.get_id(), ticket.get_status_name(), ticket.get_severity_name(), ticket.get_title());
-		}
+		for (auto &tag: tags)
+			std::print(pager, "{}\n", tag);
+		break;
 	}
 
-	if (do_tags) {
-		for (auto &&tag: tags)
-			print(pager, "{}\n", tag);
-	} else if (do_milestones) {
-		for (auto &&milestone: milestones)
-			print(pager, "{}\n", milestone);
+	case What::milestones: {
+		std::set<std::string> milestones;
+		for (auto &ticket: tickets)
+			if (auto milestone = bts.get_milestone(ticket); !milestone.empty())
+				milestones.insert(milestone);
+		for (auto &milestone: milestones)
+			std::print(pager, "{}\n", milestone);
+		break;
+	}
 	}
 
 	return 0;
-}	
+}

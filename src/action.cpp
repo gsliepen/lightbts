@@ -1,239 +1,185 @@
 /* LightBTS -- a lightweight issue tracking system
-   Copyright © 2018 Guus Sliepen <guus@lightbts.info>
+   Copyright © 2018-2026 Guus Sliepen <guus@lightbts.info>
 
    SPDX-License-Identifier: GPL-3.0+
 */
 
-#include <boost/algorithm/string/join.hpp>
-#include <fmt/ostream.h>
 #include <iostream>
-#include <string>
+#include <print>
+#include <ranges>
 
-#include "reply.hpp"
+#include "commands.hpp"
+#include "compose.hpp"
 
-#include "cli.hpp"
-#include "edit.hpp"
-#include "lightbts.hpp"
+namespace {
 
-using namespace std;
-using namespace fmt;
+std::string join_words(const Arguments &args, std::size_t first) {
+	return args | std::views::drop(first) | std::views::join_with(' ') | std::ranges::to<std::string>();
+}
 
-static int do_action(const string &id, const string &action) {
-	LightBTS::Instance bts(data_dir);
+bool check_argument_count(const Arguments &args, std::size_t minimum, std::size_t maximum) {
+	if (args.size() >= minimum && args.size() <= maximum)
+		return true;
+	std::println(std::cerr, "Invalid number of arguments");
+	return false;
+}
 
+constexpr auto unlimited = static_cast<std::size_t>(-1);
+
+int do_action(const Options &options, const std::string &id, const std::string &pseudo_headers) {
+	auto bts = options.open_instance();
 	auto ticket = bts.get_ticket(id);
 	auto first_message_id = bts.get_first_message_id(ticket);
 
 	if (first_message_id.empty()) {
-		print(cerr, "No message ID found for ticket {}!\n", ticket.get_id());
+		std::println(std::cerr, "No message ID found for ticket {}!", ticket.id);
 		return 1;
 	}
 
-	LightBTS::Message msg;
-	msg.set_crlf(false);
-	msg["From"] = bts.get_local_email_address();
-	msg["Subject"] = ticket.get_title();
+	auto message = compose_message(bts, options, {
+		.subject = ticket.title,
+		.pseudo_headers = pseudo_headers,
+		.in_reply_to = first_message_id,
+		.editor_hint = "action",
+		.is_action = true,
+	});
 
-	string body = action;
-
-	if (!cl_message.empty()) {
-		body.push_back('\n');
-		body.append(cl_message);
-		body.push_back('\n');
-		msg.set_body(body);
-	} else if (!batch) {
-		body.push_back('\n');
-		msg.set_body(body);
-		if (!edit_interactive(bts, msg, "action")) {
-			print(cerr, "Aborting action.\n");
-			return 1;
-		}
-	} else {
-		msg.set_body(body);
-	}
-
-	msg["To"] = "LightBTS";
-	msg["User-Agent"] = "LightBTS/" + lightbts_version;
-	msg["In-Reply-To"] = "<" + bts.get_first_message_id(ticket) + ">";
-
-	if (bts.import(msg)) {
-		print(cerr, "Import of action created a new ticket!\n");
+	if (!message) {
+		std::println(std::cerr, "Aborting action.");
 		return 1;
 	}
 
-	print(cerr, "Action recorded for bug number {}\n", ticket.get_id());
+	auto result = import_composed(bts, *message);
+	if (result.kind != LightBTS::ImportResult::Kind::appended) {
+		std::println(std::cerr, "Action was not recorded for ticket {}", ticket.id);
+		return 1;
+	}
 
+	std::println(std::cerr, "Action recorded for bug number {}", ticket.id);
 	return 0;
 }
 
-static void add_version(string &action, const string &prefix) {
-	for (auto &&version: versions)
-		action.append(format("{}: {}\n", prefix, version));
+std::string version_headers(const Options &options, std::string_view key) {
+	std::string headers;
+	for (auto &version: options.versions)
+		headers += pseudo_header(key, version);
+	return headers;
 }
 
-static void add_tags(string &action) {
-	for (auto &&tag: tags)
-		action.append(format("Tag: +{}\n", tag));
+std::string tag_headers(const Options &options) {
+	std::string headers;
+	for (auto &tag: options.tags)
+		headers += pseudo_header("Tag", "+" + tag);
+	return headers;
 }
 
-int do_close(const char *argv0, const vector<string> &args) {
-	if (args.size() != 1) {
-		print(cerr, "Invalid number of arguments\n");
+int do_status_action(const Options &options, const Arguments &args, std::string_view status, std::string_view version_key) {
+	if (!check_argument_count(args, 1, 1))
+		return 1;
+	return do_action(options, args[0], pseudo_header("Status", status) + version_headers(options, version_key) + tag_headers(options));
+}
+
+/// An action with a single value, like "lbts severity 1 minor".
+int do_single_action(const Options &options, const Arguments &args, std::string_view key) {
+	if (!check_argument_count(args, 2, 2))
+		return 1;
+	return do_action(options, args[0], pseudo_header(key, args[1]));
+}
+
+/// An action where all remaining arguments form one value, like "lbts retitle 1 New title".
+int do_words_action(const Options &options, const Arguments &args, std::string_view key) {
+	if (!check_argument_count(args, 2, unlimited))
+		return 1;
+	return do_action(options, args[0], pseudo_header(key, join_words(args, 1)));
+}
+
+/// An action with a pseudo-header for each remaining argument, like "lbts found 1 1.0 1.1".
+int do_multiple_action(const Options &options, const Arguments &args, std::string_view key) {
+	if (!check_argument_count(args, 2, unlimited))
+		return 1;
+
+	std::string headers;
+	for (auto &value: args | std::views::drop(1))
+		headers += pseudo_header(key, value);
+	return do_action(options, args[0], headers);
+}
+
+int do_link_action(const Options &options, const Arguments &args, std::string_view prefix) {
+	if (!check_argument_count(args, 3, 3))
+		return 1;
+
+	if (!LightBTS::parse_link_type(args[1])) {
+		std::println(std::cerr, "Invalid link type");
 		return 1;
 	}
 
-	string action = "Status: closed\n";
-	add_version(action, "Fixed");
-	add_tags(action);
-
-	return do_action(args[0], action);
+	return do_action(options, args[0], pseudo_header(std::string(prefix) + args[1], args[2]));
 }
 
-int do_reopen(const char *argv0, const vector<string> &args) {
-	if (args.size() != 1) {
-		print(cerr, "Invalid number of arguments\n");
+}
+
+int do_close(const Options &options, const Arguments &args) {
+	return do_status_action(options, args, "closed", "Fixed");
+}
+
+int do_reopen(const Options &options, const Arguments &args) {
+	return do_status_action(options, args, "open", "Found");
+}
+
+int do_retitle(const Options &options, const Arguments &args) {
+	return do_words_action(options, args, "Title");
+}
+
+int do_found(const Options &options, const Arguments &args) {
+	return do_multiple_action(options, args, "Found");
+}
+
+int do_notfound(const Options &options, const Arguments &args) {
+	return do_multiple_action(options, args, "Notfound");
+}
+
+int do_fixed(const Options &options, const Arguments &args) {
+	return do_multiple_action(options, args, "Fixed");
+}
+
+int do_notfixed(const Options &options, const Arguments &args) {
+	return do_multiple_action(options, args, "Notfixed");
+}
+
+int do_severity(const Options &options, const Arguments &args) {
+	return do_single_action(options, args, "Severity");
+}
+
+int do_link(const Options &options, const Arguments &args) {
+	return do_link_action(options, args, "");
+}
+
+int do_unlink(const Options &options, const Arguments &args) {
+	return do_link_action(options, args, "Un");
+}
+
+int do_tags(const Options &options, const Arguments &args) {
+	return do_words_action(options, args, "Tags");
+}
+
+int do_owner(const Options &options, const Arguments &args) {
+	return do_words_action(options, args, "Owner");
+}
+
+int do_noowner(const Options &options, const Arguments &args) {
+	if (!check_argument_count(args, 1, 1))
 		return 1;
-	}
-
-	string action = "Status: open\n";
-	add_version(action, "Found");
-	add_tags(action);
-
-	return do_action(args[0], action);
+	return do_action(options, args[0], pseudo_header("Owner", "-"));
 }
 
-int do_retitle(const char *argv0, const vector<string> &args) {
-	if (args.size() < 2) {
-		print(cerr, "Invalid number of arguments\n");
-		return 1;
-	}
-
-	string action = "Title: " + args[1];
-	for (size_t i = 2; i < args.size(); i++)
-		action += " " + args[i];
-
-	return do_action(args[0], action);
+int do_deadline(const Options &options, const Arguments &args) {
+	return do_single_action(options, args, "Deadline");
 }
 
-int do_single_action(const char *argv0, const vector<string> &args, const string &prefix) {
-	if (args.size() != 2) {
-		print(cerr, "Invalid number of arguments\n");
-		return 1;
-	}
-
-	string action = format("{}: {}\n", prefix, args[1]);
-	return do_action(args[0], action);
+int do_milestone(const Options &options, const Arguments &args) {
+	return do_single_action(options, args, "Milestone");
 }
 
-int do_multiple_action(const char *argv0, const vector<string> &args, const string &prefix) {
-	if (args.size() < 2) {
-		print(cerr, "Invalid number of arguments\n");
-		return 1;
-	}
-
-	string action;
-	for (size_t i = 1; i < args.size(); i++)
-		action.append(format("{}: {}\n", prefix, args[i]));
-
-	return do_action(args[0], action);
+int do_progress(const Options &options, const Arguments &args) {
+	return do_single_action(options, args, "Progress");
 }
-
-int do_found(const char *argv0, const vector<string> &args) {
-	return do_multiple_action(argv0, args, "Found");
-}
-
-int do_notfound(const char *argv0, const vector<string> &args) {
-	return do_multiple_action(argv0, args, "Notfound");
-}
-
-int do_fixed(const char *argv0, const vector<string> &args) {
-	return do_multiple_action(argv0, args, "Fixed");
-}
-
-int do_notfixed(const char *argv0, const vector<string> &args) {
-	return do_multiple_action(argv0, args, "Notfixed");
-}
-
-int do_severity(const char *argv0, const vector<string> &args) {
-	return do_single_action(argv0, args, "Severity");
-}
-
-int do_link(const char *argv0, const vector<string> &args) {
-	if (args.size() != 3) {
-		print(cerr, "Invalid number of arguments\n");
-		return 1;
-	}
-
-	if (!LightBTS::is_valid_link_type(args[1])) {
-		print(cerr, "Invalid link type\n");
-		return 1;
-	}
-
-	string action = format("{}: {}\n", args[1], args[2]);
-
-	return do_action(args[0], action);
-}
-
-int do_unlink(const char *argv0, const vector<string> &args) {
-	if (args.size() != 3) {
-		print(cerr, "Invalid number of arguments\n");
-		return 1;
-	}
-
-	if (!LightBTS::is_valid_link_type(args[1])) {
-		print(cerr, "Invalid link type\n");
-		return 1;
-	}
-
-	string action = format("Un{}: {}\n", args[1], args[2]);
-
-	return do_action(args[0], action);
-}
-
-int do_tags(const char *argv0, const vector<string> &args) {
-	if (args.size() < 2) {
-		print(cerr, "Invalid number of arguments\n");
-		return 1;
-	}
-
-	string action = "Tags:";
-	for (size_t i = 1; i < args.size(); i++)
-		action += " " + args[i];
-
-	return do_action(args[0], action);
-}
-
-int do_owner(const char *argv0, const vector<string> &args) {
-	if (args.size() < 2) {
-		print(cerr, "Invalid number of arguments\n");
-		return 1;
-	}
-
-	string action = "Owner:";
-	for (size_t i = 1; i < args.size(); i++)
-		action += " " + args[i];
-
-	return do_action(args[0], action);
-}
-
-int do_noowner(const char *argv0, const vector<string> &args) {
-	if (args.size() != 1) {
-		print(cerr, "Invalid number of arguments\n");
-		return 1;
-	}
-
-	return do_action(args[0], "Owner: -\n");
-}
-
-int do_deadline(const char *argv0, const vector<string> &args) {
-	return do_single_action(argv0, args, "Deadline");
-}
-
-int do_milestone(const char *argv0, const vector<string> &args) {
-	return do_single_action(argv0, args, "Milestone");
-}
-
-int do_progress(const char *argv0, const vector<string> &args) {
-	return do_single_action(argv0, args, "Progress");
-}
-

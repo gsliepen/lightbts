@@ -1,112 +1,104 @@
 /* LightBTS -- a lightweight issue tracking system
-   Copyright © 2017-2018 Guus Sliepen <guus@lightbts.info>
+   Copyright © 2017-2026 Guus Sliepen <guus@lightbts.info>
 
    SPDX-License-Identifier: GPL-3.0+
 */
 
-#include <fstream>
-#include <fmt/format.h>
-#include <fmt/ostream.h>
-
 #include "config.hpp"
 
-using namespace std;
-using namespace fmt;
-namespace fs = boost::filesystem;
+#include <format>
+#include <fstream>
+#include <print>
+#include <stdexcept>
 
-static void strip(string &s) {
-	auto start = s.find_first_not_of(" \t\r\n");
-	auto end = s.find_last_not_of(" \t\r\n");
-	if (start == string::npos) {
-		s.clear();
-	} else {
-		s.erase(end + 1);
-		s.erase(0, start);
-	}
-}
+#include "strings.hpp"
 
-void Config::load(const fs::path &path) {
-	ifstream file(path.string());
+namespace LightBTS {
 
-	string line;
-	string section;
+void Config::load(const std::filesystem::path &path) {
+	std::ifstream file(path);
+	if (!file.is_open())
+		throw std::runtime_error(std::format("Could not read {}", path.string()));
 
-	while (getline(file, line)) {
-		strip(line);
+	std::string line;
+	std::string section;
 
-		if (line.empty() || line[0] == '#')
+	while (std::getline(file, line)) {
+		auto text = trim(line);
+
+		if (text.empty() || text.front() == '#' || text.front() == ';')
 			continue;
 
-		if (line[0] == '[') {
-			if (line[line.size() - 1] == ']')
-				section = line.substr(1, line.size() - 2);
+		if (text.front() == '[') {
+			if (text.back() == ']')
+				section = trim(text.substr(1, text.size() - 2));
 			continue;
 		}
 
-		auto it = line.find('=');
-		if (it == string::npos)
+		auto equals = text.find('=');
+		if (equals == text.npos)
 			continue;
 
-		string variable = line.substr(0, it - 1);
-		string value = line.substr(it + 1);
-		strip(variable);
-		strip(value);
-
-		if (variable.empty() || value.empty())
+		auto variable = trim(text.substr(0, equals));
+		if (variable.empty())
 			continue;
 
-		db[section][variable] = value;
-	}
-}
-
-void Config::save(const fs::path &path) {
-	ofstream file(path.string());
-
-	for (auto &section: db) {
-		print(file, "[{}]\n", section.first);
-		for (auto &entry: section.second)
-			print(file, "\t{} = {}\n", entry.first, entry.second);
-	}
-}
-
-bool Config::exists(const string &section, const string &variable) {
-	if (db.find(section) == db.end())
-		return false;
-
-	if (!variable.empty() && db[section].find(variable) == db[section].end())
-		return false;
-
-	return true;
-}
-
-void Config::set(const string &section, const string &variable, const string &value) {
-	db[section][variable] = value;
-}
-
-void Config::set_bool(const string &section, const string &variable, const bool value) {
-	db[section][variable] = value ? "true" : "false";
-}
-
-string Config::get(const string &section, const string &variable, const string &def) {
-	auto sit = db.find(section);
-	if (sit != db.end()) {
-		auto vit = sit->second.find(variable);
-		if (vit != db[section].end())
-			return vit->second;
+		sections[section][std::string(variable)] = trim(text.substr(equals + 1));
 	}
 
-	if (!def.empty())
-		db[section][variable] = def;
-
-	return def;
+	if (file.bad())
+		throw std::runtime_error(std::format("Error while reading {}", path.string()));
 }
 
-bool Config::get_bool(const string &section, const string &variable, bool def) {
-	auto val = get(section, variable, def ? "true" : "false");
-	if (val == "true" || val == "yes")
+void Config::save(const std::filesystem::path &path) const {
+	auto temporary = path;
+	temporary += ".new";
+
+	{
+		std::ofstream file(temporary);
+		for (auto &[section, variables]: sections) {
+			std::println(file, "[{}]", section);
+			for (auto &[variable, value]: variables)
+				std::println(file, "\t{} = {}", variable, value);
+		}
+		file.close();
+		if (!file)
+			throw std::runtime_error(std::format("Could not write {}", temporary.string()));
+	}
+
+	std::filesystem::rename(temporary, path);
+}
+
+bool Config::exists(const std::string &section, const std::string &variable) const {
+	auto it = sections.find(section);
+	return it != sections.end() && it->second.contains(variable);
+}
+
+std::string Config::get(const std::string &section, const std::string &variable, const std::string &fallback) const {
+	if (auto it = sections.find(section); it != sections.end())
+		if (auto value = it->second.find(variable); value != it->second.end())
+			return value->second;
+	return fallback;
+}
+
+bool Config::get_bool(const std::string &section, const std::string &variable, bool fallback) const {
+	if (!exists(section, variable))
+		return fallback;
+
+	auto value = to_lower(get(section, variable));
+	if (value == "true" || value == "yes" || value == "1")
 		return true;
-	if (val == "false" || val == "no")
+	if (value == "false" || value == "no" || value == "0")
 		return false;
-	throw runtime_error("Invalid value for boolean variable " + section + "." + variable);
+	throw std::runtime_error(std::format("Invalid value for boolean variable {}.{}", section, variable));
 }
 
+void Config::set(const std::string &section, const std::string &variable, const std::string &value) {
+	sections[section][variable] = value;
+}
+
+void Config::set_bool(const std::string &section, const std::string &variable, bool value) {
+	sections[section][variable] = value ? "true" : "false";
+}
+
+}

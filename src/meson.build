@@ -1,42 +1,54 @@
-gentemplates = executable('gentemplates',
-	'gentemplates.cpp',
-	dependencies: [
-		boost,
-	],
+configuration = configuration_data()
+configuration.set('VERSION', meson.project_version())
+version_header = configure_file(
+	input: 'version.hpp.in',
+	output: 'version.hpp',
+	configuration: configuration,
+)
+
+gentemplates = executable('gentemplates', 'gentemplates.cpp', native: true)
+
+template_files = files(
+	'../templates/bug.html',
+	'../templates/lightbts.css',
+	'../templates/main.html',
+	'../templates/new.txt',
+	'../templates/reply.txt',
 )
 
 templates = custom_target('gen-templates',
-	input: [
-		'../templates/bug.html',
-		'../templates/lightbts.css',
-		'../templates/main.html',
-		'../templates/new.txt',
-		'../templates/reply.txt'
-	],
+	input: template_files,
 	output: 'templates.inl',
 	capture: true,
-	command: [gentemplates, '@INPUT@'],
+	command: [gentemplates, 'embedded_templates', '@INPUT@'],
 )
 
-executable('lbts',
+lightbts_core = static_library('lightbts-core',
+	'config.cpp',
+	'lightbts.cpp',
+	'process.cpp',
+	'pseudoheaders.cpp',
+	templates,
+	dependencies: [blake2, mimesis, sqlite3],
+)
+
+core = declare_dependency(
+	link_with: lightbts_core,
+	include_directories: include_directories('.'),
+	dependencies: [mimesis, sqlite3],
+)
+
+lbts = executable('lbts',
 	'action.cpp',
 	'cli.cpp',
-	'config.cpp',
+	'compose.cpp',
 	'create.cpp',
 	'edit.cpp',
 	'import.cpp',
-	'lightbts.cpp',
 	'list.cpp',
 	'pager.cpp',
 	'reply.cpp',
 	'show.cpp',
-	templates,
-	dependencies: [
-		blake2,
-		boost,
-		fmtlib,
-		mimesis,
-		sqlite3,
-	],
-	install: true
+	dependencies: core,
+	install: true,
 )

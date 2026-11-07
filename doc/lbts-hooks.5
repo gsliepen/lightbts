@@ -1,4 +1,4 @@
-.Dd 2018-04-08
+.Dd 2026-11-07
 .Dt LBTS-HOOKS 5
 .\" Manual page created by:
 .\" Guus Sliepen <guus@lightbts.info>
@@ -15,20 +15,36 @@ but that can be changed via the
 .Va core.hooks
 configuration variable.
 .Pp
-Before LightBTS calls a hook, it changes its working directory to LightBTS's data directory.
+Hooks are run with the
+.Pa .lightbts
+directory as their working directory.
 Hooks are called without arguments, information is passed solely via environment variables.
-Output to stdout and stderr is ignored.
+Stdin and stdout are connected to
+.Pa /dev/null ,
+stderr is passed through so hooks can report problems.
+Hooks must be executable files, scripts need a
+.Ql #!
+line.
 The exit code of a hook can influence the behavior of LightBTS.
 .Sh HOOKS
 .Bl -tag -width indent
 .It Pa pre-index
 This is called when a new message is to be imported into the database.
-If this hook exits with a non-zero exit code, the message will be rejected.
+It is called after the message has been stored and checked not to be a duplicate,
+but before it is added to the index.
+If this hook exits with a non-zero exit code, the message will be rejected and its file removed.
 .It Pa post-index
 This is called when a new message has been imported and indexed into the database.
 The exit code is ignored.
+.El
 .Sh ENVIRONMENT VARIABLES
 .Bl -tag -width indent
+.It Ev LIGHTBTS_DIR
+The directory containing the
+.Pa .lightbts
+directory, so that hooks can run
+.Xr lbts 1
+on the same instance.
 .It Ev MESSAGE_FILE
 This contains the full path to the message file.
 It is strongly recommended that you do not modify, move or delete the file in any way.

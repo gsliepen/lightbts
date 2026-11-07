@@ -1,44 +1,41 @@
 /* LightBTS -- a lightweight issue tracking system
-   Copyright © 2017 Guus Sliepen <guus@lightbts.info>
+   Copyright © 2017-2026 Guus Sliepen <guus@lightbts.info>
 
    SPDX-License-Identifier: GPL-3.0+
 */
 
 #include "pager.hpp"
 
-#include "cli.hpp"
+#include <cstdlib>
 
-using namespace std;
-
-Pager::Pager(string cmd) {
-	if (batch) {
-		fd = stdout;
+Pager::Pager(const Options &options, std::string command) {
+	if (options.batch)
 		return;
+
+	if (command.empty()) {
+		if (auto pager = std::getenv("LIGHTBTS_PAGER"))
+			command = pager;
+		else if (auto pager = std::getenv("PAGER"))
+			command = pager;
+		else
+			command = "less";
 	}
 
-	if (cmd.empty()) {
-		if (getenv("LIGHTBTS_PAGER"))
-			cmd = getenv("LIGHTBTS_PAGER");
-		else if (getenv("PAGER"))
-			cmd = getenv("PAGER");
-		else
-			cmd = "less";
-	}
-	
-	if (cmd.empty() || cmd == "-" || cmd == "cat") {
-		fd = stdout;
-	} else {
-		if (!getenv("LESS"))
-			cmd = "LESS=FRX " + cmd;
-		fd = popen(cmd.c_str(), "w");
-		if (fd)
-			fd_is_popen = true;
-		else
-			fd = stdout;
+	if (command.empty() || command == "-" || command == "cat")
+		return;
+
+	if (!std::getenv("LESS"))
+		command = "LESS=FRX " + command;
+
+	if (auto pipe = popen(command.c_str(), "w")) {
+		file = pipe;
+		is_pipe = true;
 	}
 }
 
 Pager::~Pager() {
-	if (fd_is_popen)
-		pclose(fd);
+	if (is_pipe)
+		pclose(file);
+	else
+		std::fflush(file);
 }

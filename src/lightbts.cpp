@@ -1,169 +1,211 @@
 /* LightBTS -- a lightweight issue tracking system
-   Copyright © 2017-2018 Guus Sliepen <guus@lightbts.info>
+   Copyright © 2017-2026 Guus Sliepen <guus@lightbts.info>
 
    SPDX-License-Identifier: GPL-3.0+
 */
 
-#include <iostream>
-#include <sstream>
-#include <limits.h>
-#include <unistd.h>
-#include <boost/filesystem.hpp>
-#include <boost/algorithm/string.hpp>
-#include <fmt/ostream.h>
-#include <blake2.h>
-#include <cstdio>
-
 #include "lightbts.hpp"
+
+#include <blake2.h>
+#include <charconv>
+#include <chrono>
+#include <climits>
+#include <cstdlib>
+#include <format>
+#include <fstream>
+#include <iostream>
+#include <print>
+#include <pwd.h>
+#include <sstream>
+#include <stdexcept>
+#include <unistd.h>
+
+#include "embedded.hpp"
+#include "process.hpp"
+#include "pseudoheaders.hpp"
+#include "strings.hpp"
 #include "templates.inl"
-
-using namespace std;
-using namespace fmt;
-namespace fs = boost::filesystem;
-using namespace boost::algorithm;
-
-static string unquote(const string &in) {
-	if (in.empty())
-		return in;
-	if (in[0] == '<' && in[in.size() - 1] == '>')
-		return in.substr(1, in.size() - 2);
-	return in;
-}
-
-static string quote(const string &in) {
-	if (in.empty())
-		return "<>";
-	if (in[0] == '<' && in[in.size() - 1] == '>')
-		return in;
-	return '<' + in + '>';
-}
 
 namespace LightBTS {
 
-bool is_valid_status(const string &name) {
-	for (auto &&status: status_names)
-		if (status == name)
-			return true;
-	return false;
+std::string unquote_message_id(std::string_view message_id) {
+	message_id = trim(message_id);
+	if (message_id.size() >= 2 && message_id.front() == '<' && message_id.back() == '>')
+		message_id = message_id.substr(1, message_id.size() - 2);
+	return std::string(message_id);
 }
 
-bool is_valid_severity(const string &name) {
-	for (auto &&severity: severity_names)
-		if (severity == name)
-			return true;
-	return false;
+namespace {
+
+constexpr int application_id = 0x4c425453;
+constexpr int index_version = 4;
+
+std::string hash_message_id(std::string_view message_id) {
+	auto unquoted = unquote_message_id(message_id);
+	if (unquoted.empty())
+		throw std::runtime_error("Invalid Message-ID");
+
+	std::array<std::uint8_t, 24> hash;
+	if (blake2b(hash.data(), unquoted.data(), nullptr, hash.size(), unquoted.size(), 0))
+		throw std::runtime_error("Hash function failed");
+
+	std::string result;
+	for (auto byte: hash)
+		result += std::format("{:02x}", byte);
+	return result;
 }
 
-bool is_valid_link_type(const string &name) {
-	for (auto &&link_type: link_names)
-		if (link_type == name)
-			return true;
-	return false;
+std::int64_t current_unix_time() {
+	return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
-int status_index(const string &name) {
-	int i = 0;
-	for (auto &&status: status_names)
-		if (status == name)
-			return i;
-		else
-			i++;
-	throw runtime_error("Invalid status name");
+std::optional<std::int64_t> parse_integer(std::string_view text) {
+	std::int64_t value;
+	auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+	if (error != std::errc() || end != text.data() + text.size())
+		return std::nullopt;
+	return value;
 }
 
-int severity_index(const string &name) {
-	int i = 0;
-	for (auto &&severity: severity_names)
-		if (severity == name)
-			return i;
-		else
-			i++;
-	throw runtime_error("Invalid severity name");
+bool is_valid_date(std::string_view text) {
+	std::chrono::year_month_day date;
+	std::istringstream in{std::string(text)};
+	in >> std::chrono::parse("%F", date);
+	return in && in.peek() == std::char_traits<char>::eof() && date.ok();
 }
 
-int link_type_index(const string &name) {
-	int i = 0;
-	for (auto &&link_type: link_names)
-		if (link_type == name)
-			return i;
-		else
-			i++;
-	throw runtime_error("Invalid link type name");
+std::string read_file(const fs::path &path) {
+	std::ifstream file(path, std::ios::binary);
+	std::stringstream contents;
+	contents << file.rdbuf();
+	if (!file)
+		throw std::runtime_error(std::format("Could not read {}", path.string()));
+	return contents.str();
 }
 
-Instance::Instance(const string &path, Flags flags) {
-	init(path, flags == Flags::INIT);
+Ticket ticket_from_row(SQLite3::row row) {
+	return {
+		.id = row.get_int64(0),
+		.title = row.get_string(1),
+		.status = static_cast<Status>(row.get_int(2)),
+		.severity = static_cast<Severity>(row.get_int(3)),
+	};
 }
 
-Instance::~Instance() {
+std::string placeholders(std::size_t count) {
+	std::string result;
+	for (std::size_t i = 0; i < count; i++)
+		result += i ? ", ?" : "?";
+	return result;
 }
 
-string Instance::get_config(const string &section, const string &variable) {
-	return config.get(section, variable);
 }
 
-void Instance::set_config(const string &section, const string &variable, const string &value) {
-	return config.set(section, variable, value);
-}
+Instance::Instance(const fs::path &start_dir, Mode mode, InstanceOptions options): no_hooks(options.no_hooks) {
+	auto dir = start_dir;
 
-void Instance::save_config() {
-	config.save(base_dir / "config");
-}
+	if (dir.empty())
+		if (auto env_dir = std::getenv("LIGHTBTS_DIR"))
+			dir = env_dir;
 
-string Instance::get_local_email_address() {
-	// TODO: have Mimesis check that we have/create a valid From address.
-	if (!admin.empty())
-		return admin;
+	if (dir.empty())
+		dir = fs::current_path();
 
-	string address;
+	dir = fs::absolute(dir).lexically_normal();
+	if (!dir.has_filename())
+		dir = dir.parent_path();
 
-	if (getenv("EMAIL"))
-		address = getenv("EMAIL");
-
-	if (address.empty()) {
-		char login_name[LOGIN_NAME_MAX] = "";
-		char host_name[HOST_NAME_MAX] = "";
-		if (getlogin_r(login_name, sizeof login_name) != 0)
-			throw runtime_error("Could not determine login name");
-		if (gethostname(host_name, sizeof host_name) != 0)
-			throw runtime_error("Could not determine host name");
-		address = format("{}@{}", login_name, host_name);
+	if (mode == Mode::create) {
+		if (fs::exists(dir / ".lightbts" / "config"))
+			throw std::runtime_error("LightBTS instance already exists");
 	} else {
-		if (address.find(" <") != address.npos)
-			return address;
+		while (!fs::exists(dir / ".lightbts" / "config")) {
+			auto parent = dir.parent_path();
+			if (parent == dir)
+				throw std::runtime_error("No LightBTS instance found");
+			dir = parent;
+		}
 	}
 
-	string fullname;
+	project_dir = dir;
+	base_dir = dir / ".lightbts";
 
-	if (getenv("FULLNAME"))
-		fullname = getenv("FULLNAME");
-
-	if (fullname.empty())
-		return address;
+	if (mode == Mode::create)
+		set_default_config();
 	else
-		return format("{} <{}>", fullname, address);
+		config.load(base_dir / "config");
+
+	// Relative paths are relative to the .lightbts directory, absolute paths replace it.
+	dbfile = base_dir / config.get("core", "index", "index");
+	maildir = base_dir / config.get("core", "messages", "messages");
+	hookdir = base_dir / config.get("core", "hooks", "hooks");
+	templatedir = base_dir / config.get("core", "templates", "templates");
+
+	if (mode != Mode::read_only) {
+		fs::create_directories(base_dir);
+		fs::create_directories(maildir);
+	}
+
+	if (mode == Mode::create) {
+		fs::create_directories(hookdir);
+		fs::create_directories(templatedir);
+		install_templates();
+	}
+
+	init_index(mode);
+
+	if (mode == Mode::create)
+		save_config();
 }
 
-void Instance::init_index(const fs::path &filename) {
-	db.open(filename.string());
-	db.execute("PRAGMA foreign_key = on");
+void Instance::set_default_config() {
+	config.set("core", "index", "index");
+	config.set("core", "messages", "messages");
+	config.set("core", "hooks", "hooks");
+	config.set("core", "templates", "templates");
+	config.set("core", "project", "");
+	config.set("core", "admin", "");
+	config.set_bool("core", "respond-to-new", true);
+	config.set_bool("core", "respond-to-reply", true);
+
+	config.set("email", "address", "");
+	config.set("email", "name", "");
+	config.set("email", "smtphost", "");
+
+	config.set("web", "root", "");
+	config.set("web", "static-root", "");
+}
+
+void Instance::install_templates() const {
+	for (auto &[filename, data]: embedded_templates) {
+		auto path = templatedir / filename;
+		if (fs::exists(path))
+			continue;
+
+		std::ofstream out(path, std::ios::binary);
+		out << data;
+		out.close();
+		if (!out)
+			throw std::runtime_error(std::format("Could not write template {}", path.string()));
+	}
+}
+
+void Instance::init_index(Mode mode) {
+	db.open(dbfile.string(), mode == Mode::read_only);
+
 	auto version = db.execute("PRAGMA user_version").get_int(0);
-	auto appid_record = db.execute("PRAGMA application_id");
-	int appid = 0;
-	if (appid_record)
-		appid = appid_record.get_int(0);
+	auto appid = db.execute("PRAGMA application_id").get_int(0);
 
-	if (appid || version)
-		if (appid != 0x4c425453)
-			throw runtime_error("Index is a SQLite database not created by LightBTS!");
-
-	if (!appid)
-		db.execute("PRAGMA application_id=0x4c425453");
+	if ((appid || version) && appid != application_id)
+		throw std::runtime_error("Index is a SQLite database not created by LightBTS!");
 
 	if (!version) {
-		print(cerr, "Creating index...\n");
+		if (mode == Mode::read_only)
+			throw std::runtime_error("The index has not been created yet");
 
-		auto tx = db.begin();
+		std::println(std::cerr, "Creating index...");
+
+		auto transaction = db.begin();
 		db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER, deadline INTEGER, progress INTEGER NOT NULL DEFAULT 0, milestone TEXT)");
 		db.execute("CREATE TABLE links (a INTEGER, b INTEGER, type INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))");
 		db.execute("CREATE INDEX links_a_index ON links (a)");
@@ -178,535 +220,491 @@ void Instance::init_index(const fs::path &filename) {
 		db.execute("CREATE TABLE versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))");
 		db.execute("CREATE INDEX versions_bug_index ON versions (bug)");
 		db.execute("CREATE INDEX versions_version_index ON versions (version)");
-		db.execute("PRAGMA user_version=4");
-		tx.commit();
-
-		version = 4;
+		db.execute(std::format("PRAGMA application_id = {}", application_id));
+		db.execute(std::format("PRAGMA user_version = {}", index_version));
+		transaction.commit();
+	} else if (version < index_version) {
+		throw std::runtime_error(std::format("Unsupported index version {}, use the Python prototype of LightBTS to upgrade it to version {}", version, index_version));
+	} else if (version > index_version) {
+		throw std::runtime_error(std::format("Unknown index version {}", version));
 	}
 
-	if (version < 0 || version > 4)
-		throw runtime_error(format("Unknown index version {}", version));
-
-	if (version < 4) {
-		print(cerr, "Old index, use the Python prototype of LightBTS to upgrade to version 4!");
-		throw runtime_error(format("Unsupported index version {}", version));
-	}
+	db.execute("PRAGMA foreign_keys = ON");
 }
 
-void Instance::init(const fs::path &start_dir, bool create) {
-	fs::path dir = start_dir;
-
-	if (dir.empty()) {
-		char *env_dir = getenv("LIGHTBTS_DIR");
-		if (env_dir)
-			dir = env_dir;
-	}
-
-	if (dir.empty())
-		dir = fs::current_path();
-
-	if (create) {
-		if (fs::exists(dir / ".lightbts" / "config"))
-			throw runtime_error("LightBTS instance already exists");
-	} else {
-		while (true) {
-			if (fs::exists(dir / ".lightbts" / "config"))
-				break;
-
-			auto parent = dir.parent_path();
-			if (parent == dir)
-				throw runtime_error("No LightBTS instance found");
-			dir = parent;
-		}
-	}
-
-	base_dir = dir / ".lightbts";
-
-	if (create && !fs::exists(base_dir / "config")) {
-		config.set("core", "index", "index");
-		config.set("core", "messages", "messages");
-		config.set("core", "hooks", "hooks");
-		config.set("core", "templates", "templates");
-		config.set("core", "project", "");
-		config.set("core", "admin", "");
-		config.set_bool("core", "respond-to-new", true);
-		config.set_bool("core", "respond-to-reply", true);
-
-		config.set("email", "address", "");
-		config.set("email", "name", "");
-		config.set("email", "smtphost", "");
-
-		config.set("web", "root", "");
-		config.set("web", "static-root", "");
-	} else {
-		config.load(base_dir / "config");
-	}
-
-	// Core configuration
-	dbfile = fs::absolute(config.get("core", "index", "index"), base_dir);
-	maildir = fs::absolute(config.get("core", "messages", "messages"), base_dir);
-	hookdir = fs::absolute(config.get("core", "hooks", "hooks"), base_dir);
-	templatedir = fs::absolute(config.get("core", "templates", "templates"), base_dir);
-	project = config.get("core", "project");
-	admin = config.get("core", "admin");
-	respond_to_new = config.get_bool("core", "respond-to-new", true);
-	respond_to_reply = config.get_bool("core", "respond-to-reply", true);
-
-	// Email configuration
-	emailaddress = config.get("email", "address");
-	emailname = config.get("email", "name");
-	smtphost = config.get("email", "smtphost");
-
-	// Web configuration
-	webroot = config.get("web", "root");
-	staticroot = config.get("web", "static-root");
-
-	// Create directories if necessary
-	fs::create_directories(base_dir);
-	fs::create_directories(maildir);
-	if (create) {
-		fs::create_directories(hookdir);
-		fs::create_directories(templatedir);
-	}
-
-	// Install templates
-	if (create) {
-		for (auto &&tmpl: templates) {
-			auto path = templatedir / tmpl.filename;
-			if (!fs::exists(path)) {
-				ofstream out(path.string());
-				if (!out.is_open())
-					throw runtime_error("Could not create template file");
-				out << tmpl.data;
-				out.close();
-				if (out.fail())
-					throw runtime_error("Could not write template file");
-			}
-		}
-	}
-
-	// Initialize the index
-	init_index(dbfile);
-
-	// Store initial configuration
-	if (create) {
-		config.save(base_dir / "config");
-	}
+bool Instance::has_config(const std::string &section, const std::string &variable) const {
+	return config.exists(section, variable);
 }
 
-vector<Ticket> Instance::list(const vector<string> &args, size_t len) {
-	string cmd = "SELECT id, title, status, severity FROM bugs WHERE 1";
+std::string Instance::get_config(const std::string &section, const std::string &variable) const {
+	return config.get(section, variable);
+}
 
-	// apply filters
-	int status = 1;
-	vector<int> severities;
-	vector<string> tags;
+void Instance::set_config(const std::string &section, const std::string &variable, const std::string &value) {
+	config.set(section, variable, value);
+}
 
-	for (size_t i = 0; i < len; i++) {
-		if (args[i] == "all") {
-			status = -1;
-		} else if (args[i] == "closed") {
-			status = 0;
-		} else if (args[i] == "open") {
-			status = 1;
-		} else if (is_valid_severity(args[i])) {
-			severities.push_back(severity_index(args[i]));
-		} else {
-			tags.push_back(args[i]);
-		}
+void Instance::save_config() const {
+	config.save(base_dir / "config");
+}
+
+std::string Instance::get_template(std::string_view name) const {
+	if (name.contains('/'))
+		throw std::invalid_argument("Invalid template name");
+
+	auto path = templatedir / name;
+	if (fs::exists(path))
+		return read_file(path);
+
+	for (auto &[filename, data]: embedded_templates)
+		if (filename == name)
+			return std::string(data);
+
+	throw std::runtime_error(std::format("No template named {}", name));
+}
+
+std::string Instance::get_local_email_address() const {
+	if (auto admin = config.get("core", "admin"); !admin.empty())
+		return admin;
+
+	std::string address;
+	if (auto email = std::getenv("EMAIL"))
+		address = email;
+
+	if (address.contains('<'))
+		return address;
+
+	auto user = getpwuid(getuid());
+
+	if (address.empty()) {
+		std::string login;
+		if (user)
+			login = user->pw_name;
+		else if (auto name = std::getenv("USER"))
+			login = name;
+		else
+			throw std::runtime_error("Could not determine login name");
+
+		std::array<char, HOST_NAME_MAX + 1> host_name{};
+		if (gethostname(host_name.data(), host_name.size() - 1) != 0)
+			throw std::runtime_error("Could not determine host name");
+
+		address = std::format("{}@{}", login, host_name.data());
 	}
 
-	if (status != -1)
-		cmd += " AND status=?";
+	std::string full_name;
+	if (auto name = std::getenv("FULLNAME"))
+		full_name = name;
+	else if (user && user->pw_gecos)
+		full_name = std::string_view(user->pw_gecos).substr(0, std::string_view(user->pw_gecos).find(','));
 
-	if (!severities.empty()) {
-		cmd += " AND (0";
-		for (auto &&severity: severities)
-			cmd += " OR severity=?";
-		cmd += ")";
-	}
+	if (trim(full_name).empty())
+		return address;
 
-	if (!tags.empty()) {
-		cmd += " AND (0";
-		for (auto &&tag: tags)
-			cmd += " OR EXISTS (SELECT 1 FROM tags WHERE bug=id AND tag=?)";
-		cmd += ")";
-	}
+	return std::format("{} <{}>", trim(full_name), address);
+}
 
-	auto stmt = db.prepare(cmd);
-	if (status != -1)
-		stmt.bind(status);
-	for (auto &&severity: severities)
-		stmt.bind(severity);
-	for (auto &&tag: tags)
-		stmt.bind(tag);
+std::vector<Ticket> Instance::list(const Filter &filter) {
+	std::string sql = "SELECT id, title, status, severity FROM bugs WHERE 1";
 
-	vector<Ticket> tickets;
-	while(stmt.step() == SQLITE_ROW)
-		tickets.emplace_back(stmt.column_string(0), stmt.column_string(1), static_cast<Status>(stmt.column_int(2)), static_cast<Severity>(stmt.column_int(3)));
+	if (filter.status)
+		sql += " AND status = ?";
+
+	if (!filter.severities.empty())
+		sql += std::format(" AND severity IN ({})", placeholders(filter.severities.size()));
+
+	if (!filter.tags.empty())
+		sql += std::format(" AND EXISTS (SELECT 1 FROM tags WHERE bug = id AND tag IN ({}))", placeholders(filter.tags.size()));
+
+	sql += " ORDER BY id";
+
+	auto statement = db.prepare(sql);
+	if (filter.status)
+		statement.bind(std::to_underlying(*filter.status));
+	for (auto severity: filter.severities)
+		statement.bind(std::to_underlying(severity));
+	for (auto &tag: filter.tags)
+		statement.bind(to_lower(tag));
+
+	std::vector<Ticket> tickets;
+	while (statement.step() == SQLITE_ROW)
+		tickets.push_back(ticket_from_row(&statement));
 
 	return tickets;
 }
 
-Ticket Instance::get_ticket_from_ticket_id(const string &id) {
-	auto row = db.execute("SELECT id, title, status, severity FROM bugs WHERE id=?", id);
-	if (!row)
-		throw runtime_error(format("No ticket with ID {}", id));
-	return Ticket(row.get_string(0), row.get_string(1), static_cast<Status>(row.get_int(2)), static_cast<Severity>(row.get_int(3)));
+std::optional<Ticket> Instance::find_ticket(std::int64_t id) {
+	auto result = db.execute("SELECT id, title, status, severity FROM bugs WHERE id = ?", id);
+	if (!result)
+		return std::nullopt;
+	return ticket_from_row(*result.begin());
 }
 
-Ticket Instance::get_ticket_from_message_id(const string &id) {
-	auto row = db.execute("SELECT bug FROM messages WHERE msgid=?", unquote(id));
-	if (!row)
-		throw runtime_error(format("No message with ID {}", id));
-	return get_ticket_from_ticket_id(row.get_string(0));
+Ticket Instance::get_ticket(std::int64_t id) {
+	if (auto ticket = find_ticket(id))
+		return *ticket;
+	throw std::runtime_error(std::format("No ticket with number {}", id));
 }
 
-Ticket Instance::get_ticket(const string &id) {
-	if (id.find('@') == string::npos)
-		return get_ticket_from_ticket_id(id);
-	else
-		return get_ticket_from_message_id(id);
-}
-
-static string hash_msgid(const string &id) {
-	if (id.size() < 3)
-		throw runtime_error("Invalid Message-ID value");
-
-	uint8_t id_hash[24];
-	int ec;
-
-	if (id[0] == '<' && id[id.size() - 1] == '>')
-		ec = blake2b(id_hash, id.data() + 1, nullptr, sizeof id_hash, id.size() - 2, 0);
-	else
-		ec = blake2b(id_hash, id.data(), nullptr, sizeof id_hash, id.size(), 0);
-
-	if (ec)
-		throw runtime_error("Hash function failed");
-
-	static const char hexdigits[] = "0123456789abcdef";
-	string result(sizeof id_hash * 2, '\0');
-
-	for (size_t i = 0; i < sizeof id_hash; i++) {
-		result[i * 2] = hexdigits[id_hash[i] >> 4];
-		result[i * 2 + 1] = hexdigits[id_hash[i] & 0xf];
+Ticket Instance::get_ticket(std::string_view id) {
+	if (id.contains('@')) {
+		auto result = db.execute("SELECT bug FROM messages WHERE msgid = ?", unquote_message_id(id));
+		if (!result)
+			throw std::runtime_error(std::format("No message with ID {}", id));
+		return get_ticket(result.get_int64(0));
 	}
 
-	return result;
+	auto number = parse_integer(id.starts_with('#') ? id.substr(1) : id);
+	if (!number)
+		throw std::runtime_error(std::format("Invalid ticket number {}", id));
+	return get_ticket(*number);
 }
 
-Message Instance::get_message(const string &id) {
-	string hash = hash_msgid(id);
+TicketDetails Instance::get_details(const Ticket &ticket) {
+	TicketDetails details{.ticket = ticket};
 
-	fs::path filename = fs::path(maildir) / hash.substr(0, 2) / hash.substr(2);
+	auto row = db.execute("SELECT owner, submitter, date, deadline, progress, milestone FROM bugs WHERE id = ?", ticket.id);
+	details.owner = row.get_string(0);
+	details.submitter = row.get_string(1);
+	details.date = row.get_int64(2);
+	details.deadline = row.get_string(3);
+	details.progress = row.get_int(4);
+	details.milestone = row.get_string(5);
 
-	Message message;
-	message.load(filename.string());
+	details.tags = get_tags(ticket);
 
-	return message;
+	for (auto &&version: db.execute("SELECT version, status FROM versions WHERE bug = ? ORDER BY version", ticket.id))
+		(version.get_int(1) ? details.found_versions : details.fixed_versions).push_back(version.get_string(0));
+
+	for (auto &&link: db.execute("SELECT links.b, links.type, bugs.title FROM links JOIN bugs ON bugs.id = links.b WHERE links.a = ? ORDER BY links.b", ticket.id))
+		details.links.push_back({static_cast<LinkType>(link.get_int(1)), link.get_int64(0), link.get_string(2)});
+
+	for (auto &&link: db.execute("SELECT links.a, links.type, bugs.title FROM links JOIN bugs ON bugs.id = links.a WHERE links.b = ? ORDER BY links.a", ticket.id))
+		details.reverse_links.push_back({static_cast<LinkType>(link.get_int(1)), link.get_int64(0), link.get_string(2)});
+
+	return details;
 }
 
-fs::path Instance::store(const Message &msg) {
-	string hash = hash_msgid(msg["Message-ID"]);
-	fs::create_directory(fs::path(maildir) / hash.substr(0, 2));
-	fs::path filename = fs::path(maildir) / hash.substr(0, 2) / hash.substr(2);
-	msg.save(filename.string());
-	return filename;
-}
-
-set<string> Instance::get_tags(const Ticket &ticket) {
-	set<string> tags;
-	for (auto &&row: db.execute("SELECT tag FROM tags WHERE bug=?", stol(ticket.id)))
+std::set<std::string> Instance::get_tags(const Ticket &ticket) {
+	std::set<std::string> tags;
+	for (auto &&row: db.execute("SELECT tag FROM tags WHERE bug = ?", ticket.id))
 		tags.insert(row.get_string(0));
 	return tags;
 }
 
-string Instance::get_milestone(const Ticket &ticket) {
-	return db.execute("SELECT milestone FROM bugs WHERE id=?", stol(ticket.id)).get_string(0);
+std::string Instance::get_milestone(const Ticket &ticket) {
+	return db.execute("SELECT milestone FROM bugs WHERE id = ?", ticket.id).get_string(0);
 }
 
-vector<string> Instance::get_message_ids(const Ticket &ticket) {
-	vector<string> result;
-
-	for (auto &&row: db.execute("SELECT msgid FROM messages WHERE bug=?", stol(ticket.id)))
+std::vector<std::string> Instance::get_message_ids(const Ticket &ticket) {
+	std::vector<std::string> result;
+	for (auto &&row: db.execute("SELECT msgid FROM messages WHERE bug = ? ORDER BY date, rowid", ticket.id))
 		result.push_back(row.get_string(0));
-
 	return result;
 }
 
-string Instance::get_first_message_id(const Ticket &ticket) {
-	auto row = db.execute("SELECT msgid FROM messages WHERE bug=? ORDER BY rowid LIMIT 1", stol(ticket.id));
-	return row ? row.get_string(0) : string{};
+std::string Instance::get_first_message_id(const Ticket &ticket) {
+	auto result = db.execute("SELECT msgid FROM messages WHERE bug = ? ORDER BY date, rowid LIMIT 1", ticket.id);
+	return result ? result.get_string(0) : std::string{};
 }
 
-bool Instance::run_hook(const string &name, const fs::path &path, const string &id) {
+fs::path Instance::message_path(std::string_view message_id) const {
+	auto hash = hash_message_id(message_id);
+	return maildir / hash.substr(0, 2) / hash.substr(2);
+}
+
+Message Instance::get_message(std::string_view message_id) const {
+	Message message;
+	message.load(message_path(message_id));
+	return message;
+}
+
+fs::path Instance::store(const Message &message) const {
+	auto path = message_path(message.get_header("Message-ID"));
+	fs::create_directories(path.parent_path());
+	message.save(path);
+	return path;
+}
+
+bool Instance::run_hook(std::string_view name, const fs::path &message_file, std::int64_t ticket) {
 	if (no_hooks)
 		return true;
 
-	fs::path hook = hookdir / name;
-	if (access(hook.string().c_str(), X_OK))
+	auto hook = hookdir / name;
+	if (access(hook.c_str(), X_OK) != 0)
 		return true;
 
-	// TODO:
-	fs::current_path(base_dir);
-	string cmd = format("LIGHTBTS_DIR=\"{}\" MESSAGE_FILE=\"{}\" BUG_ID=\"{}\" \"{}\"", base_dir, path, id, hook);
-	FILE *fd = popen(cmd.c_str(), "w");
-	if (!fd) {
-		print(cerr, "Failed to execute {} hook: {}\n", name, strerror(errno));
-		return false;
-	}
-	int result = pclose(fd);
-	if (result) {
-		print(cerr, "Error while executing {} hook, exit code {}\n", name, WEXITSTATUS(result));
+	ProcessOptions options{
+		.working_directory = base_dir,
+		.environment = {
+			{"LIGHTBTS_DIR", project_dir.string()},
+			{"MESSAGE_FILE", message_file.string()},
+			{"BUG_ID", ticket ? std::to_string(ticket) : std::string{}},
+		},
+		.discard_stdin_and_stdout = true,
+	};
+
+	try {
+		if (int exit_code = run_process({hook.string()}, options)) {
+			std::println(std::cerr, "Error while executing {} hook, exit code {}", name, exit_code);
+			return false;
+		}
+	} catch (const std::system_error &error) {
+		std::println(std::cerr, "Failed to execute {} hook: {}", name, error.what());
 		return false;
 	}
 
 	return true;
 }
 
-void Instance::parse_versions(const string &id, const string &str, int status) {
-	vector<string> versions;
-	split(versions, str, boost::is_any_of(", "), boost::token_compress_on);
-	for (auto version: versions)
-		db.execute("INSERT OR REPLACE INTO versions (bug, version, status) VALUES (?, ?, ?)", id, version, status);
+bool Instance::ticket_exists(std::int64_t id) {
+	return static_cast<bool>(db.execute("SELECT 1 FROM bugs WHERE id = ?", id));
 }
 
-void Instance::parse_tags(const string &id, const string &str) {
-	vector<string> tags;
-	split(tags, str, boost::is_any_of(", "), boost::token_compress_on);
+void Instance::set_versions(std::int64_t ticket, std::string_view versions, int status) {
+	for (auto &version: split(versions))
+		db.execute("INSERT OR REPLACE INTO versions (bug, version, status) VALUES (?, ?, ?)", ticket, version, status);
+}
+
+void Instance::remove_versions(std::int64_t ticket, std::string_view versions, int status) {
+	for (auto &version: split(versions))
+		db.execute("DELETE FROM versions WHERE bug = ? AND version = ? AND status = ?", ticket, version, status);
+}
+
+void Instance::apply_tags(std::int64_t ticket, std::string_view tags) {
 	bool add = true;
-	for (auto tag: tags) {
-		if (tag.empty())
-			continue;
-		if (tag[0] == '-') {
+
+	for (auto tag: split(tags)) {
+		if (tag.front() == '-') {
 			add = false;
 			tag.erase(0, 1);
-		} else if (tag[0] == '+') {
+		} else if (tag.front() == '+') {
 			add = true;
 			tag.erase(0, 1);
-		} else if (tag[0] == '=') {
+		} else if (tag.front() == '=') {
 			add = true;
-			db.execute("DELETE FROM tags WHERE bug=?", id);
+			db.execute("DELETE FROM tags WHERE bug = ?", ticket);
 			tag.erase(0, 1);
 		}
+
 		if (tag.empty())
 			continue;
-		to_lower(tag);
+
 		if (add)
-			db.execute("INSERT INTO tags (bug, tag) VALUES (?,?)", id, tag);
+			db.execute("INSERT OR IGNORE INTO tags (bug, tag) VALUES (?, ?)", ticket, to_lower(tag));
 		else
-			db.execute("DELETE FROM tags WHERE bug=? AND tag=?", id, tag);
+			db.execute("DELETE FROM tags WHERE bug = ? AND tag = ?", ticket, to_lower(tag));
 	}
 }
 
-void Instance::parse_metadata(const string &id, const Message &msg) {
-	// Metadata variables to extract
-	string status;
-	string severity;
-	string title;
-	vector<string> tags;
-	vector<string> versions;
-	vector<string> found;
-	vector<string> notfound;
-	vector<string> fixed;
-	vector<string> notfixed;
-	string owner;
-	string progress;
-	string milestone;
-	string deadline;
+void Instance::apply_links(std::int64_t ticket, LinkType type, std::string_view targets, bool add, std::vector<std::string> &warnings) {
+	for (auto &target: split(targets)) {
+		auto number = parse_integer(target.starts_with('#') ? std::string_view(target).substr(1) : target);
+		if (!number || *number == ticket || !ticket_exists(*number)) {
+			warnings.push_back(std::format("Invalid ticket number \"{}\" for {} link", target, name(type)));
+			continue;
+		}
 
-	// Warnings and error messages
-	string log;
-
-	// Parse email headers
-	status = msg["X-LightBTS-Status"];
-
-	{
-		string tag = msg["X-LightBTS-Tag"];
-		if (!tag.empty())
-			tags.push_back(tag);
+		if (add)
+			db.execute("INSERT OR REPLACE INTO links (a, b, type) VALUES (?, ?, ?)", ticket, *number, std::to_underlying(type));
+		else
+			db.execute("DELETE FROM links WHERE a = ? AND b = ? AND type = ?", ticket, *number, std::to_underlying(type));
 	}
+}
 
-	// Parse the body as if it is a MIME part.
-	stringstream body(msg.get_text());
-	string line;
+void Instance::apply_metadata(std::int64_t ticket, const Message &message, std::vector<std::string> &warnings) {
+	std::optional<std::string> status;
+	std::optional<std::string> severity;
+	std::optional<std::string> title;
+	std::optional<std::string> owner;
+	std::optional<std::string> progress;
+	std::optional<std::string> milestone;
+	std::optional<std::string> deadline;
+	std::vector<std::string> tags;
+	std::vector<std::string> versions;
+	std::vector<std::string> found;
+	std::vector<std::string> notfound;
+	std::vector<std::string> fixed;
+	std::vector<std::string> notfixed;
+	std::vector<std::pair<LinkType, std::string>> links;
+	std::vector<std::pair<LinkType, std::string>> unlinks;
 
-	auto set_and_check = [&log](const string &name, string &variable, const string &value) {
-		if (!variable.empty() && value != variable)
-			log += "Duplicate " + name + " field.\n";
+	auto set_once = [&](std::optional<std::string> &variable, std::string_view key, const std::string &value) {
+		if (variable && *variable != value)
+			warnings.push_back(std::format("Duplicate {} field", key));
 		variable = value;
 	};
 
-	while (getline(body, line)) {
-		if (line.empty())
-			break;
+	if (auto header = message.get_header_value("X-LightBTS-Status"); !trim(header).empty())
+		status = trim(header);
 
-		auto colon = line.find(':');
-		if (colon == line.npos || colon == 0)
-			break;
+	if (auto header = message.get_header_value("X-LightBTS-Tag"); !trim(header).empty())
+		tags.emplace_back(trim(header));
 
-		if (line.size() <= colon + 2)
-			break;
-
-		auto key = to_lower_copy(line.substr(0, colon));
-		auto value = line.substr(colon + 2);
-
-		if (key == "status") {
-			set_and_check("status", status, value);
-		} else if (key == "severity") {
-			set_and_check("severity", severity, value);
-		} else if (key == "tags" || key == "tag") {
+	for (auto &[key, value]: parse_pseudo_headers(message.get_text())) {
+		if (key == "status")
+			set_once(status, key, value);
+		else if (key == "severity")
+			set_once(severity, key, value);
+		else if (key == "title" || key == "topic")
+			set_once(title, "title", value);
+		else if (key == "owner")
+			set_once(owner, key, value);
+		else if (key == "progress")
+			set_once(progress, key, value);
+		else if (key == "milestone")
+			set_once(milestone, key, value);
+		else if (key == "deadline")
+			set_once(deadline, key, value);
+		else if (key == "tag" || key == "tags")
 			tags.push_back(value);
-		} else if (key == "version") {
+		else if (key == "version")
 			versions.push_back(value);
-		} else if(key == "found") {
+		else if (key == "found")
 			found.push_back(value);
-		} else if(key == "notfound") {
+		else if (key == "notfound")
 			notfound.push_back(value);
-		} else if(key == "fixed") {
+		else if (key == "fixed")
 			fixed.push_back(value);
-		} else if(key == "notfixed") {
+		else if (key == "notfixed")
 			notfixed.push_back(value);
-		} else if(key == "owner") {
-			set_and_check("owner", owner, value);
-		} else if(key == "progress") {
-			set_and_check("progress", progress, value);
-		} else if(key == "milestone") {
-			set_and_check("milestone", milestone, value);
-		} else if(key == "deadline") {
-			set_and_check("deadline", deadline, value);
-		} else if(key == "title" || key == "topic") {
-			set_and_check("title", title, value);
-		} else {
-			log += "Unknown header field \"" + key + "\".\n";
-		}
+		else if (auto type = parse_link_type(key))
+			links.emplace_back(*type, value);
+		else if (auto untype = key.starts_with("un") ? parse_link_type(std::string_view(key).substr(2)) : std::nullopt)
+			unlinks.emplace_back(*untype, value);
+		else
+			warnings.push_back(std::format("Unknown pseudo-header field \"{}\"", key));
 	}
 
-	// Set any variables found
-	if (!status.empty()) {
-		to_lower(status);
-		db.execute("UPDATE bugs SET status=? WHERE id=?", status_index(status), id);
+	auto set_column = [&](std::string_view column, const std::string &value) {
+		auto sql = std::format("UPDATE bugs SET {} = ? WHERE id = ?", column);
+		if (value == "-")
+			db.execute(sql, nullptr, ticket);
+		else
+			db.execute(sql, value, ticket);
+	};
+
+	if (status) {
+		if (auto value = parse_status(to_lower(*status)))
+			db.execute("UPDATE bugs SET status = ? WHERE id = ?", std::to_underlying(*value), ticket);
+		else
+			warnings.push_back(std::format("Invalid status \"{}\"", *status));
 	}
 
-	if (!severity.empty()) {
-		to_lower(severity);
-		db.execute("UPDATE bugs SET severity=? WHERE id=?", severity_index(severity), id);
+	if (severity) {
+		if (auto value = parse_severity(to_lower(*severity)))
+			db.execute("UPDATE bugs SET severity = ? WHERE id = ?", std::to_underlying(*value), ticket);
+		else
+			warnings.push_back(std::format("Invalid severity \"{}\"", *severity));
 	}
 
-	if (!owner.empty())
-		db.execute("UPDATE bugs SET owner=? WHERE id=?", owner, id);
-
-	if (!progress.empty())
-		db.execute("UPDATE bugs SET progress=? WHERE id=?", progress, id);
-
-	if (!milestone.empty())
-		db.execute("UPDATE bugs SET milestone=? WHERE id=?", milestone, id);
-
-	if (!deadline.empty())
-		db.execute("UPDATE bugs SET deadline=? WHERE id=?", deadline, id);
-
-	if (!title.empty())
-		db.execute("UPDATE bugs SET title=? WHERE id=?", title, id);
-
-	for (auto &&tag: tags)
-		parse_tags(id, tag);
-
-	for (auto &&version: fixed)
-		parse_versions(id, version, 0);
-
-	for (auto &&version: versions) {
-		int ticket_status = db.execute("SELECT status FROM bugs WHERE id=?", id).get_int(0);
-		parse_versions(id, version, ticket_status);
+	if (title) {
+		if (title->empty())
+			warnings.push_back("Empty title");
+		else
+			db.execute("UPDATE bugs SET title = ? WHERE id = ?", *title, ticket);
 	}
 
-	for (auto &&version: found)
-		parse_versions(id, version, 1);
+	auto ticket_status = db.execute("SELECT status FROM bugs WHERE id = ?", ticket).get_int(0);
+	for (auto &version: versions)
+		set_versions(ticket, version, ticket_status);
+	for (auto &version: notfound)
+		remove_versions(ticket, version, 1);
+	for (auto &version: found)
+		set_versions(ticket, version, 1);
+	for (auto &version: notfixed)
+		remove_versions(ticket, version, 0);
+	for (auto &version: fixed)
+		set_versions(ticket, version, 0);
+
+	if (progress) {
+		std::string_view text = *progress;
+		if (text.ends_with('%'))
+			text.remove_suffix(1);
+		if (auto value = parse_integer(trim(text)); value && *value >= 0 && *value <= 100)
+			db.execute("UPDATE bugs SET progress = ? WHERE id = ?", *value, ticket);
+		else
+			warnings.push_back(std::format("Invalid progress \"{}\"", *progress));
+	}
+
+	if (milestone)
+		set_column("milestone", *milestone);
+
+	if (deadline) {
+		if (*deadline == "-" || is_valid_date(*deadline))
+			set_column("deadline", *deadline);
+		else
+			warnings.push_back(std::format("Invalid deadline \"{}\", expected YYYY-MM-DD", *deadline));
+	}
+
+	if (owner)
+		set_column("owner", *owner);
+
+	for (auto &value: tags)
+		apply_tags(ticket, value);
+
+	for (auto &[type, targets]: links)
+		apply_links(ticket, type, targets, true, warnings);
+
+	for (auto &[type, targets]: unlinks)
+		apply_links(ticket, type, targets, false, warnings);
 }
 
-bool Instance::import(const Message &in) {
+ImportResult Instance::import(const Message &incoming) {
 	// Don't allow messages with the X-LightBTS-Control header set
-	if (!in["X-LightBTS-Control"].empty())
-		throw runtime_error("Denying import of message with X-LightBTS-Control header");
+	if (!incoming.get_header("X-LightBTS-Control").empty())
+		throw std::runtime_error("Denying import of message with X-LightBTS-Control header");
 
-	Message msg = in;
+	Message message = incoming;
 
-	// Handle missing Message-ID
-	if (msg["Message-ID"].empty())
-		msg.generate_msgid("LightBTS");
+	if (message.get_header("Message-ID").empty())
+		message.generate_msgid("LightBTS");
 
-	// Add a Received: header
-	msg.add_received("by localhost (LightBTS)");
+	message.add_received("by localhost (LightBTS)");
 
-	// Handle missing Date
-	if (msg["Date"].empty())
-		msg.set_date();
+	if (message.get_header("Date").empty())
+		message.set_date();
 
-	// Save message
-	string msgid = unquote(msg["Message-ID"]);
-	string parent = unquote(msg["In-Reply-To"]);
-	string subject = msg["Subject"];
-	fs::path filename = store(msg);
+	ImportResult result{.kind = ImportResult::Kind::duplicate, .message_id = unquote_message_id(message.get_header("Message-ID"))};
+	auto parent = unquote_message_id(message.get_header("In-Reply-To"));
 
-	// Run the pre-index hook
-	if (!run_hook("pre-index", filename))
-		return false;
+	// Check for duplicates before storing anything, so the original message is never overwritten.
+	if (db.execute("SELECT 1 FROM messages WHERE msgid = ?", result.message_id))
+		return result;
 
-	auto tx = db.begin();
+	auto filename = store(message);
 
-	// Store the message in the database
-	try {
-		db.execute("INSERT INTO messages (msgid, bug) VALUES (?, ?)", msgid, 0);
-	} catch (SQLite3::error &err) {
-		// Ignore duplicates
-		if (err.code == SQLITE_CONSTRAINT_PRIMARYKEY) {
-			print(cerr, "Ignoring duplicate message from {} with Message-ID {}\n", msg["From"], msgid);
-			return false;
-		} else {
-			throw runtime_error(format("Database error: {}", err.what()));
-		}
+	if (!run_hook("pre-index", filename)) {
+		fs::remove(filename);
+		result.kind = ImportResult::Kind::rejected;
+		return result;
 	}
 
-	// Can we match the message to an existing bug?
-	string id;
-	bool is_new = false;
+	auto transaction = db.begin();
+	auto now = current_unix_time();
+	auto from = message.get_header_value("From");
 
-	if (!parent.empty()) {
-		auto result = db.execute("SELECT bug FROM messages WHERE msgid=?", parent);
-		if (result)
-			id = result.get_string(0);
+	if (!parent.empty())
+		if (auto row = db.execute("SELECT bug FROM messages WHERE msgid = ?", parent))
+			result.ticket = row.get_int64(0);
+
+	if (result.ticket) {
+		result.kind = ImportResult::Kind::appended;
+	} else {
+		db.execute("INSERT INTO bugs (title, submitter, date) VALUES (?, ?, ?)", message.get_header_value("Subject"), from, now);
+		result.ticket = db.last_insert_rowid();
+		result.kind = ImportResult::Kind::created;
 	}
 
-#if 0
-	// TODO: is there a better way to match a message to an existing bug when there is no good In-Reply-To?
-	if (id.empty()) {
-		auto result = db.execute("SELECT id FROM bugs WHERE title LIKE ?", "%" + parent);
-		if (result) {
-			id = result.get_string(0);
-			if (result.next())
-				id.clear();
-		}
-	}
-#endif
+	db.execute("INSERT INTO messages (msgid, bug, date) VALUES (?, ?, ?)", result.message_id, result.ticket, now);
+	db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", result.ticket, from);
 
-	if (id.empty()) {
-		db.execute("INSERT INTO bugs (title) VALUES (?)", subject);
-		id = to_string(db.last_insert_rowid());
-		is_new = true;
-	}
+	apply_metadata(result.ticket, message, result.warnings);
 
-	db.execute("UPDATE messages SET bug=? WHERE msgid=?", id, msgid);
-	if (!db.changes())
-		throw runtime_error("Could not update message in index");
-	db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", id, msg["From"]);
+	transaction.commit();
 
-	// Handle metadata
-	parse_metadata(id, msg);
-
-	tx.commit();
-
-	//Run the post-index hook
-	run_hook("post-index", filename, id);
-	return is_new;
+	run_hook("post-index", filename, result.ticket);
+	return result;
 }
 
 }

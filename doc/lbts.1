@@ -1,4 +1,4 @@
-.Dd 2018-04-17
+.Dd 2026-11-07
 .Dt LBTS 1
 .\" Manual page created by:
 .\" Guus Sliepen <guus@lightbts.info>
@@ -7,7 +7,7 @@
 .Nd the command line interface for LightBTS
 .Sh SYNOPSIS
 .Nm
-.Op Fl dh
+.Op Fl dhv
 .Op Fl -batch
 .Op Fl -data-dir Ar path
 .Op Fl -help
@@ -30,6 +30,19 @@ This can also be controlled by setting the
 environment variable.
 .It Fl h, -help
 Print the synopsis and a list of the supported commands, then exit.
+.It Fl v, -verbose
+Show more details, for example the full text of all messages in
+.Nm lbts show .
+.It Fl m, -message Ar text
+Use the given text as the message instead of invoking an editor or reading it from stdin.
+.It Fl S, -severity Ar severity
+Set the severity of a new ticket or reply.
+.It Fl T, -tag Ar tag
+Add a tag. This option can be specified multiple times.
+.It Fl V Ar version
+Record a version. This option can be specified multiple times.
+.It Fl A, -attach Ar file
+Attach a file to the message. This option can be specified multiple times.
 .It Fl -no-email
 Disable sending any emails during the execution of the command.
 .It Fl -no-hooks
@@ -93,6 +106,10 @@ Remove a link of the given type between two tickets.
 .It version
 Print version information.
 .El
+.Pp
+Errors are reported on stderr, and result in exit code 1.
+Problems with pseudo-headers, such as an invalid severity, are reported as warnings,
+but the message is still recorded.
 .Sh ENVIRONMENT VARIABLES
 .Bl -tag -width indent
 .It Ev EDITOR

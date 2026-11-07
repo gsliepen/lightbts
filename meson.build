@@ -1,19 +1,30 @@
 project('LightBTS', 'cpp',
 	version: '0.1',
-	license: 'GPL3+',
+	license: 'GPL-3.0-or-later',
+	meson_version: '>=0.60',
+	default_options: ['cpp_std=c++23', 'warning_level=3'],
+	subproject_dir: 'external',
 )
 
 cpp = meson.get_compiler('cpp')
 
+# Designated initializers that leave out members are fine.
+add_project_arguments('-Wno-missing-field-initializers', language: 'cpp')
+
 # Dependencies
 blake2  = cpp.find_library('b2')
-boost   = dependency('boost', modules: ['filesystem', 'system'])
-fmtlib  = dependency('fmt', required: false)
-if not fmtlib.found()
-	fmtlib = cpp.find_library('fmt')
-endif
-mimesis = dependency('mimesis')
 sqlite3 = dependency('sqlite3')
+
+# Use an installed Mimesis if possible, otherwise the submodule in external/mimesis.
+mimesis = dependency('mimesis', version: '>=0.2', required: false)
+if not mimesis.found()
+	mimesis_project = subproject('mimesis', default_options: ['tests=disabled', 'docs=disabled'])
+	mimesis = declare_dependency(
+		link_with: mimesis_project.get_variable('libmimesis_internal'),
+		include_directories: mimesis_project.get_variable('incdir'),
+	)
+endif
 
 subdir('src')
 subdir('test')
+subdir('doc')

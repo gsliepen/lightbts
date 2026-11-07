@@ -17,6 +17,8 @@ Hooks must be made executable before they will run.
 Hooks are called without any arguments.
 Instead, any parameters are passed via environment variables.
 
+`LIGHTBTS_DIR`:
+: The directory containing the `.lightbts` directory.
 `MESSAGE_FILE`:
 : This contains the full path to the message file. It is strongly recommended that you do not modify, move or delete the file in any way.
 `BUG_ID`:
