@@ -18,33 +18,51 @@ commands that the command line interface supports, just type:
 ## Features
 
 * Command-line interface
-* Email interface
-* Stand-alone webserver or as CGI
+* Read-only web interface, stand-alone or via FastCGI or CGI
 * Many features from the Debian BTS are supported
 * More to come
+
+## Web interface
+
+The `lbts-web` program serves a read-only web interface for a LightBTS
+instance. It works without JavaScript; if JavaScript is enabled, it uses
+[htmx](https://htmx.org/) to update the ticket list without reloading the page.
+To run it stand-alone on http://127.0.0.1:8080/, run this in the directory of
+the instance:
+
+    lbts-web
+
+Use `--listen host:port` to listen on another address. `lbts-web` detects when
+it is started by a web server via CGI or FastCGI, and `--fastcgi=SOCKET` lets
+it listen for FastCGI requests on a socket. See `lbts-web(1)` for details.
 
 Building and installing
 -----------------------
 
 ## Dependencies
 
-The C++ version of LightBTS needs the following libraries:
+LightBTS needs a C++23 compiler (tested with GCC 14) and the following libraries:
 
 - sqlite3
-- b2
-- fmt3
-- boost-filesystem
-- [mimesis](mimesis)
+- b2 (BLAKE2)
+- [Mimesis](https://github.com/gsliepen/mimesis) 0.2 or later
 
-Make sure you have all these libraries installed before proceeding. If
-possible, use your operating system's package manager to install the
-dependencies. For example, on Debian and its derivatives, you can get all but
-the last library by running the command:
+The web interface additionally needs:
 
-    sudo apt install sqlite3-dev libb2-dev libfmt3-dev libboost-filesystem-dev
+- cpp-httplib
+- libfcgi
+- kainjow-mustache
+- htmx (optional, it is embedded into `lbts-web`)
 
-Mimesis is available from the same location as LightBTS itself. Make sure you
-compile and install Mimesis first.
+If possible, use your operating system's package manager to install the
+dependencies. For example, on Debian and its derivatives, you can get all of
+them by running the command:
+
+    sudo apt install libsqlite3-dev libb2-dev libcpp-httplib-dev libfcgi-dev libkainjow-mustache-dev libjs-htmx
+
+Mimesis is included as a git submodule in `external/mimesis`, and is used
+automatically if it is not installed on your system. Make sure to clone this
+repository with `git clone --recursive`, or run `git submodule update --init`.
 
 ## Build system
 
@@ -55,26 +73,34 @@ and install Meson from https://mesonbuild.com/.
 
 To build LightBTS, run these commands in the root directory of the source code:
 
-    meson build
+    meson setup build
     ninja -C build
+
+The web interface is built if its dependencies are found. Add `-Dweb=disabled`
+to the setup command to never build it, or `-Dweb=enabled` to make its
+dependencies required. Use `-Dhtmx=PATH` if `htmx.min.js` is not in
+`/usr/share/javascript/htmx/`, or `-Dhtmx=` to build without htmx.
 
 To run the test suite, run:
 
-    ninja -C build test
+    meson test -C build
 
-To install the binaries on your system, run:
+To install the binaries and manual pages on your system, run:
 
-    ninja -C build install
+    meson install -C build --skip-subprojects
 
-The latter command might ask for a root password if it detects the installation
+The `--skip-subprojects` option prevents the bundled copy of Mimesis from being
+installed as well; LightBTS links it statically, so it is not needed at runtime.
+
+The install command might ask for a root password if it detects the installation
 directory is not writable by the current user.
 
 By default, a debug version will be built, and the resulting binaries will be
 installed inside `/usr/local/`. If you want to create a release build and
 install it in `/usr/`, use the following commands:
 
-    meson --buildtype=release --prefix=/usr build-release
-    ninja -C build-release install
+    meson setup --buildtype=release --prefix=/usr build-release
+    meson install -C build-release --skip-subprojects
 
 Distribution packagers that want to override all compiler flags should use
 `--buildtype=plain`. The `DESTDIR` environment variable is supported by Meson.
