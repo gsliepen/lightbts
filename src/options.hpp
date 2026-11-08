@@ -22,12 +22,16 @@ struct Options {
 	bool no_email = false;
 	bool batch = false;
 	bool json = false;
+	bool markdown = false;
 
 	std::filesystem::path data_dir;
 	std::optional<std::string> message;
 	std::string severity;
 	std::vector<std::string> tags;
 	std::vector<std::string> fields; ///< From -F, of the form <field>=<value>.
+	std::vector<std::string> links;  ///< From --link: <type>:<ticket> for create and reply, or a link type for tree.
+	std::string sort;                ///< From --sort, overriding cli.sort.
+	int depth = -1;                  ///< From --depth, or -1 for no limit.
 	std::vector<std::string> versions;
 	std::vector<std::string> attachments;
 

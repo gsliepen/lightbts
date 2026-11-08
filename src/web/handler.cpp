@@ -460,6 +460,17 @@ Response show_ticket(const Context &context, std::string_view reference) {
 	add_links(details.reverse_links, reverse_link_names);
 	data.set("links", links);
 
+	// The tickets this one depends on, like the items of a roadmap, are shown as a table.
+	auto columns = definitions.parse_columns(context.bts.get_config("web", "columns"));
+	auto dependencies = context.bts.get_link_graph(LinkType::depends);
+	km::data items{km::data::type::list};
+	if (auto others = dependencies.find(ticket->id); others != dependencies.end())
+		for (auto other: others->second)
+			items.push_back(ticket_summary(context, columns, context.bts.get_ticket(other)));
+	data.set("has_items", dependencies.contains(ticket->id));
+	data.set("tickets", items);
+	data.set("column_count", std::to_string(columns.size() + 2));
+
 	auto message_ids = context.bts.get_message_ids(*ticket);
 	km::data messages{km::data::type::list};
 	for (std::size_t i = 0; i < message_ids.size(); i++)

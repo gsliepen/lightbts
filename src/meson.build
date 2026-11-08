@@ -58,6 +58,7 @@ lbts = executable('lbts',
 	'reindex.cpp',
 	'reply.cpp',
 	'show.cpp',
+	'tree.cpp',
 	dependencies: core,
 	install: true,
 )

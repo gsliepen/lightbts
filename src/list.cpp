@@ -50,6 +50,7 @@ int do_list(const Options &options, const Arguments &args) {
 	}
 
 	auto tickets = bts.list(LightBTS::parse_filter(definitions, selectors));
+	LightBTS::sort_tickets(tickets, definitions, options.sort.empty() ? bts.get_config("cli", "sort") : options.sort);
 	Pager pager(options, bts.get_config("cli", "pager"));
 
 	if (listed_field) {

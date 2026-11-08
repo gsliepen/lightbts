@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <deque>
 #include <iostream>
 #include <iterator>
@@ -530,6 +531,19 @@ std::vector<Ticket> Instance::list(const Filter &filter) {
 	for (auto &[field, values]: equal_values)
 		conditions.push_back(has_any_value(field, values));
 
+	// A ticket matches blocks=12 if it blocks 12, or if 12 depends on it.
+	for (auto &link: filter.links) {
+		auto type = *parse_link_type(link.type);
+		auto other = std::to_string(find_ticket_number(link.ticket));
+		SqlCondition condition{"(EXISTS (SELECT 1 FROM links WHERE a = bugs.id AND b = ? AND type = ?)", {other, std::to_string(std::to_underlying(type))}};
+		if (auto inverse_type = inverse(type)) {
+			condition.sql += " OR EXISTS (SELECT 1 FROM links WHERE a = ? AND b = bugs.id AND type = ?)";
+			condition.values.insert(condition.values.end(), {other, std::to_string(std::to_underlying(*inverse_type))});
+		}
+		condition.sql += ")";
+		conditions.push_back(condition);
+	}
+
 	std::string sql = "SELECT id, hash, title FROM bugs WHERE 1";
 	for (auto &condition: conditions)
 		sql += " AND " + condition.sql;
@@ -641,9 +655,66 @@ TicketDetails Instance::get_details(const Ticket &ticket) {
 	return details;
 }
 
+void sort_tickets(std::vector<Ticket> &tickets, const FieldDefinitions &definitions, std::string_view key) {
+	bool descending = key.starts_with('-');
+	if (descending)
+		key.remove_prefix(1);
+
+	struct SortKey {
+		bool unset = false;
+		std::int64_t number = 0;
+		std::string text;
+
+		auto operator<=>(const SortKey &other) const = default;
+	};
+
+	std::function<SortKey(const Ticket &)> sort_key;
+	if (key.empty() || key == "number") {
+		sort_key = [](const Ticket &ticket) { return SortKey{.number = ticket.id}; };
+	} else if (key == "title") {
+		sort_key = [](const Ticket &ticket) { return SortKey{.text = to_lower(ticket.title)}; };
+	} else {
+		auto &field = definitions.get(key);
+		sort_key = [&field](const Ticket &ticket) {
+			auto value = ticket.get(field.name);
+			if (value.empty())
+				return SortKey{.unset = true};
+			if (field.type == FieldType::enumeration)
+				return SortKey{.number = std::ranges::find(field.values, value) - field.values.begin()};
+			if (field.type == FieldType::number)
+				return SortKey{.number = parse_integer(value).value_or(0)};
+			return SortKey{.text = to_lower(value)};
+		};
+	}
+
+	std::ranges::stable_sort(tickets, [&](const Ticket &a, const Ticket &b) {
+		auto key_a = sort_key(a);
+		auto key_b = sort_key(b);
+		if (key_a.unset != key_b.unset)
+			return key_b.unset;
+		if (key_a != key_b)
+			return descending ? key_b < key_a : key_a < key_b;
+		return a.id < b.id;
+	});
+}
+
 std::string Instance::get_description(const Ticket &ticket) {
 	auto message_id = db.execute("SELECT description FROM bugs WHERE id = ?", ticket.id).get_string(0);
 	return std::string(strip_pseudo_headers(get_message(message_id).get_text()));
+}
+
+std::map<std::int64_t, std::vector<std::int64_t>> Instance::get_link_graph(LinkType type) {
+	std::map<std::int64_t, std::set<std::int64_t>> graph;
+	for (auto &&row: db.execute("SELECT a, b FROM links WHERE type = ?", std::to_underlying(type)))
+		graph[row.get_int64(0)].insert(row.get_int64(1));
+	if (auto inverse_type = inverse(type))
+		for (auto &&row: db.execute("SELECT a, b FROM links WHERE type = ?", std::to_underlying(*inverse_type)))
+			graph[row.get_int64(1)].insert(row.get_int64(0));
+
+	std::map<std::int64_t, std::vector<std::int64_t>> result;
+	for (auto &[ticket, others]: graph)
+		result[ticket].assign(others.begin(), others.end());
+	return result;
 }
 
 std::set<std::string> Instance::get_used_values(std::string_view field) {

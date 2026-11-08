@@ -14,6 +14,7 @@
 #include <stdexcept>
 
 #include "edit.hpp"
+#include "strings.hpp"
 #include "version.hpp"
 
 static std::string read_stdin() {
@@ -27,7 +28,7 @@ std::string pseudo_header(std::string_view key, std::string_view value) {
 	return std::format("{}: {}\n", key, value);
 }
 
-std::string option_headers(const LightBTS::Instance &bts, const Options &options) {
+std::string option_headers(LightBTS::Instance &bts, const Options &options) {
 	auto &definitions = bts.get_fields();
 	std::string headers;
 
@@ -44,6 +45,16 @@ std::string option_headers(const LightBTS::Instance &bts, const Options &options
 		headers += pseudo_header(definitions.get("tags").header_name(), tag);
 	for (auto &version: options.versions)
 		headers += pseudo_header("Version", version);
+
+	// Links refer to the other ticket by its ID, since numbers differ between instances.
+	for (auto &link: options.links) {
+		auto colon = link.find(':');
+		if (colon == link.npos || !LightBTS::parse_link_type(link.substr(0, colon)))
+			throw std::runtime_error(std::format("Invalid link \"{}\", expected <type>:<ticket>", link));
+		auto target = bts.get_ticket(link.substr(colon + 1));
+		headers += pseudo_header(LightBTS::capitalize(link.substr(0, colon)), LightBTS::Instance::reference_id(target));
+	}
+
 	return headers;
 }
 

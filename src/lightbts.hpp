@@ -52,6 +52,15 @@ inline std::optional<LinkType> parse_link_type(std::string_view name) { return p
 
 inline std::string_view name(LinkType type) { return link_names.at(std::to_underlying(type)); }
 
+/// The link type that means the same in the other direction: A depends on B if B blocks A.
+inline std::optional<LinkType> inverse(LinkType type) {
+	switch (type) {
+	case LinkType::depends: return LinkType::blocks;
+	case LinkType::blocks: return LinkType::depends;
+	default: return std::nullopt;
+	}
+}
+
 /// Removes the angle brackets around a Message-ID, if present.
 std::string unquote_message_id(std::string_view message_id);
 
@@ -85,6 +94,12 @@ struct TicketDetails {
 	std::vector<Link> links;         ///< Links from this ticket to other tickets.
 	std::vector<Link> reverse_links; ///< Links from other tickets to this ticket.
 };
+
+/// Sorts tickets by a field, by "title", or by "number", which is the default if the key is empty.
+/// A leading - sorts in descending order. Enum values sort in the order they are defined, numbers numerically,
+/// and other values as text. Tickets where the field is unset come last, and ties are sorted by number.
+/// \throws std::runtime_error if there is no such field.
+void sort_tickets(std::vector<Ticket> &tickets, const FieldDefinitions &definitions, std::string_view key);
 
 struct ImportResult {
 	enum class Kind {
@@ -172,6 +187,9 @@ class Instance {
 	/// The current description of a ticket: the text of its first message, or of the last message
 	/// with the pseudo-header "Description: replace", without the pseudo-headers.
 	std::string get_description(const Ticket &ticket);
+
+	/// The tickets that each ticket links to with the given type, or with its inverse in the other direction.
+	std::map<std::int64_t, std::vector<std::int64_t>> get_link_graph(LinkType type);
 
 	/// Gets all values of a field that are used by any ticket.
 	std::set<std::string> get_used_values(std::string_view field);

@@ -24,6 +24,13 @@ Blocks:
 : A declares it must be closed before bug B can be closed.
 
 Depends/Blocks are just the reverse of each other, but since A and B can be owned by different owners, it's probably best to keep both types.
+When following links, as `lbts tree` does, and in selectors like `blocks=12`, they are treated as each other's inverse: A depends on B if B blocks A.
+
+## Roadmaps
+
+A roadmap is a ticket that depends on a ticket for each item, and items can have items of their own.
+New items can be added with `lbts create --link blocks:<roadmap>`, which puts the link in the first message of the item.
+`lbts tree <roadmap>` shows the whole roadmap, with the descriptions of the items that are not done yet, and `--markdown` turns it into a document.
 
 ## Effects of linking
 

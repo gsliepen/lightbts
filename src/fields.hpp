@@ -118,17 +118,26 @@ struct Condition {
 	std::string value; ///< The value in the form stored in the index.
 };
 
+/// A condition on links, like blocks=12: tickets that block ticket 12.
+struct LinkCondition {
+	std::string type;   ///< The name of the link type.
+	std::string ticket; ///< A reference to the other ticket, as accepted by Instance::find_ticket_number().
+};
+
 /// Which tickets Instance::list() returns.
 struct Filter {
 	/// The categories of the statuses of the tickets.
 	std::set<StatusCategory> categories = {StatusCategory::to_do, StatusCategory::in_progress};
 	/// Conditions with = on the same field match if any of them matches, all other conditions must all match.
 	std::vector<Condition> conditions;
+	/// Conditions on links, which must all match.
+	std::vector<LinkCondition> links;
 };
 
 /// Parses selectors as given to lbts list:
 /// - open, closed and all, and the status categories to-do, in-progress and done;
 /// - a condition of the form <field><operator><value>;
+/// - a condition of the form <link type>=<ticket>, like blocks=12;
 /// - a value of an enum field, or else of a set field with a list of values, or else of any set field,
 ///   which selects tickets with that value.
 /// \throws std::runtime_error if a selector is not valid.

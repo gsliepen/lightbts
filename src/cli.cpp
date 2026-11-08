@@ -14,6 +14,7 @@
 
 #include "commands.hpp"
 #include "process.hpp"
+#include "strings.hpp"
 #include "version.hpp"
 
 namespace {
@@ -23,6 +24,10 @@ enum LongOnlyOption {
 	no_email_option,
 	no_hooks_option,
 	json_option,
+	link_option,
+	sort_option,
+	depth_option,
+	markdown_option,
 	version_option,
 };
 
@@ -33,6 +38,10 @@ const struct option long_options[] = {
 	{"no-email", no_argument, nullptr, no_email_option},
 	{"no-hooks", no_argument, nullptr, no_hooks_option},
 	{"json", no_argument, nullptr, json_option},
+	{"link", required_argument, nullptr, link_option},
+	{"sort", required_argument, nullptr, sort_option},
+	{"depth", required_argument, nullptr, depth_option},
+	{"markdown", no_argument, nullptr, markdown_option},
 	{"data-dir", required_argument, nullptr, 'd'},
 	{"version", no_argument, nullptr, version_option},
 	{"message", required_argument, nullptr, 'm'},
@@ -64,7 +73,7 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  --batch            No interactive input.\n"
 		"  --no-email         Do not send email messages.\n"
 		"  --no-hooks         Do not call hooks.\n"
-		"  --json             Write the output of list, show and fields as JSON.\n"
+		"  --json             Write the output of list, show, fields and tree as JSON.\n"
 		"  -d, --data-dir=DIR Directory where LightBTS stores its data.\n"
 		"  -m, --message=TEXT Use TEXT as the message instead of invoking an editor.\n"
 		"  -F, --field=F=V    Set field F to V in a new ticket or reply. Can be given multiple times.\n"
@@ -72,6 +81,11 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  -T, --tag=TAG      Add a tag. Can be given multiple times.\n"
 		"  -V VERSION         Record a version. Can be given multiple times.\n"
 		"  -A, --attach=FILE  Attach a file. Can be given multiple times.\n"
+		"  --link=TYPE:ID     Link a new ticket or reply to ticket ID. Can be given multiple times.\n"
+		"  --sort=FIELD       Sort tickets by a field, title or number; -FIELD sorts in descending order.\n"
+		"  --link=TYPE        For tree, follow links of this type instead of depends.\n"
+		"  --depth=N          For tree, show at most N levels below the given ticket.\n"
+		"  --markdown         For tree, write Markdown.\n"
 		"  --version          Show version information.\n"
 		"\n"
 		"Commands:\n"
@@ -80,6 +94,7 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  config      Get/set a configuration option.\n"
 		"  import      Import messages.\n"
 		"  list        List tickets.\n"
+		"  tree        Show tickets and the tickets they depend on, recursively.\n"
 		"  fields      Show the definitions of the fields of tickets.\n"
 		"  show        Show bug or message details.\n"
 		"  get         Print the value of a field of a ticket.\n"
@@ -222,6 +237,7 @@ constexpr Command commands[] = {
 	{"tag", do_tags},
 	{"tags", do_tags},
 	{"title", do_retitle},
+	{"tree", do_tree},
 	{"unlink", do_unlink},
 	{"unset", do_unset},
 	{"version", do_version},
@@ -245,6 +261,16 @@ int main(int argc, char *argv[]) {
 		case no_email_option: options.no_email = true; break;
 		case no_hooks_option: options.no_hooks = true; break;
 		case json_option: options.json = true; break;
+		case link_option: options.links.push_back(optarg); break;
+		case sort_option: options.sort = optarg; break;
+		case markdown_option: options.markdown = true; break;
+		case depth_option:
+			if (auto depth = LightBTS::parse_integer(optarg); depth && *depth >= 0) {
+				options.depth = static_cast<int>(*depth);
+				break;
+			}
+			std::println(std::cerr, "Invalid depth {}", optarg);
+			return 1;
 		case 'd': options.data_dir = optarg; break;
 		case 'm': options.message = optarg; break;
 		case 'V': options.versions.push_back(optarg); break;

@@ -12,7 +12,9 @@
 .Op Fl -data-dir Ar path
 .Op Fl -help
 .Op Fl -json
+.Op Fl -link Ar type Ns Op : Ns Ar id
 .Op Fl -no-email
+.Op Fl -sort Ar field
 .Op Fl -no-hooks
 .Op Fl -version
 .Ar command ...
@@ -55,6 +57,36 @@ Add a tag. This option can be specified multiple times.
 Record a version. This option can be specified multiple times.
 .It Fl A, -attach Ar file
 Attach a file to the message. This option can be specified multiple times.
+.It Fl -link Ar type : Ns Ar id
+Link a new ticket or reply to another ticket, for example
+.Ql --link blocks:12 .
+This option can be specified multiple times.
+For
+.Nm lbts tree ,
+the type of links to follow.
+.It Fl -sort Ar field
+Sort the tickets of
+.Nm lbts list
+and
+.Nm lbts tree
+by a field,
+.Ql title
+or
+.Ql number .
+With a leading
+.Ql - ,
+sort in descending order.
+The default is set by the
+.Va cli.sort
+configuration variable, and is the ticket number if that is not set.
+.It Fl -depth Ar n
+For
+.Nm lbts tree ,
+the number of levels to show.
+.It Fl -markdown
+For
+.Nm lbts tree ,
+write Markdown.
 .It Fl -no-email
 Disable sending any emails during the execution of the command.
 .It Fl -no-hooks
@@ -131,6 +163,8 @@ Change the severity of a ticket.
 Show ticket or message details.
 .It tags Ar id Oo +|- Oc Ar tag ...
 Add tags to or remove tags from a ticket.
+.It tree Oo Ar id Oc Op Ar selector ...
+Show a ticket and the tickets it depends on, recursively.
 .It unlink Ar id1 Ar type Ar id2
 Remove a link of the given type between two tickets.
 .It unset Ar id Ar field

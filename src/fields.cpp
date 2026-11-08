@@ -240,6 +240,14 @@ std::optional<Condition> parse_condition(const FieldDefinitions &definitions, st
 	return Condition{field.name, *comparison, *value};
 }
 
+/// Parses a selector of the form <link type>=<ticket>.
+std::optional<LinkCondition> parse_link_condition(std::string_view selector) {
+	auto equals = selector.find('=');
+	if (equals == selector.npos || !parse_link_type(selector.substr(0, equals)))
+		return std::nullopt;
+	return LinkCondition{std::string(selector.substr(0, equals)), std::string(selector.substr(equals + 1))};
+}
+
 /// Finds a value in the first enum field that has it, otherwise in the first set field that lists it,
 /// and otherwise in the first set field that allows any value.
 std::optional<Condition> find_value(const FieldDefinitions &definitions, std::string_view selector) {
@@ -465,6 +473,8 @@ Filter parse_filter(const FieldDefinitions &definitions, std::span<const std::st
 			filter.categories = {done};
 		else if (auto category = parse_enum<StatusCategory>(status_category_names, selector))
 			filter.categories = {*category};
+		else if (auto link = parse_link_condition(selector))
+			filter.links.push_back(*link);
 		else if (auto condition = parse_condition(definitions, selector))
 			filter.conditions.push_back(*condition);
 		else if (auto value = find_value(definitions, selector))

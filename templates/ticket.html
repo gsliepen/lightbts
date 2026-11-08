@@ -24,6 +24,14 @@
 	<pre class="body">{{description}}</pre>
 </section>
 {{/description}}
+{{#has_items}}
+<h3>Depends on</h3>
+<table class="tickets">
+	<tbody>
+{{> ticket-rows.html}}
+	</tbody>
+</table>
+{{/has_items}}
 <h3>Messages</h3>
 <section class="messages">
 {{#messages}}

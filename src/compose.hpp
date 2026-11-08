@@ -25,9 +25,9 @@ struct Composition {
 /// Formats a pseudo-header line, including the trailing newline.
 std::string pseudo_header(std::string_view key, std::string_view value);
 
-/// The pseudo-headers for the -F, -S, -T and -V options.
-/// \throws std::runtime_error if a field does not exist.
-std::string option_headers(const LightBTS::Instance &bts, const Options &options);
+/// The pseudo-headers for the -F, -S, -T, -V and --link options.
+/// \throws std::runtime_error if a field or a linked ticket does not exist.
+std::string option_headers(LightBTS::Instance &bts, const Options &options);
 
 /// Creates a message, getting its text from the -m option, an editor or stdin.
 /// \return The message, or nothing if the user aborted editing it.

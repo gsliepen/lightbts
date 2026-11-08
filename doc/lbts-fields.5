@@ -260,6 +260,13 @@ For ordered
 and
 .Ql date
 fields, tickets whose value compares this way.
+.It Ar type Ns Cm = Ns Ar id
+Tickets that have a link of the given type to the ticket
+.Ar id ,
+like
+.Ql blocks=12 .
+Since a ticket depends on the tickets that block it,
+this also selects the tickets that ticket 12 depends on.
 .It Ar value
 A value of an
 .Ql enum

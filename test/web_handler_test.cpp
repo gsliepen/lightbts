@@ -90,6 +90,9 @@ int main() {
 	CHECK(ticket.body.contains("href=\"/ticket/2\""));
 	CHECK(ticket.body.contains("message?id=1%40test"));
 	CHECK(get(handler, "/ticket/2").body.contains("Blocked by"));
+	CHECK(get(handler, "/ticket/2").body.contains("<h3>Depends on</h3>"));
+	CHECK(get(handler, "/ticket/2").body.contains("<td class=\"title\"><a href=\"/ticket/1\">First &lt;script&gt;"));
+	CHECK(!get(handler, "/ticket/1").body.contains("<h3>Depends on</h3>"));
 	auto first_id = Instance(dir, Instance::Mode::read_only).get_ticket(1).hash;
 	CHECK(ticket.body.contains(std::format("<span class=\"ticket-id\">{}</span>", first_id.substr(0, 7))));
 	CHECK(get(handler, "/ticket/" + first_id.substr(0, 8)).body.contains("The first bug."));

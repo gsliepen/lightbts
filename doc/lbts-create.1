@@ -11,6 +11,7 @@
 .Op Fl T Ar tag
 .Op Fl S Ar severity
 .Op Fl F Ar field Ns = Ns Ar value
+.Op Fl -link Ar type : Ns Ar id
 .Op Fl m Ar message
 .Ar title...
 .Sh DESCRIPTION
@@ -32,6 +33,13 @@ Specify the severity of the issue.
 .It Fl F Ar field Ns = Ns Ar value
 Set a field, see
 .Xr lbts-set 1 .
+This option can be specified multiple times.
+.It Fl -link Ar type : Ns Ar id
+Add a link of the given type to another ticket, see
+.Xr lbts-link 1 .
+For example,
+.Ql --link blocks:12
+makes ticket 12, a roadmap for example, depend on this one.
 This option can be specified multiple times.
 .It Fl m Ar message
 Use the given message instead of invoking an editor or reading one from stdin.
