@@ -36,6 +36,7 @@ const struct option long_options[] = {
 	{"message", required_argument, nullptr, 'm'},
 	{"tag", required_argument, nullptr, 'T'},
 	{"severity", required_argument, nullptr, 'S'},
+	{"field", required_argument, nullptr, 'F'},
 	{"attach", required_argument, nullptr, 'A'},
 	{},
 };
@@ -63,6 +64,7 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  --no-hooks         Do not call hooks.\n"
 		"  -d, --data-dir=DIR Directory where LightBTS stores its data.\n"
 		"  -m, --message=TEXT Use TEXT as the message instead of invoking an editor.\n"
+		"  -F, --field=F=V    Set field F to V in a new ticket or reply. Can be given multiple times.\n"
 		"  -S, --severity=SEV Set the severity of a new ticket or reply.\n"
 		"  -T, --tag=TAG      Add a tag. Can be given multiple times.\n"
 		"  -V VERSION         Record a version. Can be given multiple times.\n"
@@ -74,7 +76,8 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  init        Initialize a LightBTS instance.\n"
 		"  config      Get/set a configuration option.\n"
 		"  import      Import messages.\n"
-		"  list        List bugs.\n"
+		"  list        List tickets.\n"
+		"  fields      Show the definitions of the fields of tickets.\n"
 		"  show        Show bug or message details.\n"
 		"  create      Create a new bug.\n"
 		"  reply       Reply to an existing bug.\n"
@@ -85,6 +88,8 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  notfound    Remove records of where a problem is found.\n"
 		"  fixed       Record versions where a problem is fixed.\n"
 		"  notfixed    Remove records of where a problem is fixed.\n"
+		"  set         Change a field of a ticket.\n"
+		"  unset       Unset a field of a ticket.\n"
 		"  severity    Change the severity of a ticket.\n"
 		"  link        Add a link between two tickets.\n"
 		"  unlink      Remove a link between two tickets.\n"
@@ -150,8 +155,8 @@ int do_config(const Options &options, const Arguments &args) {
 	auto section = args[0].substr(0, dot);
 	auto variable = args[0].substr(dot + 1);
 
-	// Invalid field definitions must not prevent fixing them.
-	LightBTS::Instance bts(options.data_dir, LightBTS::Instance::Mode::open, {.no_hooks = options.no_hooks, .check_fields = false});
+	// Invalid field definitions must not prevent fixing them, and changing them shouldn't rebuild the index every time.
+	auto bts = options.open_instance(LightBTS::Instance::Mode::open, {.configuration_only = true});
 
 	if (args.size() > 1) {
 		auto value = args | std::views::drop(1) | std::views::join_with(' ') | std::ranges::to<std::string>();
@@ -184,6 +189,7 @@ constexpr Command commands[] = {
 	{"config", do_config},
 	{"create", do_create},
 	{"deadline", do_deadline},
+	{"fields", do_fields},
 	{"fixed", do_fixed},
 	{"found", do_found},
 	{"fsck", do_fsck},
@@ -202,6 +208,7 @@ constexpr Command commands[] = {
 	{"reopen", do_reopen},
 	{"reply", do_reply},
 	{"retitle", do_retitle},
+	{"set", do_set},
 	{"severity", do_severity},
 	{"show", do_show},
 	{"subject", do_retitle},
@@ -209,6 +216,7 @@ constexpr Command commands[] = {
 	{"tags", do_tags},
 	{"title", do_retitle},
 	{"unlink", do_unlink},
+	{"unset", do_unset},
 	{"version", do_version},
 };
 
@@ -222,7 +230,7 @@ int main(int argc, char *argv[]) {
 	Arguments args;
 
 	int option;
-	while ((option = getopt_long(argc, argv, "-hvd:m:V:T:S:A:", long_options, nullptr)) != -1) {
+	while ((option = getopt_long(argc, argv, "-hvd:m:V:T:S:F:A:", long_options, nullptr)) != -1) {
 		switch (option) {
 		case 'h': options.help = true; break;
 		case 'v': options.verbose = true; break;
@@ -234,6 +242,7 @@ int main(int argc, char *argv[]) {
 		case 'V': options.versions.push_back(optarg); break;
 		case 'T': options.tags.push_back(optarg); break;
 		case 'S': options.severity = optarg; break;
+		case 'F': options.fields.push_back(optarg); break;
 		case 'A': options.attachments.push_back(optarg); break;
 		case version_option: show_version(); return 0;
 

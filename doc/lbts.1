@@ -35,6 +35,9 @@ Show more details, for example the full text of all messages in
 .Nm lbts show .
 .It Fl m, -message Ar text
 Use the given text as the message instead of invoking an editor or reading it from stdin.
+.It Fl F, -field Ar field Ns = Ns Ar value
+Set a field of a new ticket or reply.
+This option can be specified multiple times.
 .It Fl S, -severity Ar severity
 Set the severity of a new ticket or reply.
 .It Fl T, -tag Ar tag
@@ -60,6 +63,8 @@ Get or set a configuration option.
 Create a new ticket.
 .It deadline Ar id Ar deadline
 Change the deadline of a ticket.
+.It fields
+Show the definitions of the fields of tickets.
 .It fixed Ar id Ar version
 Record the version where a problem is fixed.
 .It found Ar id Ar version
@@ -77,8 +82,14 @@ Import one or more messages into the database.
 Initialize a LightBTS instance.
 .It link Ar id1 Ar type Ar id2
 Add a link of the given type between two tickets.
-.It list Op Ar selector ...
-List tickets.
+.It list Oo Ar selector ... Oc Op Ar field
+List tickets, or the values of a field that these tickets use, as in
+.Ql lbts list open tags .
+The selectors are described in
+.Xr lbts-fields 5 .
+The fields shown for each ticket are set by the
+.Va cli.columns
+configuration variable, and are status and severity by default.
 .It milestone Ar id
 Change the milestone of a ticket
 .It noowner Ar id
@@ -99,6 +110,8 @@ Rebuild the index from the stored messages.
 Reply to an existing ticket.
 .It retitle Ar id Ar title
 Change the title of a ticket.
+.It set Ar id Ar field Ar value ...
+Change a field of a ticket.
 .It severity Ar id Ar severity
 Change the severity of a ticket.
 .It show Ar id
@@ -107,9 +120,14 @@ Show ticket or message details.
 Add tags to or remove tags from a ticket.
 .It unlink Ar id1 Ar type Ar id2
 Remove a link of the given type between two tickets.
+.It unset Ar id Ar field
+Unset a field of a ticket.
 .It version
 Print version information.
 .El
+.Pp
+The commands severity, tags, owner, noowner, milestone, deadline and progress
+are shortcuts for set and unset, and only work if the corresponding field exists.
 .Pp
 Errors are reported on stderr, and result in exit code 1.
 Problems with pseudo-headers, such as an invalid severity, are reported as warnings,
@@ -167,5 +185,9 @@ If not overridden, it will first look for
 in the current directory.
 If it cannot find it there, it will try if that directory exists in the parent directory,
 and so on until it reaches the root directory.
+.Sh SEE ALSO
+.Xr lbts-fields 5 ,
+.Xr lbts-hooks 5 ,
+.Xr lightbts 7 .
 .Sh AUTHOR
 .An "Guus Sliepen" Aq guus@lightbts.info

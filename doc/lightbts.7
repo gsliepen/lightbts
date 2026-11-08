@@ -39,10 +39,28 @@ Messages which refer to existing messages will be assigned to the ticket the exi
 Tickets have a state which can be modified by messages added to that ticket.
 The state consists of the following elements:
 .Bl -tag -width indent
+.It Fields:
+The values of the fields that are defined in the configuration of the instance, see
+.Xr lbts-fields 5 .
+By default, these are:
+.Bl -tag -width indent
+.It Status:
+Open or closed.
+The initial value is open.
+.It Severity:
+One of wishlist, minor, normal, important, serious, critical and grave.
+The initial value is normal.
+.It Tags:
+A set of tags, which can be added and removed at any point.
+.It Owner:
+The person or group responsible for the ticket.
+.It Milestone:
+The milestone that this ticket is part of, as free form text.
 .It Deadline:
-The deadline of a ticket.
-This can be used to prioritize work on tickets.
-The initial value is empty.
+A date, which can be used to prioritize work on tickets.
+.It Progress:
+A percentage value that describes how close to completion the issue is.
+.El
 .It Links:
 These describe binary relations between different tickets.
 There are different types of links possible:
@@ -57,28 +75,6 @@ Describes that one ticket is a duplicate of another (pre-existing) ticket.
 A generic link that describes that two tickets are related to each other.
 .El
 The initial set of links is empty.
-.It Milestone:
-The milestone that this ticket is part of.
-This is a free form text value.
-The initial value is empty.
-.It Owner:
-The person or group responsible for the ticket.
-The initial value is empty.
-.It Progress:
-A percentage value that describes how close to completion the issue is.
-Initially the value is 0%.
-.It Severity:
-The severity of a ticket.
-Valid severities are: wishlist, minor, normal, important, serious, critical, grave.
-The initial value is normal.
-.It Status:
-The status of a ticket.
-Valid values are: open, closed.
-The initial value is open.
-.It Tags:
-A set of tags that are applied to a ticket.
-Tags can be added and removed at any point.
-The initial set of tags is empty.
 .It Title:
 The title (or subject) of a ticket.
 Initially, it is set to the Subject: header of the message that created the ticket.

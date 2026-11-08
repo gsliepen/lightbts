@@ -8,6 +8,7 @@
 #include <initializer_list>
 #include <string>
 #include <string_view>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -39,6 +40,10 @@ FieldDefinitions parse_with(std::string_view name, Variables variables) {
 	return parse_field_definitions(config);
 }
 
+bool allows(const FieldDefinitions &definitions, std::string_view field, std::string_view value) {
+	return definitions.find(field)->normalize(value).has_value();
+}
+
 bool is_invalid(std::string_view name, Variables variables) {
 	return throws([&] { parse_with(name, variables); });
 }
@@ -64,16 +69,20 @@ int main() {
 		CHECK(definitions.find("Tag") == definitions.find("tags"));
 		CHECK(!definitions.find("title"));
 		CHECK(definitions.find("severity")->ordered);
-		CHECK(definitions.find("severity")->default_value == "normal");
-		CHECK(definitions.find("progress")->allows("100"));
-		CHECK(!definitions.find("progress")->allows("101"));
-		CHECK(!definitions.find("progress")->allows("-1"));
-		CHECK(!definitions.find("progress")->allows("5%"));
-		CHECK(definitions.find("deadline")->allows("2026-02-28"));
-		CHECK(!definitions.find("deadline")->allows("2026-02-30"));
-		CHECK(!definitions.find("deadline")->allows("2026-2-3"));
-		CHECK(definitions.find("tags")->allows("anything"));
-		CHECK(!definitions.find("tags")->allows("two words"));
+		CHECK(definitions.find("severity")->default_values == std::vector<std::string>{"normal"});
+		CHECK(allows(definitions, "progress", "100"));
+		CHECK(!allows(definitions, "progress", "101"));
+		CHECK(!allows(definitions, "progress", "-1"));
+		CHECK(allows(definitions, "progress", "5%"));
+		CHECK(definitions.find("progress")->normalize(" 05 % ") == "5");
+		CHECK(definitions.find("progress")->format("5") == "5%");
+		CHECK(definitions.find("progress")->format("").empty());
+		CHECK(!allows(definitions, "progress", "5 percent"));
+		CHECK(allows(definitions, "deadline", "2026-02-28"));
+		CHECK(!allows(definitions, "deadline", "2026-02-30"));
+		CHECK(!allows(definitions, "deadline", "2026-2-3"));
+		CHECK(allows(definitions, "tags", "anything"));
+		CHECK(!allows(definitions, "tags", "two words"));
 
 		CHECK(definitions.status.is_open("open"));
 		CHECK(!definitions.status.is_open("closed"));
@@ -96,13 +105,13 @@ int main() {
 		CHECK(status.category("confirmed") == StatusCategory::to_do);
 		CHECK(status.category("in-progress") == StatusCategory::in_progress);
 		CHECK(status.category("wontfix") == StatusCategory::done);
-		CHECK(definitions.find("status")->default_value == "new");
+		CHECK(definitions.find("status")->default_values.front() == "new");
 		CHECK(status.close == "fixed");
 		CHECK(status.reopen == "new");
 	}
 	{
 		auto definitions = parse_field_definitions(status_config({{"default", "Confirmed"}, {"close", "wontfix"}}));
-		CHECK(definitions.find("status")->default_value == "confirmed");
+		CHECK(definitions.find("status")->default_values.front() == "confirmed");
 		CHECK(definitions.status.close == "wontfix");
 		CHECK(definitions.status.reopen == "confirmed");
 	}
@@ -128,13 +137,13 @@ int main() {
 		CHECK(priority->values == std::vector<std::string>{"low", "normal", "high"});
 		CHECK(priority->label == "How urgent");
 		CHECK(priority->ordered);
-		CHECK(priority->allows("LOW"));
-		CHECK(!priority->allows("urgent"));
+		CHECK(priority->normalize("LOW"));
+		CHECK(!priority->normalize("urgent"));
 	}
 	{
 		auto definitions = parse_with("component", {{"type", "set"}, {"values", "core, web"}, {"default", "core web"}});
-		CHECK(definitions.find("component")->allows("web"));
-		CHECK(!definitions.find("component")->allows("email"));
+		CHECK(allows(definitions, "component", "web"));
+		CHECK(!allows(definitions, "component", "email"));
 	}
 	CHECK(!is_invalid("estimate", {{"type", "number"}, {"min", "0"}, {"unit", "h"}, {"default", "1"}}));
 	CHECK(!is_invalid("due", {{"type", "date"}, {"default", "2026-12-31"}}));
@@ -146,7 +155,7 @@ int main() {
 	CHECK(is_invalid("unknown-type", {{"type", "colour"}}));
 	CHECK(is_invalid("no-values", {{"type", "enum"}}));
 	CHECK(is_invalid("duplicate-values", {{"type", "enum"}, {"values", "a, b, A"}}));
-	CHECK(is_invalid("not-a-word", {{"type", "set"}, {"values", "a, b/c"}}));
+	CHECK(is_invalid("not-a-word", {{"type", "set"}, {"values", "a, b=c"}}));
 	CHECK(is_invalid("bad-default", {{"type", "enum"}, {"values", "a, b"}, {"default", "c"}}));
 	CHECK(is_invalid("bad-set-default", {{"type", "set"}, {"values", "a, b"}, {"default", "a c"}}));
 	CHECK(is_invalid("bad-date", {{"type", "date"}, {"default", "tomorrow"}}));
@@ -163,10 +172,89 @@ int main() {
 	CHECK(is_invalid("", {{"type", "text"}}));
 	CHECK(is_invalid("title", {{"type", "text"}}));
 	CHECK(is_invalid("unblocks", {{"type", "text"}}));
+	CHECK(is_invalid("received", {{"type", "text"}}));
+	CHECK(is_invalid("done", {{"type", "text"}}));
+	CHECK(is_invalid("other", {{"type", "text"}, {"aliases", "all"}}));
 	CHECK(is_invalid("other", {{"type", "text"}, {"aliases", "fixed"}}));
 	CHECK(is_invalid("other", {{"type", "text"}, {"aliases", "status"}}));
 	CHECK(throws([] { Config config = status_config(); config.set("field", "type", "text"); parse_field_definitions(config); }));
 	CHECK(throws([] { Config config = status_config(); config.set("field.Status", "type", "text"); parse_field_definitions(config); }));
+
+	CHECK(is_invalid("bad-value", {{"type", "set"}, {"values", "a, -b"}}));
+	CHECK(!is_invalid("good-values", {{"type", "set"}, {"values", "c++, v1.0, a/b"}}));
+	CHECK(is_invalid("bad-alias", {{"type", "text"}, {"aliases", "a.b"}}));
+
+	// Header names and columns
+	{
+		auto definitions = parse_with("due-date", {{"type", "date"}});
+		CHECK(definitions.find("due-date")->header_name() == "Due-Date");
+		CHECK(definitions.parse_columns("").size() == 1);
+		CHECK(definitions.parse_columns("due-date, status").front()->name == "due-date");
+		CHECK(throws([&] { definitions.parse_columns("unknown"); }));
+	}
+
+	// The signature changes with the definitions, but not with whitespace
+	{
+		auto signature = [](std::string_view values) {
+			Config config;
+			add_default_fields(config);
+			config.set("field.severity", "values", values);
+			return parse_field_definitions(config).signature;
+		};
+		CHECK(signature("low, normal") != signature("low, normal, high"));
+		CHECK(signature("low, normal") == signature("  low, normal "));
+		Config defaults;
+		add_default_fields(defaults);
+		CHECK(parse_field_definitions(defaults).signature == parse_field_definitions(Config()).signature);
+	}
+
+	// Selectors
+	{
+		auto definitions = parse_with("priority", {{"type", "enum"}, {"values", "low, normal, high"}, {"ordered", "true"}});
+		definitions.fields.push_back(parse_field_definitions(Config()).get("tags"));
+		definitions.fields.push_back(parse_field_definitions(Config()).get("progress"));
+		definitions.fields.push_back(parse_field_definitions(Config()).get("owner"));
+
+		auto parse = [&](std::vector<std::string> selectors) { return parse_filter(definitions, selectors); };
+		using enum StatusCategory;
+
+		CHECK(parse({}).categories == std::set{to_do, in_progress});
+		CHECK(parse({"all"}).categories.size() == 3);
+		CHECK(parse({"closed"}).categories == std::set{done});
+		CHECK(parse({"in-progress"}).categories == std::set{in_progress});
+		CHECK(parse({"done", "open"}).categories == std::set{to_do, in_progress});
+
+		auto filter = parse({"priority>=High"});
+		CHECK(filter.conditions.size() == 1);
+		CHECK(filter.conditions[0].field == "priority");
+		CHECK(filter.conditions[0].comparison == Comparison::greater_equal);
+		CHECK(filter.conditions[0].value == "high");
+
+		filter = parse({"Tag=foo", "progress<50%", "owner!=Some One"});
+		CHECK(filter.conditions[0].field == "tags");
+		CHECK(filter.conditions[1].comparison == Comparison::less);
+		CHECK(filter.conditions[1].value == "50");
+		CHECK(filter.conditions[2].comparison == Comparison::not_equal);
+		CHECK(filter.conditions[2].value == "Some One");
+
+		// Bare words are values of enum fields, otherwise of set fields
+		filter = parse({"low", "bar"});
+		CHECK(filter.conditions[0].field == "priority");
+		CHECK(filter.conditions[1].field == "tags");
+		CHECK(filter.conditions[1].value == "bar");
+
+		// Selecting a status selects tickets in any category, unless a category is given
+		CHECK(parse({"wontfix"}).categories.size() == 3);
+		CHECK(parse({"status=new"}).categories.size() == 3);
+		CHECK(parse({"status=new", "closed"}).categories == std::set{done});
+
+		CHECK(throws([&] { parse({"unknown=1"}); }));
+		CHECK(throws([&] { parse({"priority=highest"}); }));
+		CHECK(throws([&] { parse({"tags>foo"}); }));
+		CHECK(throws([&] { parse({"owner<a"}); }));
+		CHECK(throws([&] { parse({"priority=>low"}); }));
+		CHECK(throws([&] { parse({"progress=lots"}); }));
+	}
 
 	return check_result();
 }

@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -30,6 +32,22 @@ inline std::string to_lower(std::string_view text) {
 	std::string result(text);
 	std::ranges::transform(result, result.begin(), [](unsigned char c) { return std::tolower(c); });
 	return result;
+}
+
+inline std::string capitalize(std::string_view text) {
+	std::string result(text);
+	if (!result.empty())
+		result[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(result[0])));
+	return result;
+}
+
+/// Parses a whole text as an integer.
+inline std::optional<std::int64_t> parse_integer(std::string_view text) {
+	std::int64_t value;
+	auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+	if (error != std::errc() || end != text.data() + text.size())
+		return std::nullopt;
+	return value;
 }
 
 /// Parses true, yes, 1, false, no or 0, ignoring case.

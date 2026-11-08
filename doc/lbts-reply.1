@@ -10,6 +10,7 @@
 .Op Fl V Ar version
 .Op Fl T Ar tag
 .Op Fl S Ar severity
+.Op Fl F Ar field Ns = Ns Ar value
 .Op Fl m Ar message
 .Ar id
 .Sh DESCRIPTION
@@ -31,6 +32,10 @@ Add the given tag for this issue.
 This option can be specified multiple times.
 .It Fl S Ar severity
 Specify a new severity for the issue.
+.It Fl F Ar field Ns = Ns Ar value
+Set a field, see
+.Xr lbts-set 1 .
+This option can be specified multiple times.
 .It Fl m Ar message
 Use the given message instead of invoking an editor or reading one from stdin.
 .El

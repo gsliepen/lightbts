@@ -30,6 +30,13 @@ The index is rebuilt in a single transaction:
 if anything goes wrong, the current index stays as it is.
 No hooks are run.
 .Pp
+Since the field definitions determine which values in the messages are valid,
+LightBTS rebuilds the index automatically when they change,
+and when it finds an index of an older version.
+The web interface, which only reads the index,
+warns about changed field definitions instead,
+and refuses to use an index of an older version.
+.Pp
 If the index is damaged, or has a version that this version of LightBTS does not support,
 remove the file
 .Pa .lightbts/index

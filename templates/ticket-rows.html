@@ -1,13 +1,12 @@
 {{#tickets}}
-		<tr class="status-{{status}} severity-{{severity}}">
+		<tr class="{{classes}}">
 			<td class="id"><a href="{{root}}ticket/{{id}}">{{id}}</a></td>
-			<td class="status">{{status}}</td>
-			<td class="severity">{{severity}}</td>
-			<td class="title"><a href="{{root}}ticket/{{id}}">{{title}}</a>{{#tags}} <span class="tag">{{.}}</span>{{/tags}}</td>
+			{{#cells}}<td class="field field-{{name}}">{{value}}</td>{{/cells}}
+			<td class="title"><a href="{{root}}ticket/{{id}}">{{title}}</a>{{#labels}} <span class="tag">{{.}}</span>{{/labels}}</td>
 		</tr>
 {{/tickets}}
 {{^tickets}}
 		<tr>
-			<td colspan="4">No tickets found.</td>
+			<td colspan="{{column_count}}">No tickets found.</td>
 		</tr>
 {{/tickets}}

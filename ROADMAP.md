@@ -18,6 +18,8 @@ right before building more features on top of them.
 
 ### Reindexing and consistency checks
 
+*Done: `lbts reindex` and `lbts fsck`.*
+
 The design promises that the index can always be rebuilt from the messages,
 but there is no command to do that yet. Add `lbts reindex` and `lbts fsck`:
 
@@ -32,6 +34,9 @@ database schema into a matter of rebuilding the index instead of writing
 migrations, and is the basis for synchronizing instances.
 
 ### A generic field model
+
+*Done: see `doc/fields.mdwn` and `lbts-fields(5)`. Configurable link types
+and workflows are left for later.*
 
 Status and severity are hard-coded, and mirror the Debian BTS. Since
 pseudo-headers are already key/value pairs, let the configuration define the

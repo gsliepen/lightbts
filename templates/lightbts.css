@@ -89,11 +89,11 @@ table.tickets .id {
 	text-align: right;
 }
 
-table.tickets .status, table.tickets .severity {
+table.tickets .field {
 	width: 6rem;
 }
 
-.status-closed, tr.status-closed a {
+.category-done, tr.category-done a {
 	color: var(--closed);
 }
 

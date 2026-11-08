@@ -1,32 +1,39 @@
 <form class="filter" action="{{root}}" method="get" hx-get="{{root}}" hx-target="#ticket-rows" hx-trigger="input delay:300ms, submit" hx-push-url="true">
-	<label>Status
-		<select name="status">
-		{{#statuses}}
+{{#inputs}}
+{{#select}}
+	<label>{{label}}
+		<select name="{{name}}">
+		{{#groups}}
+		{{#grouped}}
+			<optgroup label="{{group_label}}">
+		{{/grouped}}
+		{{#choices}}
 			<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>
-		{{/statuses}}
+		{{/choices}}
+		{{#grouped}}
+			</optgroup>
+		{{/grouped}}
+		{{/groups}}
 		</select>
 	</label>
-	<label>Severity
-		<select name="severity">
-		{{#severities}}
-			<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>
-		{{/severities}}
-		</select>
+{{/select}}
+{{#text_input}}
+	<label>{{label}}
+		<input type="search" name="{{name}}" value="{{text}}" list="known-{{name}}">
 	</label>
-	<label>Tag
-		<input type="search" name="tag" value="{{tag}}" list="known-tags">
-	</label>
-	<datalist id="known-tags">
-	{{#known_tags}}
+	<datalist id="known-{{name}}">
+	{{#known}}
 		<option value="{{.}}">
-	{{/known_tags}}
+	{{/known}}
 	</datalist>
+{{/text_input}}
+{{/inputs}}
 	<button type="submit">Filter</button>
 </form>
 <table class="tickets">
 	<thead>
 		<tr>
-			<th class="id">#</th><th class="status">Status</th><th class="severity">Severity</th><th class="title">Title</th>
+			<th class="id">#</th>{{#columns}}<th class="field field-{{name}}">{{label}}</th>{{/columns}}<th class="title">Title</th>
 		</tr>
 	</thead>
 	<tbody id="ticket-rows">

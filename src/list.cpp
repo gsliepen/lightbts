@@ -4,84 +4,73 @@
    SPDX-License-Identifier: GPL-3.0+
 */
 
+#include <algorithm>
 #include <print>
-#include <span>
 #include <set>
+#include <span>
 
 #include "commands.hpp"
 #include "pager.hpp"
 
 namespace {
 
-enum class What {
-	tickets,
-	tags,
-	milestones,
-};
+/// The field whose values to list, for a last word like "tags" or "milestones".
+const LightBTS::FieldDefinition *find_listed_field(const LightBTS::FieldDefinitions &definitions, std::string_view word) {
+	for (auto &field: definitions.fields)
+		if (word == field.name || word == field.name + "s")
+			return &field;
+	return nullptr;
+}
 
-LightBTS::Filter parse_filter(std::span<const std::string> words) {
-	LightBTS::Filter filter;
-
-	for (auto &word: words) {
-		if (word == "all")
-			filter.status.reset();
-		else if (auto status = LightBTS::parse_status(word))
-			filter.status = status;
-		else if (auto severity = LightBTS::parse_severity(word))
-			filter.severities.push_back(*severity);
-		else
-			filter.tags.push_back(word);
-	}
-
-	return filter;
+/// The width of a column, which fits all possible values of enum fields, otherwise all values that are shown.
+std::size_t column_width(const LightBTS::FieldDefinition &field, const std::vector<LightBTS::Ticket> &tickets) {
+	std::size_t width = 0;
+	if (field.type == LightBTS::FieldType::enumeration)
+		for (auto &value: field.values)
+			width = std::max(width, value.size());
+	for (auto &ticket: tickets)
+		width = std::max(width, field.format(ticket.get(field.name)).size());
+	return width;
 }
 
 }
 
 int do_list(const Options &options, const Arguments &args) {
 	auto bts = options.open_instance();
+	auto &definitions = bts.get_fields();
 
-	std::span<const std::string> words = args;
-	auto what = What::tickets;
+	std::span<const std::string> selectors = args;
+	const LightBTS::FieldDefinition *listed_field = nullptr;
 
-	if (!words.empty()) {
-		if (words.back() == "tags")
-			what = What::tags;
-		else if (words.back() == "milestones")
-			what = What::milestones;
-
-		if (what != What::tickets || words.back() == "bugs")
-			words = words.first(words.size() - 1);
+	if (!selectors.empty()) {
+		listed_field = find_listed_field(definitions, selectors.back());
+		if (listed_field || selectors.back() == "bugs" || selectors.back() == "tickets")
+			selectors = selectors.first(selectors.size() - 1);
 	}
 
-	auto tickets = bts.list(parse_filter(words));
+	auto tickets = bts.list(LightBTS::parse_filter(definitions, selectors));
 	Pager pager(options, bts.get_config("cli", "pager"));
 
-	switch (what) {
-	case What::tickets:
+	if (listed_field) {
+		std::set<std::string> values;
 		for (auto &ticket: tickets)
-			std::print(pager, "{:>6} {:6} {:9}  {}\n", ticket.id, name(ticket.status), name(ticket.severity), ticket.title);
-		break;
-
-	case What::tags: {
-		std::set<std::string> tags;
-		for (auto &ticket: tickets)
-			for (auto &tag: bts.get_tags(ticket))
-				tags.insert(tag);
-		for (auto &tag: tags)
-			std::print(pager, "{}\n", tag);
-		break;
+			if (auto found = ticket.fields.find(listed_field->name); found != ticket.fields.end())
+				values.insert(found->second.begin(), found->second.end());
+		for (auto &value: values)
+			std::print(pager, "{}\n", listed_field->format(value));
+		return 0;
 	}
 
-	case What::milestones: {
-		std::set<std::string> milestones;
-		for (auto &ticket: tickets)
-			if (auto milestone = bts.get_milestone(ticket); !milestone.empty())
-				milestones.insert(milestone);
-		for (auto &milestone: milestones)
-			std::print(pager, "{}\n", milestone);
-		break;
-	}
+	auto columns = definitions.parse_columns(bts.get_config("cli", "columns"));
+	std::vector<std::size_t> widths;
+	for (auto column: columns)
+		widths.push_back(column_width(*column, tickets));
+
+	for (auto &ticket: tickets) {
+		std::string line = std::format("{:>6}", ticket.id);
+		for (std::size_t i = 0; i < columns.size(); i++)
+			line += std::format(" {:{}}", columns[i]->format(ticket.get(columns[i]->name)), widths[i]);
+		std::print(pager, "{}  {}\n", line, ticket.title);
 	}
 
 	return 0;

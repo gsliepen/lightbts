@@ -1,0 +1,70 @@
+.Dd 2026-11-08
+.Dt LBTS-SET 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts set
+.Nd change a field of a ticket
+.Sh SYNOPSIS
+.Nm lbts set
+.Op Fl m Ar message
+.Ar id
+.Ar field
+.Ar value ...
+.Sh DESCRIPTION
+The command changes a field of an existing ticket.
+The
+.Ar id
+can either be a ticket or a message ID.
+.Pp
+Fields of the types
+.Ql enum ,
+.Ql date
+and
+.Ql number
+take a single value.
+For
+.Ql text
+and
+.Ql user
+fields, all values together form the new value.
+For
+.Ql set
+fields, the values are changes as in the corresponding pseudo-header:
+.Ql + Ns Ar value
+or just the value adds it,
+.Ql - Ns Ar value
+removes it, and
+.Ql = Ns Ar value
+replaces all values.
+.Pp
+The change is recorded as a message with a pseudo-header.
+If the command is run interactively, an editor is invoked where a text can be added to the message.
+An invalid value is reported as a warning, but the message is still recorded.
+.Pp
+The commands
+.Nm lbts severity ,
+.Nm lbts tags ,
+.Nm lbts owner ,
+.Nm lbts milestone ,
+.Nm lbts deadline
+and
+.Nm lbts progress
+are shortcuts for this command.
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl m Ar message
+Use the given message instead of invoking an editor.
+.El
+.Sh EXAMPLES
+.Bd -literal -offset indent
+lbts set 42 priority high
+lbts set 42 owner Some One <some@example.org>
+lbts set 42 tags patch -moreinfo
+.Ed
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-unset 1 ,
+.Xr lbts-fields 5 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

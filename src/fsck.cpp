@@ -15,7 +15,8 @@ int do_fsck(const Options &options, const Arguments &args) {
 		return 1;
 	}
 
-	auto bts = options.open_instance();
+	// fsck reports problems instead of fixing them.
+	auto bts = options.open_instance(LightBTS::Instance::Mode::open, {.update_index = false});
 	auto result = bts.fsck();
 
 	for (auto &problem: result.file_problems)

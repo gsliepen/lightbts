@@ -10,6 +10,7 @@
 
 #include "commands.hpp"
 #include "pager.hpp"
+#include "strings.hpp"
 
 namespace {
 
@@ -21,18 +22,13 @@ void show_ticket_header(LightBTS::Instance &bts, FILE *out, const LightBTS::Tick
 	auto details = bts.get_details(ticket);
 
 	std::print(out, "Bug#{}: {}\n", ticket.id, ticket.title);
-	std::print(out, "Status: {}\n", name(ticket.status));
-	if (!details.tags.empty())
-		std::print(out, "Tags: {}\n", join(details.tags));
-	std::print(out, "Severity: {}\n", name(ticket.severity));
-	if (!details.owner.empty())
-		std::print(out, "Owner: {}\n", details.owner);
-	if (!details.milestone.empty())
-		std::print(out, "Milestone: {}\n", details.milestone);
-	if (details.progress)
-		std::print(out, "Progress: {}%\n", details.progress);
-	if (!details.deadline.empty())
-		std::print(out, "Deadline: {}\n", details.deadline);
+	for (auto &field: bts.get_fields().fields) {
+		auto values = ticket.fields.find(field.name);
+		if (values == ticket.fields.end())
+			continue;
+		auto formatted = values->second | std::views::transform([&](auto &value) { return field.format(value); });
+		std::print(out, "{}: {}\n", LightBTS::capitalize(field.label), join(formatted));
+	}
 	if (!details.found_versions.empty())
 		std::print(out, "Found in: {}\n", join(details.found_versions));
 	if (!details.fixed_versions.empty())

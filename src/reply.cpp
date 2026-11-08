@@ -44,7 +44,7 @@ int do_reply(const Options &options, const Arguments &args) {
 
 	auto message = compose_message(bts, options, {
 		.subject = parent.get_header_value("Subject"),
-		.pseudo_headers = option_headers(options),
+		.pseudo_headers = option_headers(bts, options),
 		.in_reply_to = parent_id,
 		.editor_text = std::format("On {}, {} wrote:\n{}", parent.get_header_value("Date"), parent.get_header_value("From"), quote_text(parent.get_text())),
 		.editor_hint = "reply",

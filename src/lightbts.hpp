@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <map>
 #include <mimesis.hpp>
 #include <optional>
 #include <set>
@@ -28,21 +29,6 @@ namespace LightBTS {
 using Mimesis::Message;
 namespace fs = std::filesystem;
 
-enum class Status {
-	closed,
-	open,
-};
-
-enum class Severity {
-	wishlist,
-	minor,
-	normal,
-	important,
-	serious,
-	critical,
-	grave,
-};
-
 enum class LinkType {
 	relates,
 	duplicates,
@@ -50,8 +36,6 @@ enum class LinkType {
 	blocks,
 };
 
-inline constexpr std::array<std::string_view, 2> status_names = {"closed", "open"};
-inline constexpr std::array<std::string_view, 7> severity_names = {"wishlist", "minor", "normal", "important", "serious", "critical", "grave"};
 inline constexpr std::array<std::string_view, 4> link_names = {"relates", "duplicates", "depends", "blocks"};
 inline constexpr std::array<std::string_view, 4> verbose_link_names = {"relates to", "duplicates", "depends on", "blocks"};
 inline constexpr std::array<std::string_view, 4> reverse_link_names = {"related to by", "duplicated by", "depended on by", "blocked by"};
@@ -64,22 +48,23 @@ std::optional<Enum> parse_enum(const std::array<std::string_view, N> &names, std
 	return static_cast<Enum>(it - names.begin());
 }
 
-inline std::optional<Status> parse_status(std::string_view name) { return parse_enum<Status>(status_names, name); }
-inline std::optional<Severity> parse_severity(std::string_view name) { return parse_enum<Severity>(severity_names, name); }
 inline std::optional<LinkType> parse_link_type(std::string_view name) { return parse_enum<LinkType>(link_names, name); }
 
-inline std::string_view name(Status status) { return status_names.at(std::to_underlying(status)); }
-inline std::string_view name(Severity severity) { return severity_names.at(std::to_underlying(severity)); }
 inline std::string_view name(LinkType type) { return link_names.at(std::to_underlying(type)); }
 
 /// Removes the angle brackets around a Message-ID, if present.
 std::string unquote_message_id(std::string_view message_id);
 
+/// The values of the fields of a ticket, by the name of the field. Unset fields are not present.
+using FieldValues = std::map<std::string, std::vector<std::string>, std::less<>>;
+
 struct Ticket {
 	std::int64_t id = 0;
 	std::string title;
-	Status status = Status::open;
-	Severity severity = Severity::normal;
+	FieldValues fields;
+
+	/// The values of a field, separated by spaces, or an empty string if it is not set.
+	std::string get(std::string_view field) const;
 };
 
 struct Link {
@@ -90,24 +75,12 @@ struct Link {
 
 struct TicketDetails {
 	Ticket ticket;
-	std::string owner;
 	std::string submitter;
 	std::int64_t date = 0; ///< Seconds since the Unix epoch, or 0 if unknown.
-	std::string deadline;
-	int progress = 0;
-	std::string milestone;
-	std::set<std::string> tags;
 	std::vector<std::string> found_versions;
 	std::vector<std::string> fixed_versions;
 	std::vector<Link> links;         ///< Links from this ticket to other tickets.
 	std::vector<Link> reverse_links; ///< Links from other tickets to this ticket.
-};
-
-/// Which tickets Instance::list() returns. Tickets match if they have any of the given severities and tags.
-struct Filter {
-	std::optional<Status> status = Status::open; ///< Unset to match any status.
-	std::vector<Severity> severities;
-	std::vector<std::string> tags;
 };
 
 struct ImportResult {
@@ -142,7 +115,8 @@ struct FsckResult {
 
 struct InstanceOptions {
 	bool no_hooks = false;
-	bool check_fields = true; ///< Whether to refuse to open an instance whose field definitions are invalid.
+	bool update_index = true;        ///< Whether to rebuild an index that is outdated, unless the instance is opened read-only.
+	bool configuration_only = false; ///< Only use the configuration: allow invalid field definitions, and don't open the index.
 };
 
 /// A LightBTS instance: the .lightbts directory with its configuration, messages and index.
@@ -184,10 +158,10 @@ class Instance {
 	Ticket get_ticket(std::string_view id);
 	TicketDetails get_details(const Ticket &ticket);
 
-	std::set<std::string> get_tags(const Ticket &ticket);
-	/// Gets all tags that are used by any ticket.
-	std::set<std::string> get_all_tags();
-	std::string get_milestone(const Ticket &ticket);
+	/// Gets all values of a field that are used by any ticket.
+	std::set<std::string> get_used_values(std::string_view field);
+	/// Whether the index was built with other field definitions than the current ones.
+	bool is_index_outdated();
 	/// Gets the Message-IDs of all messages of a ticket, in the order they were imported.
 	std::vector<std::string> get_message_ids(const Ticket &ticket);
 	/// \return The Message-ID of the first message of the ticket, or an empty string if there are none.
@@ -222,7 +196,7 @@ class Instance {
 	void set_default_config();
 	void load_fields();
 	void install_templates() const;
-	void init_index(Mode mode);
+	void init_index(Mode mode, bool update_index);
 	void create_schema();
 	void drop_schema();
 	/// Rebuilds the index, which must be done inside a transaction.
@@ -237,8 +211,11 @@ class Instance {
 	void index_message(const Message &message, std::int64_t received, std::optional<std::int64_t> new_ticket_number, ImportResult &result);
 
 	bool ticket_exists(std::int64_t id);
+	void load_fields(Ticket &ticket);
 	void apply_metadata(std::int64_t ticket, const Message &message, std::vector<std::string> &warnings);
-	void apply_tags(std::int64_t ticket, std::string_view tags);
+	void set_field_values(std::int64_t ticket, const FieldDefinition &field, const std::vector<std::string> &values);
+	void apply_field(std::int64_t ticket, const FieldDefinition &field, std::string_view value, std::vector<std::string> &warnings);
+	void apply_set_field(std::int64_t ticket, const FieldDefinition &field, std::string_view changes, std::vector<std::string> &warnings);
 	void set_versions(std::int64_t ticket, std::string_view versions, int status);
 	void remove_versions(std::int64_t ticket, std::string_view versions, int status);
 	void apply_links(std::int64_t ticket, LinkType type, std::string_view targets, bool add, std::vector<std::string> &warnings);

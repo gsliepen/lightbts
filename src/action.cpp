@@ -7,6 +7,7 @@
 #include <iostream>
 #include <print>
 #include <ranges>
+#include <span>
 
 #include "commands.hpp"
 #include "compose.hpp"
@@ -26,8 +27,7 @@ bool check_argument_count(const Arguments &args, std::size_t minimum, std::size_
 
 constexpr auto unlimited = static_cast<std::size_t>(-1);
 
-int do_action(const Options &options, const std::string &id, const std::string &pseudo_headers) {
-	auto bts = options.open_instance();
+int do_action(const Options &options, LightBTS::Instance &bts, const std::string &id, const std::string &pseudo_headers) {
 	auto ticket = bts.get_ticket(id);
 	auto first_message_id = bts.get_first_message_id(ticket);
 
@@ -59,6 +59,11 @@ int do_action(const Options &options, const std::string &id, const std::string &
 	return 0;
 }
 
+int do_action(const Options &options, const std::string &id, const std::string &pseudo_headers) {
+	auto bts = options.open_instance();
+	return do_action(options, bts, id, pseudo_headers);
+}
+
 std::string version_headers(const Options &options, std::string_view key) {
 	std::string headers;
 	for (auto &version: options.versions)
@@ -66,24 +71,49 @@ std::string version_headers(const Options &options, std::string_view key) {
 	return headers;
 }
 
-std::string tag_headers(const Options &options) {
+std::string tag_headers(const LightBTS::Instance &bts, const Options &options) {
 	std::string headers;
 	for (auto &tag: options.tags)
-		headers += pseudo_header("Tag", "+" + tag);
+		headers += pseudo_header(bts.get_fields().get("tags").header_name(), "+" + tag);
 	return headers;
 }
 
-int do_status_action(const Options &options, const Arguments &args, std::string_view status, std::string_view version_key) {
+int do_status_action(const Options &options, const Arguments &args, bool close) {
 	if (!check_argument_count(args, 1, 1))
 		return 1;
-	return do_action(options, args[0], pseudo_header("Status", status) + version_headers(options, version_key) + tag_headers(options));
+
+	auto bts = options.open_instance();
+	auto &status = bts.get_fields().status;
+	auto headers = pseudo_header("Status", close ? status.close : status.reopen) + version_headers(options, close ? "Fixed" : "Found") + tag_headers(bts, options);
+	return do_action(options, bts, args[0], headers);
 }
 
-/// An action with a single value, like "lbts severity 1 minor".
-int do_single_action(const Options &options, const Arguments &args, std::string_view key) {
-	if (!check_argument_count(args, 2, 2))
+int set_field(const Options &options, const std::string &id, std::string_view field_name, std::span<const std::string> words) {
+	auto bts = options.open_instance();
+	auto &field = bts.get_fields().get(field_name);
+
+	using enum LightBTS::FieldType;
+	bool single_word = field.type == enumeration || field.type == date || field.type == number;
+	if (words.empty() || (single_word && words.size() > 1)) {
+		std::println(std::cerr, "Invalid number of arguments");
 		return 1;
-	return do_action(options, args[0], pseudo_header(key, args[1]));
+	}
+
+	auto value = words | std::views::join_with(' ') | std::ranges::to<std::string>();
+	return do_action(options, bts, id, pseudo_header(field.header_name(), value));
+}
+
+int unset_field(const Options &options, const std::string &id, std::string_view field_name) {
+	auto bts = options.open_instance();
+	auto &field = bts.get_fields().get(field_name);
+	return do_action(options, bts, id, pseudo_header(field.header_name(), field.has_multiple_values() ? "=" : "-"));
+}
+
+/// A shortcut for lbts set, like "lbts severity 1 minor".
+int do_field_shortcut(const Options &options, const Arguments &args, std::string_view field_name) {
+	if (!check_argument_count(args, 2, unlimited))
+		return 1;
+	return set_field(options, args[0], field_name, std::span(args).subspan(1));
 }
 
 /// An action where all remaining arguments form one value, like "lbts retitle 1 New title".
@@ -119,11 +149,11 @@ int do_link_action(const Options &options, const Arguments &args, std::string_vi
 }
 
 int do_close(const Options &options, const Arguments &args) {
-	return do_status_action(options, args, "closed", "Fixed");
+	return do_status_action(options, args, true);
 }
 
 int do_reopen(const Options &options, const Arguments &args) {
-	return do_status_action(options, args, "open", "Found");
+	return do_status_action(options, args, false);
 }
 
 int do_retitle(const Options &options, const Arguments &args) {
@@ -146,10 +176,6 @@ int do_notfixed(const Options &options, const Arguments &args) {
 	return do_multiple_action(options, args, "Notfixed");
 }
 
-int do_severity(const Options &options, const Arguments &args) {
-	return do_single_action(options, args, "Severity");
-}
-
 int do_link(const Options &options, const Arguments &args) {
 	return do_link_action(options, args, "");
 }
@@ -158,28 +184,44 @@ int do_unlink(const Options &options, const Arguments &args) {
 	return do_link_action(options, args, "Un");
 }
 
+int do_set(const Options &options, const Arguments &args) {
+	if (!check_argument_count(args, 3, unlimited))
+		return 1;
+	return set_field(options, args[0], args[1], std::span(args).subspan(2));
+}
+
+int do_unset(const Options &options, const Arguments &args) {
+	if (!check_argument_count(args, 2, 2))
+		return 1;
+	return unset_field(options, args[0], args[1]);
+}
+
+int do_severity(const Options &options, const Arguments &args) {
+	return do_field_shortcut(options, args, "severity");
+}
+
 int do_tags(const Options &options, const Arguments &args) {
-	return do_words_action(options, args, "Tags");
+	return do_field_shortcut(options, args, "tags");
 }
 
 int do_owner(const Options &options, const Arguments &args) {
-	return do_words_action(options, args, "Owner");
+	return do_field_shortcut(options, args, "owner");
 }
 
 int do_noowner(const Options &options, const Arguments &args) {
 	if (!check_argument_count(args, 1, 1))
 		return 1;
-	return do_action(options, args[0], pseudo_header("Owner", "-"));
+	return unset_field(options, args[0], "owner");
 }
 
 int do_deadline(const Options &options, const Arguments &args) {
-	return do_single_action(options, args, "Deadline");
+	return do_field_shortcut(options, args, "deadline");
 }
 
 int do_milestone(const Options &options, const Arguments &args) {
-	return do_single_action(options, args, "Milestone");
+	return do_field_shortcut(options, args, "milestone");
 }
 
 int do_progress(const Options &options, const Arguments &args) {
-	return do_single_action(options, args, "Progress");
+	return do_field_shortcut(options, args, "progress");
 }

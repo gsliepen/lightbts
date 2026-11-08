@@ -23,7 +23,8 @@ including references to tickets that do not exist.
 Differences between the index and what rebuilding it from the messages would produce,
 for example messages that are not in the index,
 messages in the index whose file is missing,
-and tickets whose status, tags or links differ.
+tickets whose fields or links differ,
+and an index that was built with other field definitions.
 .El
 .Pp
 The last two kinds of problems are fixed by running
@@ -34,6 +35,11 @@ finds the differences by rebuilding the index inside a transaction that is then 
 so it reports exactly what
 .Nm lbts reindex
 would change.
+.Pp
+Unlike other commands,
+.Nm lbts fsck
+does not rebuild an index that was built with other field definitions,
+but reports it.
 .Pp
 Problems are printed on stdout, one per line,
 prefixed with "Message file:", "Database:" or "Index:".

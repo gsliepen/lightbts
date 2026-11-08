@@ -125,6 +125,45 @@ int main() {
 	CHECK(configured.body.contains("href=\"https://static.example.org/lbts/lightbts.css\""));
 	CHECK(header(configured, "Content-Security-Policy").contains("style-src 'self' https://static.example.org;"));
 
+	// Custom fields are shown and can be filtered on
+	{
+		Instance bts(dir);
+		bts.set_config("field.priority", "type", "enum");
+		bts.set_config("field.priority", "values", "low, very-high");
+		bts.set_config("field.priority", "ordered", "true");
+		bts.set_config("web", "columns", "priority, status");
+		bts.save_config();
+	}
+	{
+		Instance bts(dir);
+		bts.import(make_message("Fourth bug", "<4@test>", "Priority: very-high\n\nThe fourth bug.\n"));
+	}
+	auto custom = get(handler, "/");
+	CHECK(custom.body.contains("<th class=\"field field-priority\">Priority</th><th class=\"field field-status\">Status</th>"));
+	CHECK(custom.body.contains("<td class=\"field field-priority\">Very high</td>"));
+	CHECK(custom.body.contains("class=\"status-open severity-normal priority-very-high category-to-do\""));
+	CHECK(custom.body.contains("<select name=\"priority\">"));
+	CHECK(!custom.body.contains("optgroup"));
+	CHECK(!custom.body.contains("field-severity"));
+	CHECK(get(handler, "/", {{"priority", "very-high"}}).body.contains("Fourth bug"));
+	CHECK(!get(handler, "/", {{"priority", "very-high"}}).body.contains("First &lt;"));
+	CHECK(get(handler, "/", {{"priority", "low"}}).body.contains("No tickets found."));
+	CHECK(get(handler, "/", {{"priority", "bogus"}}).status == 400);
+	CHECK(get(handler, "/", {{"status", "status=closed"}}).body.contains("Second bug"));
+	CHECK(get(handler, "/", {{"status", "in-progress"}}).body.contains("No tickets found."));
+
+	auto fourth = get(handler, "/ticket/3");
+	CHECK(fourth.body.contains("<dt>Priority</dt><dd class=\"priority-very-high\"><a href=\"/bugs/?status=all&amp;priority=very-high\">Very high</a> </dd>"));
+	CHECK(fourth.body.contains("<a href=\"/bugs/?status=status%3Dopen\">Open</a>"));
+	CHECK(get(handler, "/ticket/1").body.contains("<a class=\"tag\" href=\"/bugs/?status=all&amp;tags=foo\">foo</a>"));
+
+	{
+		Instance bts(dir);
+		bts.set_config("web", "columns", "nonexistent");
+		bts.save_config();
+	}
+	CHECK(get(handler, "/").status == 500);
+
 	// A missing instance results in an error, not a crash
 	CHECK(Handler(fs::temp_directory_path() / ("lightbts-missing-" + std::to_string(getpid()))).handle({}).status == 500);
 

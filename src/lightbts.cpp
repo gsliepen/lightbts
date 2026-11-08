@@ -7,7 +7,6 @@
 #include "lightbts.hpp"
 
 #include <blake2.h>
-#include <charconv>
 #include <chrono>
 #include <climits>
 #include <cstdlib>
@@ -19,6 +18,7 @@
 #include <map>
 #include <print>
 #include <pwd.h>
+#include <ranges>
 #include <sstream>
 #include <stdexcept>
 #include <tuple>
@@ -42,7 +42,7 @@ std::string unquote_message_id(std::string_view message_id) {
 namespace {
 
 constexpr int application_id = 0x4c425453;
-constexpr int index_version = 4;
+constexpr int index_version = 5;
 
 std::string hash_message_id(std::string_view message_id) {
 	auto unquoted = unquote_message_id(message_id);
@@ -127,21 +127,6 @@ std::optional<Microseconds> get_received_time(const Message &message) {
 	return std::nullopt;
 }
 
-std::optional<std::int64_t> parse_integer(std::string_view text) {
-	std::int64_t value;
-	auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-	if (error != std::errc() || end != text.data() + text.size())
-		return std::nullopt;
-	return value;
-}
-
-bool is_valid_date(std::string_view text) {
-	std::chrono::year_month_day date;
-	std::istringstream in{std::string(text)};
-	in >> std::chrono::parse("%F", date);
-	return in && in.peek() == std::char_traits<char>::eof() && date.ok();
-}
-
 std::string read_file(const fs::path &path) {
 	std::ifstream file(path, std::ios::binary);
 	std::stringstream contents;
@@ -152,12 +137,7 @@ std::string read_file(const fs::path &path) {
 }
 
 Ticket ticket_from_row(SQLite3::row row) {
-	return {
-		.id = row.get_int64(0),
-		.title = row.get_string(1),
-		.status = static_cast<Status>(row.get_int(2)),
-		.severity = static_cast<Severity>(row.get_int(3)),
-	};
+	return {.id = row.get_int64(0), .title = row.get_string(1)};
 }
 
 std::string placeholders(std::size_t count) {
@@ -204,7 +184,7 @@ Instance::Instance(const fs::path &start_dir, Mode mode, InstanceOptions options
 		config.load(base_dir / "config");
 
 	load_fields();
-	if (options.check_fields)
+	if (!options.configuration_only)
 		get_fields();
 
 	// Relative paths are relative to the .lightbts directory, absolute paths replace it.
@@ -224,7 +204,8 @@ Instance::Instance(const fs::path &start_dir, Mode mode, InstanceOptions options
 		install_templates();
 	}
 
-	init_index(mode);
+	if (!options.configuration_only)
+		init_index(mode, options.update_index);
 
 	if (mode == Mode::create)
 		save_config();
@@ -278,7 +259,14 @@ void Instance::install_templates() const {
 	}
 }
 
-void Instance::init_index(Mode mode) {
+std::string Ticket::get(std::string_view field) const {
+	auto values = fields.find(field);
+	if (values == fields.end())
+		return {};
+	return values->second | std::views::join_with(' ') | std::ranges::to<std::string>();
+}
+
+void Instance::init_index(Mode mode, bool update_index) {
 	db.open(dbfile.string(), mode == Mode::read_only);
 
 	auto version = db.execute("PRAGMA user_version").get_int(0);
@@ -296,17 +284,41 @@ void Instance::init_index(Mode mode) {
 		auto transaction = db.begin();
 		create_schema();
 		transaction.commit();
-	} else if (version < index_version) {
-		throw std::runtime_error(std::format("Unsupported index version {}, use the Python prototype of LightBTS to upgrade it to version {}", version, index_version));
+	} else if (version < 4) {
+		throw std::runtime_error(std::format("Unsupported index version {}, use the Python prototype of LightBTS to upgrade it to version 4", version));
 	} else if (version > index_version) {
 		throw std::runtime_error(std::format("Unknown index version {}", version));
 	}
 
 	db.execute("PRAGMA foreign_keys = ON");
+
+	// Older indexes, and indexes built with other field definitions, are rebuilt from the messages.
+	bool old_version = version && version < index_version;
+	if (!old_version && (!fields || !is_index_outdated()))
+		return;
+
+	if (mode == Mode::read_only || !update_index) {
+		if (old_version)
+			throw std::runtime_error(std::format("The index has version {}, run lbts reindex to upgrade it", version));
+		std::println(std::cerr, "Warning: the field definitions have changed since the index was built, run lbts reindex to update it");
+		return;
+	}
+
+	std::println(std::cerr, "{}", old_version ? "Upgrading the index..." : "The field definitions have changed, rebuilding the index...");
+	auto result = reindex();
+	for (auto &error: result.errors)
+		std::println(std::cerr, "Error: {}", error);
+}
+
+bool Instance::is_index_outdated() {
+	auto stored = db.execute("SELECT value FROM metadata WHERE name = 'fields'");
+	return !stored || stored.get_string(0) != get_fields().signature;
 }
 
 void Instance::create_schema() {
-	db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL DEFAULT 1, severity INTEGER NOT NULL DEFAULT 2, title TEXT, owner TEXT, submitter TEXT, date INTEGER, deadline INTEGER, progress INTEGER NOT NULL DEFAULT 0, milestone TEXT)");
+	db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, submitter TEXT, date INTEGER)");
+	db.execute("CREATE TABLE fields (bug INTEGER, name TEXT, value TEXT, PRIMARY KEY(bug, name, value), FOREIGN KEY(bug) REFERENCES bugs(id))");
+	db.execute("CREATE INDEX fields_name_value_index ON fields (name, value)");
 	db.execute("CREATE TABLE links (a INTEGER, b INTEGER, type INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))");
 	db.execute("CREATE INDEX links_a_index ON links (a)");
 	db.execute("CREATE INDEX links_b_index ON links (b)");
@@ -314,12 +326,11 @@ void Instance::create_schema() {
 	db.execute("CREATE TABLE recipients (bug INTEGER, address TEXT, PRIMARY KEY(bug, address), FOREIGN KEY(bug) REFERENCES bugs(id))");
 	db.execute("CREATE INDEX recipients_bug_index ON recipients (bug)");
 	db.execute("CREATE INDEX recipients_address_index ON recipients (address)");
-	db.execute("CREATE TABLE tags (bug INTEGER, tag TEXT, PRIMARY KEY(bug, tag), FOREIGN KEY(bug) REFERENCES bugs(id))");
-	db.execute("CREATE INDEX tags_bug_index ON tags (bug)");
-	db.execute("CREATE INDEX tags_tag_index ON tags (tag)");
 	db.execute("CREATE TABLE versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))");
 	db.execute("CREATE INDEX versions_bug_index ON versions (bug)");
 	db.execute("CREATE INDEX versions_version_index ON versions (version)");
+	db.execute("CREATE TABLE metadata (name TEXT PRIMARY KEY, value TEXT)");
+	db.execute("INSERT INTO metadata (name, value) VALUES ('fields', ?)", fields ? fields->signature : std::string());
 	db.execute(std::format("PRAGMA application_id = {}", application_id));
 	db.execute(std::format("PRAGMA user_version = {}", index_version));
 }
@@ -329,23 +340,31 @@ namespace {
 struct IndexTable {
 	std::string_view name;
 	std::size_t key_columns; ///< The number of leading columns that form the primary key.
+	std::string_view query;  ///< How fsck reads the table.
 };
 
-/// All tables in the index. Tables referring to other tables come first, because of the foreign keys.
+/// All tables in the index that are compared by fsck. Tables referring to other tables come first, because of the foreign keys.
 constexpr IndexTable index_tables[] = {
-	{"links", 2},
-	{"messages", 1},
-	{"recipients", 2},
-	{"tags", 2},
-	{"versions", 2},
-	{"bugs", 1},
+	{"links", 2, "SELECT * FROM links"},
+	{"messages", 1, "SELECT * FROM messages"},
+	{"recipients", 2, "SELECT * FROM recipients"},
+	// The values of a field are compared together, to show which values changed.
+	{"fields", 2, "SELECT bug, name, group_concat(value, ' ') AS value FROM (SELECT * FROM fields ORDER BY bug, name, value) GROUP BY bug, name"},
+	{"versions", 2, "SELECT * FROM versions"},
+	{"bugs", 1, "SELECT * FROM bugs"},
 };
+
+/// Tables of older versions of the index, which refer to the current tables.
+constexpr std::string_view old_tables[] = {"tags"};
 
 }
 
 void Instance::drop_schema() {
+	for (auto table: old_tables)
+		db.execute(std::format("DROP TABLE IF EXISTS {}", table));
 	for (auto &table: index_tables)
 		db.execute(std::format("DROP TABLE IF EXISTS {}", table.name));
+	db.execute("DROP TABLE IF EXISTS metadata");
 }
 
 bool Instance::has_config(const std::string &section, const std::string &variable) const {
@@ -421,40 +440,114 @@ std::string Instance::get_local_email_address() const {
 	return std::format("{} <{}>", trim(full_name), address);
 }
 
+namespace {
+
+/// The SQL for a condition, and the values to bind to it.
+struct SqlCondition {
+	std::string sql;
+	std::vector<std::string> values;
+};
+
+SqlCondition has_any_value(std::string_view field, const std::vector<std::string> &values, bool negate = false) {
+	SqlCondition condition{std::format("{}EXISTS (SELECT 1 FROM fields WHERE bug = bugs.id AND name = ? AND value IN ({}))", negate ? "NOT " : "", placeholders(values.size())), {std::string(field)}};
+	condition.values.insert(condition.values.end(), values.begin(), values.end());
+	return condition;
+}
+
+bool compare(Comparison comparison, auto a, auto b) {
+	switch (comparison) {
+	case Comparison::equal: return a == b;
+	case Comparison::not_equal: return a != b;
+	case Comparison::less: return a < b;
+	case Comparison::less_equal: return a <= b;
+	case Comparison::greater: return a > b;
+	case Comparison::greater_equal: return a >= b;
+	}
+	return false;
+}
+
+SqlCondition sql_condition(const FieldDefinitions &definitions, const Condition &condition) {
+	auto &field = definitions.get(condition.field);
+
+	if (condition.comparison == Comparison::not_equal)
+		return has_any_value(field.name, {condition.value}, true);
+
+	// Ordered enums are compared by the position of their values.
+	if (field.type == FieldType::enumeration) {
+		auto position = [&](std::string_view value) { return std::ranges::find(field.values, value) - field.values.begin(); };
+		std::vector<std::string> values;
+		for (auto &value: field.values)
+			if (compare(condition.comparison, position(value), position(condition.value)))
+				values.push_back(value);
+		return has_any_value(field.name, values);
+	}
+
+	// Numbers are stored as text, dates of the form YYYY-MM-DD compare correctly as text.
+	auto comparison = comparison_operators[std::to_underlying(condition.comparison)];
+	auto sql = field.type == FieldType::number
+		? std::format("EXISTS (SELECT 1 FROM fields WHERE bug = bugs.id AND name = ? AND CAST(value AS INTEGER) {} CAST(? AS INTEGER))", comparison)
+		: std::format("EXISTS (SELECT 1 FROM fields WHERE bug = bugs.id AND name = ? AND value {} ?)", comparison);
+	return {sql, {field.name, condition.value}};
+}
+
+}
+
 std::vector<Ticket> Instance::list(const Filter &filter) {
-	std::string sql = "SELECT id, title, status, severity FROM bugs WHERE 1";
+	auto &definitions = get_fields();
+	std::vector<SqlCondition> conditions;
 
-	if (filter.status)
-		sql += " AND status = ?";
+	if (filter.categories.size() < status_category_names.size()) {
+		std::vector<std::string> statuses;
+		for (auto &status: definitions.get("status").values)
+			if (filter.categories.contains(definitions.status.category(status)))
+				statuses.push_back(status);
+		conditions.push_back(has_any_value("status", statuses));
+	}
 
-	if (!filter.severities.empty())
-		sql += std::format(" AND severity IN ({})", placeholders(filter.severities.size()));
+	// Conditions with = on the same field are combined, so that any of the values matches.
+	std::map<std::string, std::vector<std::string>> equal_values;
+	for (auto &condition: filter.conditions) {
+		auto &field = definitions.get(condition.field);
+		if (condition.comparison == Comparison::equal && field.type != FieldType::number)
+			equal_values[field.name].push_back(condition.value);
+		else
+			conditions.push_back(sql_condition(definitions, condition));
+	}
+	for (auto &[field, values]: equal_values)
+		conditions.push_back(has_any_value(field, values));
 
-	if (!filter.tags.empty())
-		sql += std::format(" AND EXISTS (SELECT 1 FROM tags WHERE bug = id AND tag IN ({}))", placeholders(filter.tags.size()));
-
+	std::string sql = "SELECT id, title FROM bugs WHERE 1";
+	for (auto &condition: conditions)
+		sql += " AND " + condition.sql;
 	sql += " ORDER BY id";
 
 	auto statement = db.prepare(sql);
-	if (filter.status)
-		statement.bind(std::to_underlying(*filter.status));
-	for (auto severity: filter.severities)
-		statement.bind(std::to_underlying(severity));
-	for (auto &tag: filter.tags)
-		statement.bind(to_lower(tag));
+	for (auto &condition: conditions)
+		for (auto &value: condition.values)
+			statement.bind(value);
 
 	std::vector<Ticket> tickets;
 	while (statement.step() == SQLITE_ROW)
 		tickets.push_back(ticket_from_row(&statement));
 
+	for (auto &ticket: tickets)
+		load_fields(ticket);
+
 	return tickets;
 }
 
+void Instance::load_fields(Ticket &ticket) {
+	for (auto &&row: db.execute("SELECT name, value FROM fields WHERE bug = ? ORDER BY name, value", ticket.id))
+		ticket.fields[row.get_string(0)].push_back(row.get_string(1));
+}
+
 std::optional<Ticket> Instance::find_ticket(std::int64_t id) {
-	auto result = db.execute("SELECT id, title, status, severity FROM bugs WHERE id = ?", id);
+	auto result = db.execute("SELECT id, title FROM bugs WHERE id = ?", id);
 	if (!result)
 		return std::nullopt;
-	return ticket_from_row(*result.begin());
+	auto ticket = ticket_from_row(*result.begin());
+	load_fields(ticket);
+	return ticket;
 }
 
 Ticket Instance::get_ticket(std::int64_t id) {
@@ -480,15 +573,9 @@ Ticket Instance::get_ticket(std::string_view id) {
 TicketDetails Instance::get_details(const Ticket &ticket) {
 	TicketDetails details{.ticket = ticket};
 
-	auto row = db.execute("SELECT owner, submitter, date, deadline, progress, milestone FROM bugs WHERE id = ?", ticket.id);
-	details.owner = row.get_string(0);
-	details.submitter = row.get_string(1);
-	details.date = row.get_int64(2);
-	details.deadline = row.get_string(3);
-	details.progress = row.get_int(4);
-	details.milestone = row.get_string(5);
-
-	details.tags = get_tags(ticket);
+	auto row = db.execute("SELECT submitter, date FROM bugs WHERE id = ?", ticket.id);
+	details.submitter = row.get_string(0);
+	details.date = row.get_int64(1);
 
 	for (auto &&version: db.execute("SELECT version, status FROM versions WHERE bug = ? ORDER BY version", ticket.id))
 		(version.get_int(1) ? details.found_versions : details.fixed_versions).push_back(version.get_string(0));
@@ -502,22 +589,11 @@ TicketDetails Instance::get_details(const Ticket &ticket) {
 	return details;
 }
 
-std::set<std::string> Instance::get_tags(const Ticket &ticket) {
-	std::set<std::string> tags;
-	for (auto &&row: db.execute("SELECT tag FROM tags WHERE bug = ?", ticket.id))
-		tags.insert(row.get_string(0));
-	return tags;
-}
-
-std::set<std::string> Instance::get_all_tags() {
-	std::set<std::string> tags;
-	for (auto &&row: db.execute("SELECT DISTINCT tag FROM tags"))
-		tags.insert(row.get_string(0));
-	return tags;
-}
-
-std::string Instance::get_milestone(const Ticket &ticket) {
-	return db.execute("SELECT milestone FROM bugs WHERE id = ?", ticket.id).get_string(0);
+std::set<std::string> Instance::get_used_values(std::string_view field) {
+	std::set<std::string> values;
+	for (auto &&row: db.execute("SELECT DISTINCT value FROM fields WHERE name = ?", get_fields().get(field).name))
+		values.insert(row.get_string(0));
+	return values;
 }
 
 std::vector<std::string> Instance::get_message_ids(const Ticket &ticket) {
@@ -599,29 +675,52 @@ void Instance::remove_versions(std::int64_t ticket, std::string_view versions, i
 		db.execute("DELETE FROM versions WHERE bug = ? AND version = ? AND status = ?", ticket, version, status);
 }
 
-void Instance::apply_tags(std::int64_t ticket, std::string_view tags) {
+void Instance::set_field_values(std::int64_t ticket, const FieldDefinition &field, const std::vector<std::string> &values) {
+	db.execute("DELETE FROM fields WHERE bug = ? AND name = ?", ticket, field.name);
+	for (auto &value: values)
+		db.execute("INSERT OR IGNORE INTO fields (bug, name, value) VALUES (?, ?, ?)", ticket, field.name, value);
+}
+
+void Instance::apply_field(std::int64_t ticket, const FieldDefinition &field, std::string_view value, std::vector<std::string> &warnings) {
+	if (field.has_multiple_values())
+		return apply_set_field(ticket, field, value, warnings);
+
+	if (trim(value) == "-")
+		return set_field_values(ticket, field, field.default_values);
+
+	if (auto normalized = field.normalize(value))
+		set_field_values(ticket, field, {*normalized});
+	else
+		warnings.push_back(std::format("Invalid {} \"{}\", expected {}", field.name, trim(value), field.describe_valid_values()));
+}
+
+/// Applies changes like "+foo -bar", "foo bar" and "= foo".
+void Instance::apply_set_field(std::int64_t ticket, const FieldDefinition &field, std::string_view changes, std::vector<std::string> &warnings) {
 	bool add = true;
 
-	for (auto tag: split(tags)) {
-		if (tag.front() == '-') {
+	for (auto word: split(changes)) {
+		if (word.front() == '-') {
 			add = false;
-			tag.erase(0, 1);
-		} else if (tag.front() == '+') {
+			word.erase(0, 1);
+		} else if (word.front() == '+') {
 			add = true;
-			tag.erase(0, 1);
-		} else if (tag.front() == '=') {
+			word.erase(0, 1);
+		} else if (word.front() == '=') {
 			add = true;
-			db.execute("DELETE FROM tags WHERE bug = ?", ticket);
-			tag.erase(0, 1);
+			db.execute("DELETE FROM fields WHERE bug = ? AND name = ?", ticket, field.name);
+			word.erase(0, 1);
 		}
 
-		if (tag.empty())
+		if (word.empty())
 			continue;
 
-		if (add)
-			db.execute("INSERT OR IGNORE INTO tags (bug, tag) VALUES (?, ?)", ticket, to_lower(tag));
+		auto value = field.normalize(word);
+		if (!value)
+			warnings.push_back(std::format("Invalid {} \"{}\", expected {}", field.name, word, field.describe_valid_values()));
+		else if (add)
+			db.execute("INSERT OR IGNORE INTO fields (bug, name, value) VALUES (?, ?, ?)", ticket, field.name, *value);
 		else
-			db.execute("DELETE FROM tags WHERE bug = ? AND tag = ?", ticket, to_lower(tag));
+			db.execute("DELETE FROM fields WHERE bug = ? AND name = ? AND value = ?", ticket, field.name, *value);
 	}
 }
 
@@ -641,14 +740,11 @@ void Instance::apply_links(std::int64_t ticket, LinkType type, std::string_view 
 }
 
 void Instance::apply_metadata(std::int64_t ticket, const Message &message, std::vector<std::string> &warnings) {
-	std::optional<std::string> status;
-	std::optional<std::string> severity;
+	auto &definitions = get_fields();
+
 	std::optional<std::string> title;
-	std::optional<std::string> owner;
-	std::optional<std::string> progress;
-	std::optional<std::string> milestone;
-	std::optional<std::string> deadline;
-	std::vector<std::string> tags;
+	std::vector<std::pair<const FieldDefinition *, std::string>> field_changes;
+	std::map<std::string, std::string> single_values;
 	std::vector<std::string> versions;
 	std::vector<std::string> found;
 	std::vector<std::string> notfound;
@@ -657,73 +753,50 @@ void Instance::apply_metadata(std::int64_t ticket, const Message &message, std::
 	std::vector<std::pair<LinkType, std::string>> links;
 	std::vector<std::pair<LinkType, std::string>> unlinks;
 
-	auto set_once = [&](std::optional<std::string> &variable, std::string_view key, const std::string &value) {
-		if (variable && *variable != value)
-			warnings.push_back(std::format("Duplicate {} field", key));
-		variable = value;
+	auto change_field = [&](const FieldDefinition &field, const std::string &value) {
+		if (!field.has_multiple_values()) {
+			auto [previous, inserted] = single_values.emplace(field.name, value);
+			if (!inserted && previous->second != value)
+				warnings.push_back(std::format("Duplicate {} field", field.name));
+			previous->second = value;
+		}
+		field_changes.emplace_back(&field, value);
 	};
 
-	if (auto header = message.get_header_value("X-LightBTS-Status"); !trim(header).empty())
-		status = trim(header);
-
-	if (auto header = message.get_header_value("X-LightBTS-Tag"); !trim(header).empty())
-		tags.emplace_back(trim(header));
+	// Email headers like X-LightBTS-Status act as pseudo-headers.
+	constexpr std::string_view header_prefix = "x-lightbts-";
+	for (auto &[header, value]: message.get_headers()) {
+		auto name = to_lower(header);
+		if (!name.starts_with(header_prefix) || trim(value).empty())
+			continue;
+		if (auto field = definitions.find(std::string_view(name).substr(header_prefix.size())))
+			change_field(*field, std::string(trim(message.get_header_value(header))));
+	}
 
 	for (auto &[key, value]: parse_pseudo_headers(message.get_text())) {
-		if (key == "status")
-			set_once(status, key, value);
-		else if (key == "severity")
-			set_once(severity, key, value);
-		else if (key == "title" || key == "topic")
-			set_once(title, "title", value);
-		else if (key == "owner")
-			set_once(owner, key, value);
-		else if (key == "progress")
-			set_once(progress, key, value);
-		else if (key == "milestone")
-			set_once(milestone, key, value);
-		else if (key == "deadline")
-			set_once(deadline, key, value);
-		else if (key == "tag" || key == "tags")
-			tags.push_back(value);
-		else if (key == "version")
+		if (key == "title" || key == "topic") {
+			if (title && *title != value)
+				warnings.push_back("Duplicate title field");
+			title = value;
+		} else if (key == "version") {
 			versions.push_back(value);
-		else if (key == "found")
+		} else if (key == "found") {
 			found.push_back(value);
-		else if (key == "notfound")
+		} else if (key == "notfound") {
 			notfound.push_back(value);
-		else if (key == "fixed")
+		} else if (key == "fixed") {
 			fixed.push_back(value);
-		else if (key == "notfixed")
+		} else if (key == "notfixed") {
 			notfixed.push_back(value);
-		else if (auto type = parse_link_type(key))
+		} else if (auto type = parse_link_type(key)) {
 			links.emplace_back(*type, value);
-		else if (auto untype = key.starts_with("un") ? parse_link_type(std::string_view(key).substr(2)) : std::nullopt)
+		} else if (auto untype = key.starts_with("un") ? parse_link_type(std::string_view(key).substr(2)) : std::nullopt) {
 			unlinks.emplace_back(*untype, value);
-		else
+		} else if (auto field = definitions.find(key)) {
+			change_field(*field, value);
+		} else {
 			warnings.push_back(std::format("Unknown pseudo-header field \"{}\"", key));
-	}
-
-	auto set_column = [&](std::string_view column, const std::string &value) {
-		auto sql = std::format("UPDATE bugs SET {} = ? WHERE id = ?", column);
-		if (value == "-")
-			db.execute(sql, nullptr, ticket);
-		else
-			db.execute(sql, value, ticket);
-	};
-
-	if (status) {
-		if (auto value = parse_status(to_lower(*status)))
-			db.execute("UPDATE bugs SET status = ? WHERE id = ?", std::to_underlying(*value), ticket);
-		else
-			warnings.push_back(std::format("Invalid status \"{}\"", *status));
-	}
-
-	if (severity) {
-		if (auto value = parse_severity(to_lower(*severity)))
-			db.execute("UPDATE bugs SET severity = ? WHERE id = ?", std::to_underlying(*value), ticket);
-		else
-			warnings.push_back(std::format("Invalid severity \"{}\"", *severity));
+		}
 	}
 
 	if (title) {
@@ -733,9 +806,15 @@ void Instance::apply_metadata(std::int64_t ticket, const Message &message, std::
 			db.execute("UPDATE bugs SET title = ? WHERE id = ?", *title, ticket);
 	}
 
-	auto ticket_status = db.execute("SELECT status FROM bugs WHERE id = ?", ticket).get_int(0);
+	for (auto &[field, value]: field_changes)
+		apply_field(ticket, *field, value, warnings);
+
+	// A version without Found or Fixed depends on whether the ticket is open.
+	auto status = db.execute("SELECT value FROM fields WHERE bug = ? AND name = 'status'", ticket);
+	int found_status = !status || definitions.status.is_open(status.get_string(0));
+
 	for (auto &version: versions)
-		set_versions(ticket, version, ticket_status);
+		set_versions(ticket, version, found_status);
 	for (auto &version: notfound)
 		remove_versions(ticket, version, 1);
 	for (auto &version: found)
@@ -744,32 +823,6 @@ void Instance::apply_metadata(std::int64_t ticket, const Message &message, std::
 		remove_versions(ticket, version, 0);
 	for (auto &version: fixed)
 		set_versions(ticket, version, 0);
-
-	if (progress) {
-		std::string_view text = *progress;
-		if (text.ends_with('%'))
-			text.remove_suffix(1);
-		if (auto value = parse_integer(trim(text)); value && *value >= 0 && *value <= 100)
-			db.execute("UPDATE bugs SET progress = ? WHERE id = ?", *value, ticket);
-		else
-			warnings.push_back(std::format("Invalid progress \"{}\"", *progress));
-	}
-
-	if (milestone)
-		set_column("milestone", *milestone);
-
-	if (deadline) {
-		if (*deadline == "-" || is_valid_date(*deadline))
-			set_column("deadline", *deadline);
-		else
-			warnings.push_back(std::format("Invalid deadline \"{}\", expected YYYY-MM-DD", *deadline));
-	}
-
-	if (owner)
-		set_column("owner", *owner);
-
-	for (auto &value: tags)
-		apply_tags(ticket, value);
 
 	for (auto &[type, targets]: links)
 		apply_links(ticket, type, targets, true, warnings);
@@ -974,7 +1027,7 @@ std::string format_value(const SQLite3::statement &statement, int column) {
 }
 
 TableContents read_table(SQLite3::database &db, const IndexTable &table) {
-	auto statement = db.prepare(std::format("SELECT * FROM {}", table.name));
+	auto statement = db.prepare(table.query);
 
 	TableContents contents;
 	for (int i = 0; i < statement.column_count(); i++)
@@ -1000,12 +1053,10 @@ std::string without_quotes(std::string_view value) {
 /// Shows enumerations by their names instead of their numbers.
 std::string describe_value(std::string_view table, std::string_view column, const std::string &value) {
 	auto number = parse_integer(value);
-	if (table == "bugs" && column == "status" && number && *number >= 0 && *number < std::ssize(status_names))
-		return std::string(status_names[*number]);
-	if (table == "bugs" && column == "severity" && number && *number >= 0 && *number < std::ssize(severity_names))
-		return std::string(severity_names[*number]);
 	if (table == "links" && column == "type" && number && *number >= 0 && *number < std::ssize(link_names))
 		return std::string(link_names[*number]);
+	if (table == "fields")
+		return without_quotes(value);
 	return value;
 }
 
@@ -1022,6 +1073,8 @@ std::string describe_subject(const IndexTable &table, const TableContents &conte
 		return std::format("Ticket {}", row[0]);
 	if (table.name == "messages")
 		return std::format("Message {}", without_quotes(row[0]));
+	if (table.name == "fields")
+		return std::format("Ticket {}: {} \"{}\"", row[0], without_quotes(row[1]), without_quotes(row[2]));
 	return std::format("The row {}", describe_row(table, contents, row));
 }
 
@@ -1045,7 +1098,11 @@ void compare_table(const IndexTable &table, const TableContents &index, const Ta
 
 		for (std::size_t i = table.key_columns; i < row.size(); i++) {
 			auto &column = index.columns[i];
-			if (row[i] != other->second[i])
+			if (row[i] == other->second[i])
+				continue;
+			if (table.name == "fields")
+				problems.push_back(std::format("Ticket {}: {} is {} in the index, but {} according to the messages", row[0], without_quotes(row[1]), without_quotes(row[i]), without_quotes(other->second[i])));
+			else
 				problems.push_back(std::format("{}: {} is {} in the index, but {} according to the messages", subject, column, describe_value(table.name, column, row[i]), describe_value(table.name, column, other->second[i])));
 		}
 	}
@@ -1066,6 +1123,9 @@ FsckResult Instance::fsck() {
 
 	for (auto &&row: db.execute("PRAGMA foreign_key_check"))
 		result.database_problems.push_back(std::format("Row {} of table {} refers to a missing row in table {}", row.get_int64(1), row.get_string(0), row.get_string(2)));
+
+	if (is_index_outdated())
+		result.index_problems.push_back("The index was built with other field definitions");
 
 	// Rebuild the index inside a transaction that is rolled back, and compare it with the current one.
 	auto transaction = db.begin(true);
@@ -1103,6 +1163,9 @@ void Instance::index_message(const Message &message, std::int64_t received, std:
 			db.execute("INSERT INTO bugs (title, submitter, date) VALUES (?, ?, ?)", title, from, received);
 		result.ticket = db.last_insert_rowid();
 		result.kind = ImportResult::Kind::created;
+
+		for (auto &field: get_fields().fields)
+			set_field_values(result.ticket, field, field.default_values);
 	}
 
 	db.execute("INSERT INTO messages (msgid, bug, date) VALUES (?, ?, ?)", result.message_id, result.ticket, received);

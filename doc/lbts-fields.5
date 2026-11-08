@@ -1,0 +1,283 @@
+.Dd 2026-11-08
+.Dt LBTS-FIELDS 5
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts fields
+.Nd the fields of tickets in LightBTS
+.Sh DESCRIPTION
+Each ticket has a title, and values for the fields that are defined in the configuration file
+.Pa .lightbts/config .
+Fields are changed by pseudo-headers at the start of messages, like
+.Ql Severity: minor ,
+by the commands of
+.Xr lbts 1 ,
+and by email headers like
+.Ql X-LightBTS-Severity .
+.Pp
+Each field is defined in a section named
+.Ql field. Ns Ar name ,
+for example:
+.Bd -literal -offset indent
+[field.priority]
+	type = enum
+	values = low, normal, high, urgent
+	default = normal
+	ordered = true
+.Ed
+.Pp
+These sections can be changed with
+.Nm lbts config ,
+for example
+.Ql lbts config field.priority.default high .
+.Xr lbts-init 1
+writes the default fields into the configuration of a new instance.
+If the configuration has no field sections at all,
+as is the case for instances created by older versions of LightBTS,
+the default fields are used.
+.Pp
+When the field definitions are invalid, all commands except
+.Nm lbts config
+fail with an error that explains the problem.
+When they change, the index is rebuilt automatically from the messages,
+since the definitions determine which values are valid.
+.Sh VARIABLES
+.Bl -tag -width indent
+.It Va type
+The type of the field, see
+.Sx TYPES .
+Required.
+.It Va values
+For
+.Ql enum
+and
+.Ql set
+fields, the allowed values, separated by commas.
+This is optional for
+.Ql set
+fields; without it, any value is allowed.
+.It Va default
+The value that new tickets start with, and that a field returns to when it is unset.
+For
+.Ql set
+fields, this can be several values.
+.It Va ordered
+For
+.Ql enum
+fields, whether the values are listed in a meaningful order,
+so they can be compared in selectors like
+.Ql priority>=high .
+.It Va min , Va max , Va unit
+For
+.Ql number
+fields, the smallest and largest allowed value,
+and a unit that is shown after the value, and may be written after it.
+.It Va aliases
+Other names for the field in pseudo-headers and selectors, separated by commas.
+.It Va label
+The name of the field shown by
+.Nm lbts show
+and the web interface, if it should differ from the name.
+.El
+.Pp
+Other variables are not allowed.
+Names of fields and aliases consist of letters, digits,
+.Ql -
+and
+.Ql _ .
+Values of
+.Ql enum
+and
+.Ql set
+fields can't contain spaces, commas or any of
+.Ql = < > ! ,
+and can't start with
+.Ql +
+or
+.Ql - .
+Names and these values are case-insensitive.
+.Sh TYPES
+.Bl -tag -width indent
+.It Cm text
+A line of text.
+.It Cm enum
+One value out of a fixed list.
+.It Cm set
+Any number of values, optionally out of a fixed list.
+.It Cm user
+An email address, possibly with a name.
+.It Cm date
+A date of the form YYYY-MM-DD.
+.It Cm number
+An integer.
+.El
+.Sh THE STATUS FIELD
+The
+.Ql status
+field is required, and must be an
+.Ql enum
+field.
+Each status belongs to one of three categories:
+.Ql to-do
+for work that has not started yet,
+.Ql in-progress
+for work that has started, and
+.Ql done
+for work that is finished.
+Tickets in the
+.Ql done
+category are closed, all others are open.
+The status field has these extra variables:
+.Bl -tag -width indent
+.It Va in-progress , Va done
+The values in these categories, separated by commas.
+All other values are in the
+.Ql to-do
+category.
+.Va done
+is required.
+.It Va close , Va reopen
+The values that
+.Nm lbts close
+and
+.Nm lbts reopen
+set.
+By default, the first value of
+.Va done ,
+and the default value.
+.El
+.Pp
+Without a
+.Va default ,
+the first value that is not done is the default.
+.Sh DEFAULT FIELDS
+.Bd -literal -offset indent
+[field.status]
+	type = enum
+	values = open, closed
+	default = open
+	done = closed
+	close = closed
+	reopen = open
+
+[field.severity]
+	type = enum
+	values = wishlist, minor, normal, important, serious, critical, grave
+	default = normal
+	ordered = true
+
+[field.tags]
+	type = set
+	aliases = tag
+
+[field.owner]
+	type = user
+
+[field.milestone]
+	type = text
+
+[field.deadline]
+	type = date
+
+[field.progress]
+	type = number
+	min = 0
+	max = 100
+	unit = %
+.Ed
+.Sh PSEUDO-HEADERS
+A pseudo-header whose name is the name or an alias of a field changes that field.
+For fields with a single value,
+.Ql -
+unsets the field:
+.Bd -literal -offset indent
+Priority: high
+Owner: -
+.Ed
+.Pp
+For
+.Ql set
+fields,
+.Ql + Ns Ar value
+or just the value adds it,
+.Ql - Ns Ar value
+removes it, and
+.Ql = Ns Ar value
+replaces all values.
+A
+.Ql + ,
+.Ql -
+or
+.Ql =
+on its own applies to the values that follow:
+.Bd -literal -offset indent
+Tags: patch -moreinfo
+Tags: = confirmed security
+.Ed
+.Pp
+Invalid values are reported as warnings, and the rest of the message is still recorded.
+The pseudo-headers
+.Ql Title ,
+.Ql Topic ,
+.Ql Version ,
+.Ql Found ,
+.Ql Notfound ,
+.Ql Fixed ,
+.Ql Notfixed
+and those of the link types are built in,
+and their names can't be used for fields.
+Neither can
+.Ql received
+and
+.Ql control ,
+which LightBTS uses in its own X-LightBTS headers, nor the words
+.Ql all ,
+.Ql open ,
+.Ql closed ,
+.Ql to-do ,
+.Ql in-progress ,
+.Ql done ,
+.Ql bugs
+and
+.Ql tickets ,
+which have a meaning in selectors.
+.Sh SELECTORS
+.Nm lbts list
+and the web interface select tickets with these selectors:
+.Bl -tag -width indent
+.It Cm open , closed , all
+Tickets whose status is open, closed, or any.
+Without any of these, only open tickets are selected.
+.It Cm to-do , in-progress , done
+Tickets whose status is in the given category.
+.It Ar field Ns Cm = Ns Ar value , Ar field Ns Cm != Ns Ar value
+Tickets that have, or don't have, the given value.
+.It Ar field Ns Cm < Ns Ar value , and likewise Cm <= , > , >=
+For ordered
+.Ql enum ,
+.Ql number
+and
+.Ql date
+fields, tickets whose value compares this way.
+.It Ar value
+A value of an
+.Ql enum
+field, or else of a
+.Ql set
+field with a list of values, or else of any
+.Ql set
+field, such as a tag.
+.El
+.Pp
+Selecting a status, for example with
+.Ql status=wontfix ,
+selects tickets in any category, unless a category is given as well.
+Conditions with
+.Ql =
+on the same field match if any of them matches, all other selectors must all match.
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-web 1 ,
+.Xr lightbts 7 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

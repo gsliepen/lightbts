@@ -1,0 +1,39 @@
+.Dd 2026-11-08
+.Dt LBTS-UNSET 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts unset
+.Nd unset a field of a ticket
+.Sh SYNOPSIS
+.Nm lbts unset
+.Op Fl m Ar message
+.Ar id
+.Ar field
+.Sh DESCRIPTION
+The command unsets a field of an existing ticket,
+after which it has its default value, if the field has one.
+All values of a
+.Ql set
+field are removed.
+The
+.Ar id
+can either be a ticket or a message ID.
+.Pp
+The change is recorded as a message with a pseudo-header.
+If the command is run interactively, an editor is invoked where a text can be added to the message.
+.Pp
+.Nm lbts noowner
+is a shortcut for
+.Ql lbts unset Ar id Ql owner .
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl m Ar message
+Use the given message instead of invoking an editor.
+.El
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-set 1 ,
+.Xr lbts-fields 5 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

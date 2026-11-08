@@ -13,7 +13,7 @@
 .Sh DESCRIPTION
 .Nm
 serves a read-only web interface for a LightBTS instance.
-It shows the list of tickets, which can be filtered by status, severity and tag,
+It shows the list of tickets, which can be filtered by the fields of tickets,
 the details and messages of each ticket, and the raw messages.
 .Pp
 The interface works without JavaScript.
@@ -64,13 +64,15 @@ Show version information.
 .Bl -tag -width indent
 .It /
 The list of tickets.
-The query parameters
+The query parameter
 .Va status
-(open, closed or all),
-.Va severity
-and
-.Va tag
-filter the list.
+selects tickets by the category of their status,
+as with the selectors of
+.Xr lbts-fields 5 ,
+or by their status if it is of the form
+.Ql status= Ns Ar value .
+A query parameter with the name or an alias of another field selects tickets with that value;
+for set fields, it can contain several values separated by spaces.
 .It /ticket/ Ns Ar number
 The details and messages of a ticket.
 .It /message?id= Ns Ar message-id
@@ -83,6 +85,9 @@ The style sheet and htmx.
 .It Va web.root
 The URL of the ticket list, used to create links.
 By default, the script name passed by the web server is used, or / when running stand-alone.
+.It Va web.columns
+The fields shown in the list of tickets, separated by commas.
+By default, status and severity.
 .It Va web.static-root
 The URL of the static files.
 By default, this is

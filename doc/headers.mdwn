@@ -26,27 +26,25 @@ X-Autoreply:
 : For incoming email, if this header is present, the email is ignored.
 X-Autorespond:
 : For incoming email, if this header is present, the email is ignored.
-X-LightBTS-Status:
-: If this header is present, it is interpreted the same way as the "Status:" pseudo-header. It is set by lightbts-email when the --close or --reopen option is used.
+X-LightBTS-<field>:
+: A header with the name of a field, like X-LightBTS-Status or X-LightBTS-Tag, is interpreted the same way as the pseudo-header for that field. Pseudo-headers in the body are applied after these headers.
 X-LightBTS-Received:
 : The time at which LightBTS imported the message, in UTC with microsecond precision, for example "2026-11-07T23:26:39.381900Z". It is added to every imported message, together with a Received header, and replaces any existing X-LightBTS-Received header. It is used to replay messages in the right order when rebuilding the index.
-X-LightBTS-Tag:
-: If this header is present, it is interpreted the same way as the "Tags:" pseudo-header. It is set by lightbts-email when the --tag option is used.
 
 ## Pseudo header fields
 
-The following fields record simple changes to bugs:
+Each field of a ticket, as defined in the configuration, has a pseudo-header with its name; see `lbts-fields(5)` and `fields.mdwn`. With the default fields, these are Status, Severity, Tags, Owner, Milestone, Deadline and Progress. The following pseudo-headers are built in, or are default fields:
 
 Version:
 : The version where a bug is found in (if a bug is opened or replied to), or the version that fixes a bug (when it is closed).
 Tags:
 : A list of tags that should be set. Tags can optionally be prepended with `+` or `-`, in the latter case the tag will be removed.
 Deadline:
-: A date before which the bug should be fixed. Should be in RFC2822 or 3339 format.
+: A date before which the bug should be fixed, of the form YYYY-MM-DD.
 Milestone:
 : This bug should be fixed before the given milestone.
 Status:
-: Is either `open` or `closed`.
+: Is either `open` or `closed`, or one of the values of the status field.
 Severity:
 : Is one of: `wishlist`, `minor`, `normal`, `important`, `serious`, `critical`, `grave`.
 Found:

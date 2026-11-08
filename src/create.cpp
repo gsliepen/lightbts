@@ -21,7 +21,7 @@ int do_create(const Options &options, const Arguments &args) {
 
 	auto message = compose_message(bts, options, {
 		.subject = args | std::views::join_with(' ') | std::ranges::to<std::string>(),
-		.pseudo_headers = option_headers(options),
+		.pseudo_headers = option_headers(bts, options),
 		.editor_hint = "create",
 	});
 

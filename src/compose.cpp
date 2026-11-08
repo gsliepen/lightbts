@@ -27,14 +27,23 @@ std::string pseudo_header(std::string_view key, std::string_view value) {
 	return std::format("{}: {}\n", key, value);
 }
 
-std::string option_headers(const Options &options) {
+std::string option_headers(const LightBTS::Instance &bts, const Options &options) {
+	auto &definitions = bts.get_fields();
 	std::string headers;
+
+	for (auto &assignment: options.fields) {
+		auto equals = assignment.find('=');
+		if (equals == assignment.npos)
+			throw std::runtime_error(std::format("Invalid field assignment \"{}\", expected <field>=<value>", assignment));
+		headers += pseudo_header(definitions.get(assignment.substr(0, equals)).header_name(), assignment.substr(equals + 1));
+	}
+
 	if (!options.severity.empty())
-		headers += pseudo_header("Severity", options.severity);
+		headers += pseudo_header(definitions.get("severity").header_name(), options.severity);
+	for (auto &tag: options.tags)
+		headers += pseudo_header(definitions.get("tags").header_name(), tag);
 	for (auto &version: options.versions)
 		headers += pseudo_header("Version", version);
-	for (auto &tag: options.tags)
-		headers += pseudo_header("Tags", tag);
 	return headers;
 }
 
