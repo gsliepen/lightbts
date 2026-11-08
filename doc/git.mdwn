@@ -103,5 +103,8 @@ the next `lbts sync` commits it.
 - `git clean -ffdx` in the main worktree removes `.lightbts`, including
   messages that were not pushed yet. A single `-f` doesn't, since `.lightbts`
   is a worktree of its own.
+- Git commands for the `lightbts` branch run in `.lightbts`, so a remote with
+  a relative path, like `../project.git`, refers to another directory than in
+  the main worktree. Use an absolute path or a URL for such remotes.
 - Since the index is not tracked, a clone that only uses `git pull` in
   `.lightbts`, instead of `lbts sync`, has to run `lbts reindex` afterwards.
