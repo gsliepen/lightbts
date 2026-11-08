@@ -1,0 +1,298 @@
+Ticket fields
+-------------
+
+*Status: draft design, not implemented yet.*
+
+Currently, the fields of a ticket are hard-coded: an open/closed status, the
+seven severities of the Debian BTS, tags, an owner, a milestone, a deadline and
+a progress percentage. To make LightBTS usable for tracking issues in general,
+the fields should be defined in the configuration of each instance instead.
+
+## Goals
+
+- Each instance can define its own fields, the values they can have, and which
+  statuses and ticket types exist.
+- Messages stay the only source of truth. Fields are changed by pseudo-headers,
+  as they are now, and the index is derived from the messages.
+- Existing instances keep working without changes: the default definitions
+  give exactly the current behavior.
+- The command line and web interfaces work with any field, instead of having
+  code for each one.
+
+## Defining fields
+
+Fields are defined in sections of `.lightbts/config` named `field.<name>`:
+
+    [field.priority]
+        type = enum
+        values = low, normal, high, urgent
+        default = normal
+        ordered = true
+
+    [field.component]
+        type = set
+        values = core, cli, web, email
+
+    [field.estimate]
+        type = number
+        min = 0
+        unit = h
+
+The variables of a field are:
+
+`type`:
+: The type of the field, see below. Required.
+`values`:
+: For `enum` and `set` fields, the allowed values, separated by commas.
+For `set` fields, this is optional; without it, any value is allowed.
+`default`:
+: The value of the field when it is not set.
+`ordered`:
+: For `enum` fields, whether the values are in a meaningful order, so that
+tickets can be sorted by the field, and filtered with comparisons such as
+`priority>=high`.
+`min`, `max`, `unit`:
+: For `number` fields.
+`aliases`:
+: Other names for the pseudo-header, separated by commas, for example
+`topic` for `title`.
+`label`:
+: The name shown in the interfaces, if it should differ from the name.
+
+Values of `enum` and `set` fields are single words (letters, digits, `-` and
+`_`), so they can be used in pseudo-headers and on the command line without
+quoting. They are shown with `-` and `_` replaced by spaces, and the first
+letter capitalized.
+
+### Types
+
+`text`:
+: A single line of text. For example: a milestone.
+`enum`:
+: One value out of a fixed list. For example: severity, priority, ticket type.
+`set`:
+: Any number of values, optionally out of a fixed list. For example: tags,
+components.
+`user`:
+: An email address, possibly with a name. For example: the owner of a ticket.
+Once LightBTS has identities (see `ROADMAP.md`), these can be checked and
+shown with the person's name.
+`date`:
+: A date in the form `YYYY-MM-DD`. For example: a deadline.
+`number`:
+: An integer. For example: progress, or an estimate.
+
+### The status field
+
+The `status` field is required, and must be an `enum`. Each status belongs to
+one of three categories:
+
+`to-do`:
+: Work that has not started yet.
+`in-progress`:
+: Work that has started.
+`done`:
+: Work that is finished, for whatever reason: fixed, rejected, a duplicate.
+
+Tickets in the `to-do` and `in-progress` categories are open, and tickets in
+the `done` category are closed. LightBTS needs to know the categories so that
+`lbts list` can show open tickets by default, and so that later, boards and
+reports can tell work that has not started from work in progress. It also needs
+to know what `lbts close` and `lbts reopen` should do:
+
+    [field.status]
+        type = enum
+        values = new, confirmed, in-progress, fixed, wontfix
+        default = new
+        in-progress = in-progress
+        done = fixed, wontfix
+        close = fixed
+        reopen = confirmed
+
+`in-progress`, `done`:
+: The values that belong to these categories. All other values belong to the
+`to-do` category.
+`close`, `reopen`:
+: The values that `lbts close` and `lbts reopen` set. The value of `close` must
+be in the `done` category, and the values of `reopen` and `default` must not.
+
+The categories are not stored in the index, since they follow from the status
+and the field definitions.
+
+The selectors `open` and `closed` of `lbts list` select tickets by whether
+their status is open or closed, not by a status named "open" or "closed".
+Likewise, the selectors `to-do`, `in-progress` and `done` select tickets by the
+category of their status. To select a status with the same name as a category,
+use `status=in-progress`.
+
+Rules for which transitions between statuses are allowed, and who may make
+them, are part of the workflows described in `ROADMAP.md`, and are not part of
+this design. The configuration leaves room for them in the same section.
+
+### Ticket types
+
+Ticket types are just an `enum` field named `type`, which instances can choose
+to define:
+
+    [field.type]
+        type = enum
+        values = bug, feature, task
+        default = bug
+
+Later, other fields could be limited to certain ticket types, for example with
+`types = bug` in the section of the `severity` field.
+
+### Default fields
+
+`lbts init` writes the following definitions into the configuration of a new
+instance, so they are easy to find and change:
+
+    [field.status]
+        type = enum
+        values = open, closed
+        default = open
+        done = closed
+        close = closed
+        reopen = open
+
+    [field.severity]
+        type = enum
+        values = wishlist, minor, normal, important, serious, critical, grave
+        default = normal
+        ordered = true
+
+    [field.tags]
+        type = set
+        aliases = tag
+
+    [field.owner]
+        type = user
+
+    [field.milestone]
+        type = text
+
+    [field.deadline]
+        type = date
+
+    [field.progress]
+        type = number
+        min = 0
+        max = 100
+        unit = %
+
+If the configuration of an instance has no `field.*` sections at all, as is
+the case for existing instances, these definitions are used. Otherwise, the
+configuration is complete by itself: a field that is not defined doesn't
+exist, so for example an instance can do without severities.
+
+### Built-in pseudo-headers
+
+Some pseudo-headers are not fields, and their names can't be used for fields:
+
+- `Title` and `Topic`, since the title is always there, and initially comes
+  from the Subject header.
+- `Version`, `Found`, `Notfound`, `Fixed` and `Notfixed`, which record in which
+  versions a problem was found or fixed. Their meaning depends on the status of
+  the ticket, so they don't fit the field types.
+- The link types, like `Blocks` and `Unblocks`. Making these configurable,
+  with their reverse names, is left for later.
+
+## Changing fields
+
+A pseudo-header whose name is the name or an alias of a field changes that
+field. Names are case-insensitive.
+
+For fields that have a single value:
+
+    Priority: high
+    Priority: -
+
+The value `-` unsets the field, after which it has its default value, if any.
+This is what `Owner: -` already does.
+
+For `set` fields, the syntax of the `Tags` pseudo-header is used: `+value` or
+`value` adds, `-value` removes, and `=value` replaces all values. A `+`, `-` or
+`=` on its own applies to the following values:
+
+    Component: web -cli
+    Component: = core email
+
+A value that is not valid for the field, like `Priority: highest`, is ignored
+and reported as a warning, as invalid values are now. The message is still
+added to the ticket.
+
+The headers `X-LightBTS-Status` and `X-LightBTS-Tag` become a general rule: an
+email header `X-LightBTS-<field>` is treated as a pseudo-header for that field.
+
+## The index
+
+Field values are stored in a single table, replacing the `tags` table and the
+`status`, `severity`, `owner`, `deadline`, `progress` and `milestone` columns
+of the `bugs` table:
+
+    CREATE TABLE fields (bug INTEGER, name TEXT, value TEXT,
+                         PRIMARY KEY(bug, name, value),
+                         FOREIGN KEY(bug) REFERENCES bugs(id))
+    CREATE INDEX fields_name_value_index ON fields (name, value)
+
+A field with a single value has one row, a `set` field has one row per value,
+and an unset field has no rows. Values are stored as text, also for `enum`
+fields, so that reordering the values in the configuration doesn't change the
+meaning of the index. The `bugs` table keeps the columns that are not fields:
+`id`, `title`, `submitter` and `date`.
+
+Since the index is built from the messages, its schema can change freely:
+
+- The index version becomes 5. When LightBTS opens an index with version 4,
+  it rebuilds the index automatically, as `lbts reindex` does.
+- Which values are valid depends on the field definitions, so the index
+  depends on them as well. The index stores a hash of the field definitions.
+  When they have changed, the command line interface rebuilds the index
+  automatically before doing anything else, and says so. The web interface,
+  which only reads the index, logs a warning instead.
+- `lbts fsck` reports when the index was built with other field definitions.
+
+## Command line interface
+
+- `lbts set <id> <field> <value>...` and `lbts unset <id> <field>` change any
+  field. The existing commands `severity`, `owner`, `noowner`, `milestone`,
+  `deadline`, `progress` and `tags` keep working, as shortcuts for these, as
+  long as the corresponding field exists.
+- `-F, --field <field>=<value>` sets a field when creating a ticket or
+  replying, generalizing `-S` and `-T`, which stay as shortcuts.
+- `lbts list` accepts selectors of the form `<field>=<value>`,
+  `<field>!=<value>`, and for ordered `enum`, `number` and `date` fields also
+  `<`, `<=`, `>` and `>=`. The existing selectors keep working: `open`,
+  `closed` and `all`, the status categories, a value of the `severity` field,
+  and otherwise a tag.
+  Note that `<` and `>` need quoting in the shell.
+- `lbts show` shows all fields that are set, in the order they are defined.
+- `lbts fields` shows the field definitions, with their values.
+
+## Web interface
+
+- The filter form gets a selection for each `enum` field, and an input for
+  each `set` field.
+- Which fields are shown as columns in the ticket list is configured with
+  `web.columns`, which defaults to `status, severity, title` if those fields
+  exist.
+- The ticket page shows all fields that are set.
+
+## Implementation steps
+
+1. Parse and validate the field definitions, with the built-in defaults.
+   Split `lbts config` names at the last dot, so that `lbts config
+   field.priority.type` works.
+2. Add the `fields` table, the automatic rebuild of older indexes, and the hash
+   of the field definitions. Apply pseudo-headers to fields.
+3. Replace the uses of the old columns and the `tags` table in the core, the
+   command line and the web interface.
+4. Add `lbts set`, `lbts unset`, `--field`, the new `lbts list` selectors and
+   `lbts fields`.
+5. Make the web interface use the field definitions.
+
+## Open questions
+
+- Should a ticket's field values be shown with their history, for example in
+  `lbts show --history`? The messages already contain the full history, so
+  this needs no extra storage.
