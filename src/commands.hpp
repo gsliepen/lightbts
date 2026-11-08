@@ -28,6 +28,7 @@ int do_set(const Options &options, const Arguments &args);
 int do_unset(const Options &options, const Arguments &args);
 
 int do_create(const Options &options, const Arguments &args);
+int do_describe(const Options &options, const Arguments &args);
 int do_fields(const Options &options, const Arguments &args);
 int do_fsck(const Options &options, const Arguments &args);
 int do_import(const Options &options, const Arguments &args);

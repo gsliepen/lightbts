@@ -17,16 +17,18 @@ static bool is_key_character(unsigned char c) {
 	return std::isalnum(c) || c == '-' || c == '_';
 }
 
-std::vector<PseudoHeader> parse_pseudo_headers(std::string_view text) {
-	std::vector<PseudoHeader> headers;
+PseudoHeaderBlock split_pseudo_headers(std::string_view text) {
+	PseudoHeaderBlock block;
+	auto rest = text;
 
-	while (!text.empty()) {
-		auto end = text.find('\n');
-		auto line = trim(text.substr(0, end));
-		text = end == text.npos ? std::string_view{} : text.substr(end + 1);
+	while (!rest.empty()) {
+		auto end = rest.find('\n');
+		auto line = trim(rest.substr(0, end));
+		auto next = end == rest.npos ? std::string_view{} : rest.substr(end + 1);
 
 		if (line.empty()) {
-			if (headers.empty())
+			rest = next;
+			if (block.headers.empty())
 				continue;
 			break;
 		}
@@ -39,10 +41,13 @@ std::vector<PseudoHeader> parse_pseudo_headers(std::string_view text) {
 		if (key.empty() || !std::ranges::all_of(key, is_key_character))
 			break;
 
-		headers.push_back({to_lower(key), std::string(trim(line.substr(colon + 1)))});
+		block.headers.push_back({to_lower(key), std::string(trim(line.substr(colon + 1)))});
+		rest = next;
 	}
 
-	return headers;
+	// Without pseudo-headers, the text is unchanged, apart from leading empty lines.
+	block.text = rest;
+	return block;
 }
 
 }

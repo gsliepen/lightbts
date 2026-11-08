@@ -1,0 +1,86 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+$lbts init
+
+# The description is the text of the first message, without pseudo-headers
+printf 'Tags: plan\n\nThe first plan.\n' | $lbts create A plan 2> /dev/null
+$lbts show 1 > show
+grep -q "^The first plan.$" show
+test "$(grep -c "^Tags: plan$" show)" = "1"
+first_message=$(grep "@" show | head -1)
+$lbts show 1 | sed -n 2p | grep -q "^Status: open$"
+
+# lbts describe replaces it
+$lbts describe -m "The revised plan.
+
+With two paragraphs." 1 2> output
+grep -q "^Changed the description of bug number 1 " output
+$lbts show 1 > show
+grep -q "^The revised plan.$" show
+grep -q "^With two paragraphs.$" show
+fails grep -q "^The first plan.$" show
+
+# The history is still there
+$lbts show -v 1 > show
+grep -q "^The first plan.$" show
+grep -q "^Description: replace$" show
+test "$($lbts show 1 | grep -c "@")" = "2"
+
+# Replies don't change the description
+echo "Just a comment." | $lbts reply 1 2> /dev/null
+$lbts show 1 | grep -q "^The revised plan.$"
+$lbts show 1 | fails grep -q "Just a comment."
+
+# Unchanged descriptions are refused
+fails $lbts describe -m "The revised plan.
+
+With two paragraphs." 1 2> output
+grep -q "The description is unchanged" output
+echo "From stdin." | $lbts describe 1 2> /dev/null
+$lbts show 1 | grep -q "^From stdin.$"
+fails $lbts describe
+fails $lbts describe 99
+
+# Imported messages can replace the description, other values are reported
+$lbts import << IMPORT
+From: Someone <someone@example.org>
+Subject: Re: A plan
+Message-ID: <describe@test>
+In-Reply-To: <$first_message>
+
+Description: replace
+Tags: revised
+
+The plan, by email.
+IMPORT
+$lbts show 1 | grep -q "^The plan, by email.$"
+$lbts show 1 | grep -q "^Tags: plan revised$"
+$lbts import 2> error << IMPORT
+From: Someone <someone@example.org>
+Subject: Re: A plan
+Message-ID: <describe2@test>
+In-Reply-To: <describe@test>
+
+Description: maybe
+
+Not a description.
+IMPORT
+grep -q 'Invalid description "maybe", expected replace' error
+$lbts show 1 | grep -q "^The plan, by email.$"
+
+# The description is in the JSON output, and survives rebuilding the index
+$lbts show --json 1 | grep -q '"description": "The plan, by email.\\n"'
+$lbts show --json 1 | grep -q '"description_message_id": "describe@test"'
+rm .lightbts/index
+$lbts reindex 2> /dev/null
+$lbts show 1 | grep -q "^The plan, by email.$"
+$lbts fsck
+
+# Description is not a valid name for a field
+$lbts config field.description.type text 2> output
+grep -q '"description" is reserved' output

@@ -88,6 +88,7 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  close       Close a ticket.\n"
 		"  reopen      Reopen a ticket.\n"
 		"  retitle     Change the title of a ticket.\n"
+		"  describe    Change the description of a ticket.\n"
 		"  found       Record versions where a problem is found.\n"
 		"  notfound    Remove records of where a problem is found.\n"
 		"  fixed       Record versions where a problem is fixed.\n"
@@ -193,6 +194,7 @@ constexpr Command commands[] = {
 	{"config", do_config},
 	{"create", do_create},
 	{"deadline", do_deadline},
+	{"describe", do_describe},
 	{"fields", do_fields},
 	{"fixed", do_fixed},
 	{"found", do_found},

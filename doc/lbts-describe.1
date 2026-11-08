@@ -1,0 +1,37 @@
+.Dd 2026-11-08
+.Dt LBTS-DESCRIBE 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts describe
+.Nd replace the description of a ticket
+.Sh SYNOPSIS
+.Nm lbts describe
+.Op Fl m Ar message
+.Ar id
+.Sh DESCRIPTION
+The command replaces the description of an existing ticket.
+Initially, the description of a ticket is the text of its first message.
+.Pp
+If the command is run interactively, an editor is invoked with the current description,
+which can then be changed.
+Otherwise, the new description is taken from the
+.Fl m
+option or from stdin.
+If the description is not changed, the command fails.
+.Pp
+The new description is recorded as a message with the pseudo-header
+.Ql Description: replace ,
+so the earlier descriptions remain in the history of the ticket, as shown by
+.Ql lbts show -v .
+Such a message can also be sent by email.
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl m Ar message
+Use the given description instead of invoking an editor or reading one from stdin.
+.El
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-show 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

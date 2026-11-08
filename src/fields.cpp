@@ -28,7 +28,7 @@ constexpr std::string_view section_prefix = "field.";
 /// and words with a special meaning for lbts list.
 std::set<std::string, std::less<>> reserved_names() {
 	std::set<std::string, std::less<>> names = {
-		"title", "topic", "version", "found", "notfound", "fixed", "notfixed",
+		"title", "topic", "description", "version", "found", "notfound", "fixed", "notfixed",
 		"received", "control",
 		"all", "open", "closed", "bugs", "tickets",
 	};

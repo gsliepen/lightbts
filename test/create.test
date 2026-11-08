@@ -44,7 +44,7 @@ test "$($lbts list foo | wc -l)" = "1"
 
 # Create a bug with several versions
 echo "Fourth bug." | $lbts create -V 0.1 -V 0.2 Fourth bug
-$lbts show 4 > 4
+$lbts show -v 4 > 4
 
 grep -q "^Version: 0.1$" 4
 grep -q "^Version: 0.2$" 4
@@ -57,6 +57,6 @@ Version: 0.1, 0.2 0.3
 This is the fifth bug.
 EOF
 
-$lbts show 5 > 5
+$lbts show -v 5 > 5
 head -4 5 | grep -q "^Tags: bar baz foo$"
 grep -q "^Version: 0.1, 0.2 0.3$" 5

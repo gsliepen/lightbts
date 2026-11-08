@@ -19,10 +19,19 @@ struct PseudoHeader {
 	bool operator==(const PseudoHeader &other) const = default;
 };
 
-/// Parses the "Key: value" lines at the start of a message body.
+/// The pseudo-headers at the start of a message body, and the text that follows them.
+struct PseudoHeaderBlock {
+	std::vector<PseudoHeader> headers;
+	std::string_view text; ///< The rest of the body, without the empty line that ends the pseudo-headers.
+};
+
+/// Splits the "Key: value" lines at the start of a message body from the rest of the text.
 ///
-/// Leading empty lines are skipped. Parsing stops at the first empty line, or at the first line
+/// Leading empty lines are skipped. The pseudo-headers end at the first empty line, or at the first line
 /// that does not look like a pseudo-header.
-std::vector<PseudoHeader> parse_pseudo_headers(std::string_view text);
+PseudoHeaderBlock split_pseudo_headers(std::string_view text);
+
+inline std::vector<PseudoHeader> parse_pseudo_headers(std::string_view text) { return split_pseudo_headers(text).headers; }
+inline std::string_view strip_pseudo_headers(std::string_view text) { return split_pseudo_headers(text).text; }
 
 }

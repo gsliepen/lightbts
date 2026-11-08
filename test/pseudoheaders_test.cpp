@@ -8,6 +8,7 @@
 #include "pseudoheaders.hpp"
 
 using LightBTS::parse_pseudo_headers;
+using LightBTS::strip_pseudo_headers;
 using LightBTS::PseudoHeader;
 using Headers = std::vector<PseudoHeader>;
 
@@ -29,6 +30,14 @@ int main() {
 
 	// Empty values are kept, so they can be reported
 	CHECK(parse_pseudo_headers("Owner:\n") == Headers{{"owner", ""}});
+
+	// The text after the pseudo-headers
+	CHECK(strip_pseudo_headers("Status: closed\n\nThe text.\n") == "The text.\n");
+	CHECK(strip_pseudo_headers("Status: closed\nThe text.\n") == "The text.\n");
+	CHECK(strip_pseudo_headers("Status: closed\n") == "");
+	CHECK(strip_pseudo_headers("\n\nJust text.\n\nMore: text\n") == "Just text.\n\nMore: text\n");
+	CHECK(strip_pseudo_headers("Status: open\n\n\nTwo empty lines.\n") == "\nTwo empty lines.\n");
+	CHECK(strip_pseudo_headers("") == "");
 
 	return check_result();
 }

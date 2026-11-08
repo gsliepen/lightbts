@@ -66,6 +66,8 @@ Json ticket_to_json(Instance &bts, const Ticket &ticket) {
 Json details_to_json(Instance &bts, const TicketDetails &details, bool with_text) {
 	auto json = ticket_to_json(bts, details.ticket);
 
+	json.set("description", details.description);
+	json.set("description_message_id", details.description_message_id);
 	json.set("submitter", details.submitter);
 	if (details.date)
 		json.set("date", std::format("{:%FT%TZ}", std::chrono::sys_seconds{std::chrono::seconds{details.date}}));

@@ -86,6 +86,10 @@ int show_ticket(const Options &options, const std::string &id) {
 
 	show_ticket_header(bts, pager, ticket);
 
+	// Without -v, show the current description, then the Message-IDs of all messages.
+	if (!options.verbose)
+		std::print(pager, "{}\n", first_lines(bts.get_description(ticket), 10));
+
 	bool first = true;
 	for (auto &message_id: bts.get_message_ids(ticket)) {
 		if (options.verbose) {
@@ -96,8 +100,6 @@ int show_ticket(const Options &options, const std::string &id) {
 				std::print(pager, "{}: {}\n", field, message.get_header_value(field));
 			std::print(pager, "\n{}", message.get_text());
 		} else {
-			if (first)
-				std::print(pager, "{}\n", first_lines(bts.get_message(message_id).get_text(), 10));
 			std::print(pager, "{}\n", message_id);
 		}
 

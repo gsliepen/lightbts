@@ -76,6 +76,8 @@ struct Link {
 
 struct TicketDetails {
 	Ticket ticket;
+	std::string description; ///< The current description, without pseudo-headers.
+	std::string description_message_id; ///< The message that contains the current description.
 	std::string submitter;
 	std::int64_t date = 0; ///< Seconds since the Unix epoch, or 0 if unknown.
 	std::vector<std::string> found_versions;
@@ -167,6 +169,9 @@ class Instance {
 	/// The ID of a ticket as it is written in messages that refer to it.
 	static std::string reference_id(const Ticket &ticket) { return ticket.hash.substr(0, 16); }
 	TicketDetails get_details(const Ticket &ticket);
+	/// The current description of a ticket: the text of its first message, or of the last message
+	/// with the pseudo-header "Description: replace", without the pseudo-headers.
+	std::string get_description(const Ticket &ticket);
 
 	/// Gets all values of a field that are used by any ticket.
 	std::set<std::string> get_used_values(std::string_view field);
@@ -223,7 +228,7 @@ class Instance {
 
 	bool ticket_exists(std::int64_t id);
 	void load_fields(Ticket &ticket);
-	void apply_metadata(std::int64_t ticket, const Message &message, std::vector<std::string> &warnings);
+	void apply_metadata(std::int64_t ticket, const std::string &message_id, const Message &message, std::vector<std::string> &warnings);
 	void set_field_values(std::int64_t ticket, const FieldDefinition &field, const std::vector<std::string> &values);
 	void apply_field(std::int64_t ticket, const FieldDefinition &field, std::string_view value, std::vector<std::string> &warnings);
 	void apply_set_field(std::int64_t ticket, const FieldDefinition &field, std::string_view changes, std::vector<std::string> &warnings);

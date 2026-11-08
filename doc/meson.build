@@ -3,6 +3,7 @@ install_man(
 	'lbts-close.1',
 	'lbts-create.1',
 	'lbts-deadline.1',
+	'lbts-describe.1',
 	'lbts-fields.1',
 	'lbts-fixed.1',
 	'lbts-found.1',

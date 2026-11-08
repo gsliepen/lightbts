@@ -19,6 +19,12 @@
 	<dt>{{relation}}</dt><dd><a href="{{root}}ticket/{{id}}">#{{id}}</a> {{title}}</dd>
 {{/links}}
 </dl>
+{{#description}}
+<section class="description">
+	<pre class="body">{{description}}</pre>
+</section>
+{{/description}}
+<h3>Messages</h3>
 <section class="messages">
 {{#messages}}
 {{> message.html}}

@@ -206,6 +206,8 @@ Some pseudo-headers are not fields, and their names can't be used for fields:
 
 - `Title` and `Topic`, since the title is always there, and initially comes
   from the Subject header.
+- `Description`, which with the value `replace` makes the text of the message
+  the new description of the ticket.
 - `Version`, `Found`, `Notfound`, `Fixed` and `Notfixed`, which record in which
   versions a problem was found or fixed. Their meaning depends on the status of
   the ticket, so they don't fit the field types.

@@ -61,3 +61,5 @@ Owner:
 : Who is responsible for a bug.
 Title:
 : Sets a new title for a bug.
+Description:
+: With the value `replace`, the text of this message, without the pseudo-headers, becomes the new description of the ticket. Initially, the description is the text of the first message.

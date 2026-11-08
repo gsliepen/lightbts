@@ -85,6 +85,7 @@ int main() {
 	CHECK(ticket.status == 200);
 	CHECK(ticket.body.contains("The first bug."));
 	CHECK(ticket.body.contains("A reply."));
+	CHECK(ticket.body.contains("<section class=\"description\">\n\t<pre class=\"body\">The first bug.\n</pre>"));
 	CHECK(ticket.body.contains("Blocks"));
 	CHECK(ticket.body.contains("href=\"/ticket/2\""));
 	CHECK(ticket.body.contains("message?id=1%40test"));

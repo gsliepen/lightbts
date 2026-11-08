@@ -44,7 +44,7 @@ std::string unquote_message_id(std::string_view message_id) {
 namespace {
 
 constexpr int application_id = 0x4c425453;
-constexpr int index_version = 6;
+constexpr int index_version = 7;
 
 std::string hash_message_id(std::string_view message_id) {
 	auto unquoted = unquote_message_id(message_id);
@@ -330,7 +330,7 @@ bool Instance::is_index_outdated() {
 }
 
 void Instance::create_schema() {
-	db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL UNIQUE, title TEXT, submitter TEXT, date INTEGER)");
+	db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL UNIQUE, title TEXT, description TEXT, submitter TEXT, date INTEGER)");
 	db.execute("CREATE TABLE fields (bug INTEGER, name TEXT, value TEXT, PRIMARY KEY(bug, name, value), FOREIGN KEY(bug) REFERENCES bugs(id))");
 	db.execute("CREATE INDEX fields_name_value_index ON fields (name, value)");
 	db.execute("CREATE TABLE links (a INTEGER, b INTEGER, type INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))");
@@ -623,9 +623,11 @@ std::string Instance::short_id(const Ticket &ticket) {
 TicketDetails Instance::get_details(const Ticket &ticket) {
 	TicketDetails details{.ticket = ticket};
 
-	auto row = db.execute("SELECT submitter, date FROM bugs WHERE id = ?", ticket.id);
+	auto row = db.execute("SELECT submitter, date, description FROM bugs WHERE id = ?", ticket.id);
 	details.submitter = row.get_string(0);
 	details.date = row.get_int64(1);
+	details.description_message_id = row.get_string(2);
+	details.description = get_description(ticket);
 
 	for (auto &&version: db.execute("SELECT version, status FROM versions WHERE bug = ? ORDER BY version", ticket.id))
 		(version.get_int(1) ? details.found_versions : details.fixed_versions).push_back(version.get_string(0));
@@ -637,6 +639,11 @@ TicketDetails Instance::get_details(const Ticket &ticket) {
 		details.reverse_links.push_back({static_cast<LinkType>(link.get_int(1)), link.get_int64(0), link.get_string(2)});
 
 	return details;
+}
+
+std::string Instance::get_description(const Ticket &ticket) {
+	auto message_id = db.execute("SELECT description FROM bugs WHERE id = ?", ticket.id).get_string(0);
+	return std::string(strip_pseudo_headers(get_message(message_id).get_text()));
 }
 
 std::set<std::string> Instance::get_used_values(std::string_view field) {
@@ -796,7 +803,7 @@ void Instance::apply_links(std::int64_t ticket, LinkType type, std::string_view 
 	}
 }
 
-void Instance::apply_metadata(std::int64_t ticket, const Message &message, std::vector<std::string> &warnings) {
+void Instance::apply_metadata(std::int64_t ticket, const std::string &message_id, const Message &message, std::vector<std::string> &warnings) {
 	auto &definitions = get_fields();
 
 	std::optional<std::string> title;
@@ -835,6 +842,11 @@ void Instance::apply_metadata(std::int64_t ticket, const Message &message, std::
 			if (title && *title != value)
 				warnings.push_back("Duplicate title field");
 			title = value;
+		} else if (key == "description") {
+			if (to_lower(value) == "replace")
+				db.execute("UPDATE bugs SET description = ? WHERE id = ?", message_id, ticket);
+			else
+				warnings.push_back(std::format("Invalid description \"{}\", expected replace", value));
 		} else if (key == "version") {
 			versions.push_back(value);
 		} else if (key == "found") {
@@ -1216,9 +1228,9 @@ void Instance::index_message(const Message &message, std::int64_t received, std:
 		auto title = message.get_header_value("Subject");
 		auto hash = hash_message_id(result.message_id);
 		if (new_ticket_number)
-			db.execute("INSERT INTO bugs (id, hash, title, submitter, date) VALUES (?, ?, ?, ?, ?)", *new_ticket_number, hash, title, from, received);
+			db.execute("INSERT INTO bugs (id, hash, title, description, submitter, date) VALUES (?, ?, ?, ?, ?, ?)", *new_ticket_number, hash, title, result.message_id, from, received);
 		else
-			db.execute("INSERT INTO bugs (hash, title, submitter, date) VALUES (?, ?, ?, ?)", hash, title, from, received);
+			db.execute("INSERT INTO bugs (hash, title, description, submitter, date) VALUES (?, ?, ?, ?, ?)", hash, title, result.message_id, from, received);
 		id_length.reset();
 		result.ticket = db.last_insert_rowid();
 		result.kind = ImportResult::Kind::created;
@@ -1230,7 +1242,7 @@ void Instance::index_message(const Message &message, std::int64_t received, std:
 	db.execute("INSERT INTO messages (msgid, bug, date) VALUES (?, ?, ?)", result.message_id, result.ticket, received);
 	db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", result.ticket, from);
 
-	apply_metadata(result.ticket, message, result.warnings);
+	apply_metadata(result.ticket, result.message_id, message, result.warnings);
 }
 
 ImportResult Instance::import(const Message &incoming) {
