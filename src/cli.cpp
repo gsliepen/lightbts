@@ -95,6 +95,7 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  import      Import messages.\n"
 		"  list        List tickets.\n"
 		"  tree        Show tickets and the tickets they depend on, recursively.\n"
+		"  search      Search the text of all messages.\n"
 		"  fields      Show the definitions of the fields of tickets.\n"
 		"  show        Show bug or message details.\n"
 		"  get         Print the value of a field of a ticket.\n"
@@ -230,6 +231,7 @@ constexpr Command commands[] = {
 	{"reopen", do_reopen},
 	{"reply", do_reply},
 	{"retitle", do_retitle},
+	{"search", do_search},
 	{"set", do_set},
 	{"severity", do_severity},
 	{"show", do_show},
@@ -290,6 +292,17 @@ int main(int argc, char *argv[]) {
 		default:
 			std::println(std::cerr, "Try '{} --help' for more information.", options.program_name);
 			return 1;
+		}
+	}
+
+	// Arguments after "--" are never options.
+	if (optind < argc && std::string_view(argv[optind - 1]) == "--") {
+		options.separator = args.size();
+		for (int i = optind; i < argc; i++) {
+			if (command.empty())
+				command = argv[i];
+			else
+				args.push_back(argv[i]);
 		}
 	}
 

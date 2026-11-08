@@ -338,8 +338,28 @@ Response list_tickets(const Context &context) {
 		column_names.push_back(column);
 	}
 
+	// With a search query, the tickets are sorted by relevance.
+	std::vector<Ticket> found;
+	auto query_text = request.get_query_value("q");
+	auto query = trim(query_text);
+	if (query.empty()) {
+		found = context.bts.list(filter);
+	} else {
+		// The form searches while typing, so the last word is a prefix.
+		auto words = split(query, " \t");
+		if (std::ranges::all_of(words.back(), [](unsigned char c) { return std::isalnum(c) || c >= 0x80; }))
+			words.back() += '*';
+
+		try {
+			for (auto &result: context.bts.search(make_search_query(words), filter))
+				found.push_back(result.ticket);
+		} catch (const std::runtime_error &error) {
+			throw BadRequest(error.what());
+		}
+	}
+
 	km::data tickets{km::data::type::list};
-	for (auto &ticket: context.bts.list(filter))
+	for (auto &ticket: found)
 		tickets.push_back(ticket_summary(context, columns, ticket));
 
 	km::data data;
@@ -354,6 +374,7 @@ Response list_tickets(const Context &context) {
 		response = html_response(context, render(context, "ticket-rows.html", data));
 	} else {
 		data.set("inputs", filter_inputs(context));
+		data.set("query", std::string(query));
 		response = page(context, "Tickets", "list.html", data);
 	}
 

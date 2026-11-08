@@ -15,6 +15,7 @@
 #include <mimesis.hpp>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -100,6 +101,21 @@ struct TicketDetails {
 /// and other values as text. Tickets where the field is unset come last, and ties are sorted by number.
 /// \throws std::runtime_error if there is no such field.
 void sort_tickets(std::vector<Ticket> &tickets, const FieldDefinitions &definitions, std::string_view key);
+
+struct SearchMatch {
+	std::string message_id;
+	std::string snippet; ///< Part of the message, with the matching words between [ and ].
+};
+
+struct SearchResult {
+	Ticket ticket;
+	std::vector<SearchMatch> matches; ///< The matching messages, best match first.
+};
+
+/// Converts words given on the command line to an FTS5 query. Words that are not FTS5 syntax are quoted,
+/// so that words like lbts-web match as a phrase instead of being a syntax error. If any word contains a
+/// double quote, the words are used as they are.
+std::string make_search_query(std::span<const std::string> words);
 
 struct ImportResult {
 	enum class Kind {
@@ -190,6 +206,11 @@ class Instance {
 
 	/// The tickets that each ticket links to with the given type, or with its inverse in the other direction.
 	std::map<std::int64_t, std::vector<std::int64_t>> get_link_graph(LinkType type);
+
+	/// Finds the tickets whose messages match a full-text search, best match first.
+	/// \param query A query in the syntax of SQLite's FTS5 extension.
+	/// \throws std::runtime_error if the query is not valid.
+	std::vector<SearchResult> search(const std::string &query, const Filter &filter);
 
 	/// Gets all values of a field that are used by any ticket.
 	std::set<std::string> get_used_values(std::string_view field);

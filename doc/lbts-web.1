@@ -73,8 +73,14 @@ or by their status if it is of the form
 .Ql status= Ns Ar value .
 A query parameter with the name or an alias of another field selects tickets with that value;
 for set fields, it can contain several values separated by spaces.
+The query parameter
+.Va q
+searches the messages, as with
+.Xr lbts-search 1 ,
+where the last word also matches words that start with it.
 .It /ticket/ Ns Ar number
 The details and messages of a ticket.
+Instead of the number, a prefix of the ID of the ticket can be used.
 .It /message?id= Ns Ar message-id
 A raw message.
 .It /static/

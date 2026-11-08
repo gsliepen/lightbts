@@ -28,6 +28,11 @@ inline std::string_view trim(std::string_view text) {
 	return text.substr(start, end - start + 1);
 }
 
+inline std::string_view trim(const char *text) { return trim(std::string_view(text)); }
+
+/// Trimming a temporary string would return a view of a string that no longer exists.
+std::string_view trim(const std::string &&text) = delete;
+
 inline std::string to_lower(std::string_view text) {
 	std::string result(text);
 	std::ranges::transform(result, result.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -38,6 +43,16 @@ inline std::string capitalize(std::string_view text) {
 	std::string result(text);
 	if (!result.empty())
 		result[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(result[0])));
+	return result;
+}
+
+inline std::string join(const std::vector<std::string> &words, std::string_view separator) {
+	std::string result;
+	for (auto &word: words) {
+		if (!result.empty())
+			result += separator;
+		result += word;
+	}
 	return result;
 }
 

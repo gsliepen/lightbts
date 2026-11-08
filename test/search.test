@@ -1,0 +1,57 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+$lbts init
+$lbts create -m "The index can't be rebuilt from the messages." Reindexing 2> /dev/null
+$lbts create -m "Lines end with CRLF in email." Import fails 2> /dev/null
+$lbts create -m "lbts-web shows the wrong index." Web problem 2> /dev/null
+echo "The index is also slow." | $lbts reply 2 2> /dev/null
+printf 'Tags: crlf\n\nNothing about the problem here.\n' | $lbts create Pseudo-headers 2> /dev/null
+$lbts close 3 2> /dev/null
+
+# Prints the numbers of the tickets that a search finds, in ascending order.
+found() {
+	echo $($lbts search "$@" | awk '{print $1}' | sort -n)
+}
+
+# Words are searched in subjects and texts
+test "$(found index)" = "1 2"
+test -z "$(found all-of-these-words)"
+test "$(found email)" = "2"
+test "$(found Reindexing)" = "1"
+test "$(found rebuilt messages)" = "1"
+test "$(found index OR email)" = "1 2"
+test "$(found index NOT slow)" = "1"
+test "$(found reind*)" = "1"
+test "$(found '"wrong index"' -- all)" = "3"
+
+# Pseudo-headers are not searched
+test "$(found crlf -- all)" = "2"
+
+# Selectors come after --, and only open tickets are searched by default
+test -z "$($lbts search lbts-web)"
+test "$(found lbts-web -- all)" = "3"
+test "$(found index -- closed)" = "3"
+test "$(echo $($lbts search --sort -number index -- all | awk '{print $1}'))" = "3 2 1"
+
+# Snippets
+$lbts search -v slow > results
+grep -q "^        .*@.*: The index is also \[slow\]\.$" results
+
+# JSON
+$lbts search --json slow | grep -q '"snippet": "The index is also \[slow\]."'
+
+# Errors
+fails $lbts search
+fails $lbts search '"unterminated' 2> error
+grep -q "Invalid search query" error
+
+# The search index is rebuilt with the rest of the index
+rm .lightbts/index
+$lbts reindex 2> /dev/null
+test "$(found index)" = "1 2"
+$lbts fsck

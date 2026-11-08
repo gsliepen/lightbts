@@ -1,4 +1,7 @@
 <form class="filter" action="{{root}}" method="get" hx-get="{{root}}" hx-target="#ticket-rows" hx-trigger="input delay:300ms, submit" hx-push-url="true">
+	<label>Search
+		<input type="search" name="q" value="{{query}}">
+	</label>
 {{#inputs}}
 {{#select}}
 	<label>{{label}}

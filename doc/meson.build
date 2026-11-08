@@ -22,6 +22,7 @@ install_man(
 	'lbts-reopen.1',
 	'lbts-reply.1',
 	'lbts-retitle.1',
+	'lbts-search.1',
 	'lbts-set.1',
 	'lbts-severity.1',
 	'lbts-show.1',

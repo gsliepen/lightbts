@@ -45,7 +45,7 @@ std::string unquote_message_id(std::string_view message_id) {
 namespace {
 
 constexpr int application_id = 0x4c425453;
-constexpr int index_version = 7;
+constexpr int index_version = 8;
 
 std::string hash_message_id(std::string_view message_id) {
 	auto unquoted = unquote_message_id(message_id);
@@ -344,6 +344,7 @@ void Instance::create_schema() {
 	db.execute("CREATE TABLE versions (bug INTEGER, version TEXT, status INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(bug, version))");
 	db.execute("CREATE INDEX versions_bug_index ON versions (bug)");
 	db.execute("CREATE INDEX versions_version_index ON versions (version)");
+	db.execute("CREATE VIRTUAL TABLE search USING fts5(msgid UNINDEXED, bug UNINDEXED, subject, text)");
 	db.execute("CREATE TABLE metadata (name TEXT PRIMARY KEY, value TEXT)");
 	db.execute("INSERT INTO metadata (name, value) VALUES ('fields', ?)", fields ? fields->signature : std::string());
 	db.execute(std::format("PRAGMA application_id = {}", application_id));
@@ -379,6 +380,7 @@ void Instance::drop_schema() {
 		db.execute(std::format("DROP TABLE IF EXISTS {}", table));
 	for (auto &table: index_tables)
 		db.execute(std::format("DROP TABLE IF EXISTS {}", table.name));
+	db.execute("DROP TABLE IF EXISTS search");
 	db.execute("DROP TABLE IF EXISTS metadata");
 }
 
@@ -700,7 +702,8 @@ void sort_tickets(std::vector<Ticket> &tickets, const FieldDefinitions &definiti
 
 std::string Instance::get_description(const Ticket &ticket) {
 	auto message_id = db.execute("SELECT description FROM bugs WHERE id = ?", ticket.id).get_string(0);
-	return std::string(strip_pseudo_headers(get_message(message_id).get_text()));
+	auto text = get_message(message_id).get_text();
+	return std::string(strip_pseudo_headers(text));
 }
 
 std::map<std::int64_t, std::vector<std::int64_t>> Instance::get_link_graph(LinkType type) {
@@ -715,6 +718,50 @@ std::map<std::int64_t, std::vector<std::int64_t>> Instance::get_link_graph(LinkT
 	for (auto &[ticket, others]: graph)
 		result[ticket].assign(others.begin(), others.end());
 	return result;
+}
+
+std::string make_search_query(std::span<const std::string> words) {
+	auto is_bareword = [](std::string_view word) {
+		if (word.ends_with('*'))
+			word.remove_suffix(1);
+		return !word.empty() && std::ranges::all_of(word, [](unsigned char c) { return std::isalnum(c) || c == '_' || c >= 0x80; });
+	};
+	auto is_operator = [](std::string_view word) { return word == "AND" || word == "OR" || word == "NOT" || word == "(" || word == ")"; };
+
+	bool has_quotes = std::ranges::any_of(words, [](std::string_view word) { return word.contains('"'); });
+
+	std::string query;
+	for (auto &word: words) {
+		if (!query.empty())
+			query += ' ';
+		query += has_quotes || is_bareword(word) || is_operator(word) ? word : std::format("\"{}\"", word);
+	}
+	return query;
+}
+
+std::vector<SearchResult> Instance::search(const std::string &query, const Filter &filter) {
+	std::set<std::int64_t> selected;
+	for (auto &ticket: list(filter))
+		selected.insert(ticket.id);
+
+	std::vector<SearchResult> results;
+	std::map<std::int64_t, std::size_t> positions;
+
+	try {
+		for (auto &&row: db.execute("SELECT bug, msgid, snippet(search, -1, '[', ']', '...', 16) FROM search WHERE search MATCH ? ORDER BY rank", query)) {
+			auto ticket = row.get_int64(0);
+			if (!selected.contains(ticket))
+				continue;
+			auto [position, inserted] = positions.emplace(ticket, results.size());
+			if (inserted)
+				results.push_back({.ticket = get_ticket(ticket)});
+			results[position->second].matches.push_back({row.get_string(1), join(split(row.get_string(2), " \t\r\n"), " ")});
+		}
+	} catch (const SQLite3::error &error) {
+		throw std::runtime_error(std::format("Invalid search query \"{}\": {}", query, error.what()));
+	}
+
+	return results;
 }
 
 std::set<std::string> Instance::get_used_values(std::string_view field) {
@@ -904,8 +951,10 @@ void Instance::apply_metadata(std::int64_t ticket, const std::string &message_id
 		auto name = to_lower(header);
 		if (!name.starts_with(header_prefix) || trim(value).empty())
 			continue;
-		if (auto field = definitions.find(std::string_view(name).substr(header_prefix.size())))
-			change_field(*field, std::string(trim(message.get_header_value(header))));
+		if (auto field = definitions.find(std::string_view(name).substr(header_prefix.size()))) {
+			auto header_value = message.get_header_value(header);
+			change_field(*field, std::string(trim(header_value)));
+		}
 	}
 
 	for (auto &[key, value]: parse_pseudo_headers(message.get_text())) {
@@ -1311,6 +1360,8 @@ void Instance::index_message(const Message &message, std::int64_t received, std:
 	}
 
 	db.execute("INSERT INTO messages (msgid, bug, date) VALUES (?, ?, ?)", result.message_id, result.ticket, received);
+	auto text = message.get_text();
+	db.execute("INSERT INTO search (msgid, bug, subject, text) VALUES (?, ?, ?, ?)", result.message_id, result.ticket, message.get_header_value("Subject"), strip_pseudo_headers(text));
 	db.execute("INSERT OR IGNORE INTO recipients (bug, address) VALUES (?, ?)", result.ticket, from);
 
 	apply_metadata(result.ticket, result.message_id, message, result.warnings);

@@ -33,5 +33,10 @@ PseudoHeaderBlock split_pseudo_headers(std::string_view text);
 
 inline std::vector<PseudoHeader> parse_pseudo_headers(std::string_view text) { return split_pseudo_headers(text).headers; }
 inline std::string_view strip_pseudo_headers(std::string_view text) { return split_pseudo_headers(text).text; }
+inline std::string_view strip_pseudo_headers(const char *text) { return strip_pseudo_headers(std::string_view(text)); }
+
+/// The result would be a view of a string that no longer exists.
+PseudoHeaderBlock split_pseudo_headers(const std::string &&text) = delete;
+std::string_view strip_pseudo_headers(const std::string &&text) = delete;
 
 }

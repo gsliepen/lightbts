@@ -1,0 +1,70 @@
+.Dd 2026-11-08
+.Dt LBTS-SEARCH 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts search
+.Nd search the text of all messages
+.Sh SYNOPSIS
+.Nm lbts search
+.Op Fl v
+.Op Fl -sort Ar field
+.Op Fl -json
+.Ar word ...
+.Op Fl - Ar selector ...
+.Sh DESCRIPTION
+The command lists the tickets with messages whose subject or text contains all the given words,
+best match first, in the same format as
+.Nm lbts list .
+Pseudo-headers are not searched.
+.Pp
+Words are matched as whole words, ignoring case.
+The query uses the syntax of the full-text search of SQLite:
+.Ql OR
+and
+.Ql NOT
+combine words, a word ending in
+.Ql *
+matches every word that starts with it, and words between double quotes must appear as a phrase.
+Words with other characters, like
+.Ql lbts-web ,
+are searched for as a phrase.
+.Pp
+Selectors after
+.Ql --
+limit which tickets are searched, see
+.Xr lbts-fields 5 .
+Like
+.Nm lbts list ,
+only open tickets are searched by default.
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl v , Fl -verbose
+Show a part of each matching message, with the matching words between
+.Ql \&[
+and
+.Ql \&] .
+.It Fl -sort Ar field
+Sort the tickets by a field instead of by how well they match.
+.It Fl -json
+Write the tickets as with
+.Ql lbts list --json ,
+with an additional array
+.Va matches
+of objects with the
+.Va message_id
+and
+.Va snippet
+of each matching message.
+.El
+.Sh EXAMPLES
+.Bd -literal -offset indent
+lbts search index
+lbts search '"wrong index"' OR crlf -- all
+lbts search -v reind* -- closed tags=patch
+.Ed
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-fields 5 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

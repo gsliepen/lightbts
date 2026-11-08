@@ -71,6 +71,14 @@ int main() {
 	CHECK(get(handler, "/", {{"status", "bogus"}}).status == 400);
 	CHECK(get(handler, "/", {{"severity", "bogus"}}).status == 400);
 
+	// Searching, where the last word is a prefix
+	auto search = get(handler, "/", {{"status", "all"}, {"q", "seco"}});
+	CHECK(search.body.contains("Second bug"));
+	CHECK(!search.body.contains("First &lt;"));
+	CHECK(search.body.contains("<input type=\"search\" name=\"q\" value=\"seco\">"));
+	CHECK(get(handler, "/", {{"q", "reply"}}).body.contains("First &lt;"));
+	CHECK(get(handler, "/", {{"q", "\"unterminated"}}).status == 400);
+
 	// htmx only gets the table rows
 	auto rows = get(handler, "/", {{"status", "all"}}, {{"hx-request", "true"}, {"hx-target", "ticket-rows"}});
 	CHECK(rows.status == 200);

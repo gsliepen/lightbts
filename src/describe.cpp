@@ -31,7 +31,8 @@ int do_describe(const Options &options, const Arguments &args) {
 		.editor_hint = "describe",
 	});
 
-	if (!message || LightBTS::trim(LightBTS::strip_pseudo_headers(message->get_text())) == LightBTS::trim(description)) {
+	auto text = message ? message->get_text() : std::string();
+	if (!message || LightBTS::trim(LightBTS::strip_pseudo_headers(text)) == LightBTS::trim(description)) {
 		std::println(std::cerr, "The description is unchanged.");
 		return 1;
 	}

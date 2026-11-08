@@ -34,6 +34,10 @@ int do_fsck(const Options &options, const Arguments &args);
 int do_import(const Options &options, const Arguments &args);
 int do_list(const Options &options, const Arguments &args);
 int do_tree(const Options &options, const Arguments &args);
+int do_search(const Options &options, const Arguments &args);
+
+/// Formats tickets as lbts list shows them, one line per ticket, with the columns set by cli.columns.
+std::vector<std::string> format_ticket_lines(LightBTS::Instance &bts, const std::vector<LightBTS::Ticket> &tickets);
 int do_reindex(const Options &options, const Arguments &args);
 int do_reply(const Options &options, const Arguments &args);
 int do_show(const Options &options, const Arguments &args);

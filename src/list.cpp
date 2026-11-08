@@ -74,17 +74,23 @@ int do_list(const Options &options, const Arguments &args) {
 		return 0;
 	}
 
-	auto columns = definitions.parse_columns(bts.get_config("cli", "columns"));
+	for (auto &line: format_ticket_lines(bts, tickets))
+		std::print(pager, "{}\n", line);
+	return 0;
+}
+
+std::vector<std::string> format_ticket_lines(LightBTS::Instance &bts, const std::vector<LightBTS::Ticket> &tickets) {
+	auto columns = bts.get_fields().parse_columns(bts.get_config("cli", "columns"));
 	std::vector<std::size_t> widths;
 	for (auto column: columns)
 		widths.push_back(column_width(*column, tickets));
 
+	std::vector<std::string> lines;
 	for (auto &ticket: tickets) {
 		std::string line = std::format("{:>6} {}", ticket.id, bts.short_id(ticket));
 		for (std::size_t i = 0; i < columns.size(); i++)
 			line += std::format(" {:{}}", columns[i]->format(ticket.get(columns[i]->name)), widths[i]);
-		std::print(pager, "{}  {}\n", line, ticket.title);
+		lines.push_back(std::format("{}  {}", line, ticket.title));
 	}
-
-	return 0;
+	return lines;
 }

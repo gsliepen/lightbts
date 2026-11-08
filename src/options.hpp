@@ -32,6 +32,7 @@ struct Options {
 	std::vector<std::string> links;  ///< From --link: <type>:<ticket> for create and reply, or a link type for tree.
 	std::string sort;                ///< From --sort, overriding cli.sort.
 	int depth = -1;                  ///< From --depth, or -1 for no limit.
+	std::optional<std::size_t> separator; ///< The number of arguments before "--", if it was given.
 	std::vector<std::string> versions;
 	std::vector<std::string> attachments;
 
