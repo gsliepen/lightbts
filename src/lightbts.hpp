@@ -169,10 +169,24 @@ class Instance {
 	Instance &operator=(const Instance &) = delete;
 
 	const fs::path &get_project_dir() const { return project_dir; }
+	/// The .lightbts directory.
+	const fs::path &get_base_dir() const { return base_dir; }
+
+	/// Whether the instance is stored in git, see doc/git.mdwn.
+	bool uses_git() const { return config.get_bool("core", "git", false); }
+	/// Runs git in the .lightbts directory.
+	/// \param output If set, the standard output of git is stored in it, otherwise it is discarded.
+	/// \return The exit code of git.
+	int run_git(const std::vector<std::string> &arguments, std::string *output = nullptr) const;
+	/// Commits changes to files in the .lightbts directory, if the instance is stored in git.
+	/// Failures are reported on stderr, since the next lbts sync commits what is left.
+	/// \return Whether committing succeeded, or there was nothing to commit.
+	bool commit(const std::vector<fs::path> &paths, const std::string &message) const;
 
 	bool has_config(const std::string &section, const std::string &variable) const;
 	std::string get_config(const std::string &section, const std::string &variable) const;
-	void set_config(const std::string &section, const std::string &variable, const std::string &value);
+	/// \param local Whether to change the local configuration in config.local, instead of the shared one in config.
+	void set_config(const std::string &section, const std::string &variable, const std::string &value, bool local = false);
 	void save_config() const;
 
 	/// \throws std::runtime_error if the field definitions in the configuration are invalid.
@@ -245,11 +259,14 @@ class Instance {
 
 	SQLite3::database db;
 	std::optional<std::size_t> id_length; ///< Cached length of short IDs.
-	Config config;
+	Config shared_config; ///< The configuration in config, which is shared when the instance is stored in git.
+	Config local_config;  ///< The configuration in config.local, which overrides the shared configuration.
+	Config config;        ///< The shared and the local configuration together.
 	std::expected<FieldDefinitions, std::string> fields;
 
 	void set_default_config();
 	void load_fields();
+	void merge_config();
 	void install_templates() const;
 	void init_index(Mode mode, bool update_index);
 	void create_schema();

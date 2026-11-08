@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <map>
 #include <string>
+#include <string>
 #include <vector>
 
 namespace LightBTS {
@@ -17,6 +18,7 @@ struct ProcessOptions {
 	std::filesystem::path working_directory;           ///< If empty, the current directory is used.
 	std::map<std::string, std::string> environment;    ///< Variables to add to or replace in the environment.
 	bool discard_stdin_and_stdout = false;
+	std::string *output = nullptr;                     ///< If set, stdout is captured into this string instead.
 };
 
 /// Runs a program and waits for it to finish. The program is searched for in PATH.

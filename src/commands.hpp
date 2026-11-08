@@ -35,6 +35,8 @@ int do_import(const Options &options, const Arguments &args);
 int do_list(const Options &options, const Arguments &args);
 int do_tree(const Options &options, const Arguments &args);
 int do_search(const Options &options, const Arguments &args);
+int do_sync(const Options &options, const Arguments &args);
+int do_init_git(const Options &options, const std::filesystem::path &start);
 
 /// Formats tickets as lbts list shows them, one line per ticket, with the columns set by cli.columns.
 std::vector<std::string> format_ticket_lines(LightBTS::Instance &bts, const std::vector<LightBTS::Ticket> &tickets);

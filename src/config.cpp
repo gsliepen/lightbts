@@ -114,6 +114,12 @@ void Config::set(std::string_view section, std::string_view variable, std::strin
 		found_variable->second = value;
 }
 
+void Config::merge(const Config &other) {
+	for (auto &[section, variables]: other.sections)
+		for (auto &[variable, value]: variables)
+			set(section, variable, value);
+}
+
 void Config::set_bool(std::string_view section, std::string_view variable, bool value) {
 	set(section, variable, value ? "true" : "false");
 }

@@ -28,6 +28,9 @@ enum LongOnlyOption {
 	sort_option,
 	depth_option,
 	markdown_option,
+	git_option,
+	local_option,
+	no_push_option,
 	version_option,
 };
 
@@ -42,6 +45,9 @@ const struct option long_options[] = {
 	{"sort", required_argument, nullptr, sort_option},
 	{"depth", required_argument, nullptr, depth_option},
 	{"markdown", no_argument, nullptr, markdown_option},
+	{"git", no_argument, nullptr, git_option},
+	{"local", no_argument, nullptr, local_option},
+	{"no-push", no_argument, nullptr, no_push_option},
 	{"data-dir", required_argument, nullptr, 'd'},
 	{"version", no_argument, nullptr, version_option},
 	{"message", required_argument, nullptr, 'm'},
@@ -86,6 +92,9 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  --link=TYPE        For tree, follow links of this type instead of depends.\n"
 		"  --depth=N          For tree, show at most N levels below the given ticket.\n"
 		"  --markdown         For tree, write Markdown.\n"
+		"  --git              For init, store the instance in the lightbts branch of the git repository.\n"
+		"  --local            For config, change config.local instead of the shared configuration.\n"
+		"  --no-push          For sync, only receive changes.\n"
 		"  --version          Show version information.\n"
 		"\n"
 		"Commands:\n"
@@ -122,6 +131,7 @@ void show_help(std::ostream &out, std::string_view program_name) {
 		"  deadline    Change the deadline of a ticket.\n"
 		"  reindex     Rebuild the index from the stored messages.\n"
 		"  fsck        Check the messages and the index for problems.\n"
+		"  sync        Synchronize with the upstream of the lightbts branch in git.\n"
 		"  version     Show version information.\n",
 		program_name);
 }
@@ -157,6 +167,9 @@ int do_init(const Options &options, const Arguments &args) {
 	if (!args.empty())
 		init_options.data_dir = args[0];
 
+	if (options.git)
+		return do_init_git(init_options, init_options.data_dir);
+
 	init_options.open_instance(LightBTS::Instance::Mode::create);
 	return 0;
 }
@@ -181,8 +194,10 @@ int do_config(const Options &options, const Arguments &args) {
 
 	if (args.size() > 1) {
 		auto value = args | std::views::drop(1) | std::views::join_with(' ') | std::ranges::to<std::string>();
-		bts.set_config(section, variable, value);
+		bts.set_config(section, variable, value, options.local);
 		bts.save_config();
+		if (!options.local)
+			bts.commit({"config"}, std::format("Set {} to \"{}\"", args[0], value));
 		try {
 			bts.get_fields();
 		} catch (const std::runtime_error &error) {
@@ -236,6 +251,7 @@ constexpr Command commands[] = {
 	{"severity", do_severity},
 	{"show", do_show},
 	{"subject", do_retitle},
+	{"sync", do_sync},
 	{"tag", do_tags},
 	{"tags", do_tags},
 	{"title", do_retitle},
@@ -266,6 +282,9 @@ int main(int argc, char *argv[]) {
 		case link_option: options.links.push_back(optarg); break;
 		case sort_option: options.sort = optarg; break;
 		case markdown_option: options.markdown = true; break;
+		case git_option: options.git = true; break;
+		case local_option: options.local = true; break;
+		case no_push_option: options.no_push = true; break;
 		case depth_option:
 			if (auto depth = LightBTS::parse_integer(optarg); depth && *depth >= 0) {
 				options.depth = static_cast<int>(*depth);

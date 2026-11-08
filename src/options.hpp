@@ -23,6 +23,9 @@ struct Options {
 	bool batch = false;
 	bool json = false;
 	bool markdown = false;
+	bool git = false;      ///< From --git, for lbts init.
+	bool local = false;    ///< From --local, for lbts config.
+	bool no_push = false;  ///< From --no-push, for lbts sync.
 
 	std::filesystem::path data_dir;
 	std::optional<std::string> message;

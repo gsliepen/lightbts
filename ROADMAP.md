@@ -60,6 +60,8 @@ cheaper to do now than after more features depend on the hard-coded fields.
 
 ### Storing tickets in git
 
+*Done: `lbts init --git` and `lbts sync`, see `doc/git.mdwn`.*
+
 The messages can be stored in the git repository of the project itself,
 without mixing them with the project's history:
 

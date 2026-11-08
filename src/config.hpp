@@ -31,6 +31,8 @@ class Config {
 	bool get_bool(std::string_view section, std::string_view variable, bool fallback) const;
 	void set(std::string_view section, std::string_view variable, std::string_view value);
 	void set_bool(std::string_view section, std::string_view variable, bool value);
+	/// Sets all variables of another configuration, overriding those that are set in both.
+	void merge(const Config &other);
 
 	const std::vector<Section> &get_sections() const { return sections; }
 

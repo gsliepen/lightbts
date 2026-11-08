@@ -1,0 +1,161 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+command -v git >/dev/null || exit 77
+
+# Don't use the configuration of the user, and never find a repository above the test directory,
+# since the test runs inside the repository of LightBTS itself.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+export GIT_AUTHOR_NAME=Test GIT_AUTHOR_EMAIL=test@example.org GIT_COMMITTER_NAME=Test GIT_COMMITTER_EMAIL=test@example.org
+export GIT_CEILING_DIRECTORIES="$PWD"
+top=$PWD
+
+# Prints the IDs of all tickets, sorted, so that instances can be compared.
+ids() {
+	$lbts list all | awk '{print $2}' | sort
+}
+
+# A project with a remote repository
+git init --quiet --bare --initial-branch=main remote.git
+git init --quiet --initial-branch=main project
+cd project
+echo "Some code." > README
+git add README
+git commit --quiet --message "Initial commit"
+git remote add origin "$top/remote.git"
+git push --quiet --set-upstream origin main
+
+# A new instance is created in an orphan branch, checked out in .lightbts
+$lbts init --git 2> "$top/output"
+grep -q "^Created LightBTS in the lightbts branch, checked out in $top/project/.lightbts.$" "$top/output"
+test -f .lightbts/.git
+test "$(git -C .lightbts log --format=%s)" = "Initialize LightBTS"
+test "$(echo $(git -C .lightbts ls-files))" = ".gitignore config"
+test "$(git -C .lightbts rev-list --max-parents=0 HEAD)" = "$(git -C .lightbts rev-list HEAD)"
+test "$(git log --oneline | wc -l)" = "1"
+test -z "$(git status --porcelain)"
+grep -q "^/.lightbts$" .git/info/exclude
+test "$($lbts config core.git)" = "true"
+fails $lbts init --git 2> "$top/output"
+grep -q "is already a git worktree" "$top/output"
+
+# Messages and changes to the shared configuration are committed
+echo "First." | $lbts create First bug 2> /dev/null
+test "$(git -C .lightbts log -1 --format=%s)" = "Create ticket $(ids | cut -c1-7): First bug"
+$lbts tags 1 foo 2> /dev/null
+git -C .lightbts log -1 --format=%s | grep -q "^Update ticket [0-9a-f]\{7\}: First bug$"
+$lbts config core.project Test
+test "$(git -C .lightbts log -1 --format=%s)" = 'Set core.project to "Test"'
+test -z "$(git -C .lightbts status --porcelain)"
+
+# The local configuration and the index are not committed
+$lbts config --local cli.pager cat
+test "$($lbts config cli.pager)" = "cat"
+test -f .lightbts/config.local
+fails grep -q "pager" .lightbts/config
+test -z "$(git -C .lightbts status --porcelain)"
+test "$(git -C .lightbts log -1 --format=%s)" = 'Set core.project to "Test"'
+
+# The first sync pushes the branch
+$lbts sync 2> "$top/output"
+grep -q "^Sent the lightbts branch to origin.$" "$top/output"
+git --git-dir=../remote.git rev-parse --verify --quiet refs/heads/lightbts > /dev/null
+
+# A clone gets the tickets with lbts init --git, but not the local configuration
+cd "$top"
+git clone --quiet "$top/remote.git" clone
+cd clone
+fails test -e .lightbts
+$lbts init --git 2> "$top/output"
+grep -q "with 1 tickets.$" "$top/output"
+$lbts show 1 | grep -q "^Tags: foo$"
+test "$($lbts config core.project)" = "Test"
+fails $lbts config cli.pager
+test "$(ids)" = "$(cd ../project && ids)"
+
+# Both create a ticket, which get the same number in each, and link by ID
+echo "Second." | $lbts create Second bug 2> /dev/null
+cd ../project
+echo "Third." | $lbts create Third bug 2> /dev/null
+$lbts link 2 blocks 1 2> /dev/null
+third=$($lbts get 2 id)
+
+$lbts sync 2> "$top/output"
+grep -q "^Received 0 new messages.$" "$top/output"
+grep -q "^Sent 2 commits.$" "$top/output"
+
+cd ../clone
+$lbts sync 2> "$top/output"
+grep -q "^Received 2 new messages.$" "$top/output"
+grep -q "^Sent 1 commit.$" "$top/output"
+test "$($lbts list all | wc -l)" = "3"
+test "$($lbts get "$third" title)" = "Third bug"
+test "$($lbts get "$third" number)" = "3"
+$lbts show "$third" | grep -q "^This bug blocks bug#1: First bug$"
+
+cd ../project
+$lbts sync 2> "$top/output"
+grep -q "^Received 1 new message.$" "$top/output"
+test "$($lbts list all | wc -l)" = "3"
+test "$($lbts get "$third" number)" = "2"
+test "$(ids)" = "$(cd ../clone && ids)"
+$lbts sync --no-push 2> "$top/output"
+grep -q "^Received 0 new messages.$" "$top/output"
+
+# Changes to the configuration are synchronized, and rebuild the index
+$lbts config field.priority.type enum 2> /dev/null
+$lbts config field.priority.values low, high
+$lbts sync 2> /dev/null
+cd ../clone
+$lbts sync 2> "$top/output"
+grep -q "rebuilding the index" "$top/output"
+$lbts set 1 priority high 2> /dev/null
+test "$($lbts get 1 priority)" = "high"
+
+# Changes that were not committed are committed by lbts sync
+$lbts config --local core.git false
+echo "Fourth." | $lbts create Fourth bug 2> /dev/null
+test -n "$(git -C .lightbts status --porcelain)"
+$lbts config --local core.git true
+$lbts sync 2> "$top/output"
+grep -q "^Sent 2 commits.$" "$top/output"
+test "$(git -C .lightbts log -1 --format=%s)" = "Commit changes that were not committed yet"
+test -z "$(git -C .lightbts status --porcelain)"
+
+# An existing instance is converted, keeping its local files
+cd "$top"
+git init --quiet --initial-branch=main convert
+cd convert
+git commit --quiet --allow-empty --message "Initial commit"
+$lbts init
+echo "Old." | $lbts create Old bug 2> /dev/null
+mkdir -p .lightbts/hooks
+touch .lightbts/hooks/post-index
+old_id=$(ids)
+$lbts init --git 2> "$top/output"
+grep -q "^Moved LightBTS in the lightbts branch" "$top/output"
+test -f .lightbts/.git
+test -f .lightbts/index
+test -f .lightbts/hooks/post-index
+fails test -e .lightbts.old
+test "$(ids)" = "$old_id"
+git -C .lightbts ls-files | grep -q "^messages/"
+git -C .lightbts ls-files | fails grep -q "hooks"
+test "$(git -C .lightbts log --format=%s)" = "Store the LightBTS instance in git"
+fails $lbts sync 2> "$top/output"
+grep -q "There is no remote repository to synchronize with" "$top/output"
+
+# Errors
+cd "$top"
+mkdir not-git
+cd not-git
+fails $lbts init --git 2> "$top/output"
+grep -q "Not inside a git repository" "$top/output"
+fails test -e .lightbts
+$lbts init
+fails $lbts sync 2> "$top/output"
+grep -q "not stored in git" "$top/output"

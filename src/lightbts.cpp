@@ -193,10 +193,14 @@ Instance::Instance(const fs::path &start_dir, Mode mode, InstanceOptions options
 	project_dir = dir;
 	base_dir = dir / ".lightbts";
 
-	if (mode == Mode::create)
+	if (mode == Mode::create) {
 		set_default_config();
-	else
-		config.load(base_dir / "config");
+	} else {
+		shared_config.load(base_dir / "config");
+		if (fs::exists(base_dir / "config.local"))
+			local_config.load(base_dir / "config.local");
+	}
+	merge_config();
 
 	load_fields();
 	if (!options.configuration_only)
@@ -227,23 +231,28 @@ Instance::Instance(const fs::path &start_dir, Mode mode, InstanceOptions options
 }
 
 void Instance::set_default_config() {
-	config.set("core", "index", "index");
-	config.set("core", "messages", "messages");
-	config.set("core", "hooks", "hooks");
-	config.set("core", "templates", "templates");
-	config.set("core", "project", "");
-	config.set("core", "admin", "");
-	config.set_bool("core", "respond-to-new", true);
-	config.set_bool("core", "respond-to-reply", true);
+	shared_config.set("core", "index", "index");
+	shared_config.set("core", "messages", "messages");
+	shared_config.set("core", "hooks", "hooks");
+	shared_config.set("core", "templates", "templates");
+	shared_config.set("core", "project", "");
+	shared_config.set("core", "admin", "");
+	shared_config.set_bool("core", "respond-to-new", true);
+	shared_config.set_bool("core", "respond-to-reply", true);
 
-	config.set("email", "address", "");
-	config.set("email", "name", "");
-	config.set("email", "smtphost", "");
+	shared_config.set("email", "address", "");
+	shared_config.set("email", "name", "");
+	shared_config.set("email", "smtphost", "");
 
-	config.set("web", "root", "");
-	config.set("web", "static-root", "");
+	shared_config.set("web", "root", "");
+	shared_config.set("web", "static-root", "");
 
-	add_default_fields(config);
+	add_default_fields(shared_config);
+}
+
+void Instance::merge_config() {
+	config = shared_config;
+	config.merge(local_config);
 }
 
 void Instance::load_fields() {
@@ -299,6 +308,12 @@ void Instance::init_index(Mode mode, bool update_index) {
 		auto transaction = db.begin();
 		create_schema();
 		transaction.commit();
+
+		// The messages may already be there, for example in a new clone of a git repository.
+		if (mode == Mode::open) {
+			for (auto &error: reindex().errors)
+				std::println(std::cerr, "Error: {}", error);
+		}
 	} else if (version < 4) {
 		throw std::runtime_error(std::format("Unsupported index version {}, use the Python prototype of LightBTS to upgrade it to version 4", version));
 	} else if (version > index_version) {
@@ -392,13 +407,16 @@ std::string Instance::get_config(const std::string &section, const std::string &
 	return config.get(section, variable);
 }
 
-void Instance::set_config(const std::string &section, const std::string &variable, const std::string &value) {
-	config.set(section, variable, value);
+void Instance::set_config(const std::string &section, const std::string &variable, const std::string &value, bool local) {
+	(local ? local_config : shared_config).set(section, variable, value);
+	merge_config();
 	load_fields();
 }
 
 void Instance::save_config() const {
-	config.save(base_dir / "config");
+	shared_config.save(base_dir / "config");
+	if (!local_config.get_sections().empty() || fs::exists(base_dir / "config.local"))
+		local_config.save(base_dir / "config.local");
 }
 
 std::string Instance::get_template(std::string_view name) const {
@@ -803,6 +821,41 @@ fs::path Instance::store(const Message &message) const {
 	fs::create_directories(path.parent_path());
 	message.save(path);
 	return path;
+}
+
+int Instance::run_git(const std::vector<std::string> &arguments, std::string *output) const {
+	std::vector<std::string> command = {"git"};
+	command.insert(command.end(), arguments.begin(), arguments.end());
+	return run_process(command, {.working_directory = base_dir, .discard_stdin_and_stdout = true, .output = output});
+}
+
+bool Instance::commit(const std::vector<fs::path> &paths, const std::string &message) const {
+	if (!uses_git())
+		return true;
+
+	std::vector<std::string> pathspec = {"--"};
+	for (auto &path: paths)
+		pathspec.push_back(path.string());
+
+	auto with_paths = [&](std::vector<std::string> arguments) {
+		arguments.insert(arguments.end(), pathspec.begin(), pathspec.end());
+		return arguments;
+	};
+
+	try {
+		if (run_git(with_paths({"add"})) != 0)
+			throw std::runtime_error("git add failed");
+		// git diff --quiet exits with 1 if there are changes.
+		if (run_git(with_paths({"diff", "--cached", "--quiet"})) == 0)
+			return true;
+		if (run_git(with_paths({"commit", "--quiet", "--message", message})) != 0)
+			throw std::runtime_error("git commit failed");
+	} catch (const std::exception &error) {
+		std::println(std::cerr, "Warning: could not commit to git: {}. Run lbts sync to try again.", error.what());
+		return false;
+	}
+
+	return true;
 }
 
 bool Instance::run_hook(std::string_view name, const fs::path &message_file, std::int64_t ticket) {
@@ -1402,6 +1455,10 @@ ImportResult Instance::import(const Message &incoming) {
 	auto transaction = db.begin();
 	index_message(message, to_unix_time(now), std::nullopt, result);
 	transaction.commit();
+
+	auto ticket = get_ticket(result.ticket);
+	auto action = result.kind == ImportResult::Kind::created ? "Create" : "Update";
+	commit({filename}, std::format("{} ticket {}: {}", action, short_id(ticket), message.get_header_value("Subject")));
 
 	run_hook("post-index", filename, result.ticket);
 	return result;

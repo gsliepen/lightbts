@@ -11,6 +11,7 @@
 .Op Fl -batch
 .Op Fl -data-dir Ar path
 .Op Fl -help
+.Op Fl -git
 .Op Fl -json
 .Op Fl -link Ar type Ns Op : Ns Ar id
 .Op Fl -no-email
@@ -33,6 +34,23 @@ This can also be controlled by setting the
 environment variable.
 .It Fl h, -help
 Print the synopsis and a list of the supported commands, then exit.
+.It Fl -git
+For
+.Nm lbts init ,
+store the instance in the git repository, see
+.Xr lbts-init 1 .
+.It Fl -local
+For
+.Nm lbts config ,
+change the local configuration in
+.Pa .lightbts/config.local ,
+which overrides the shared configuration in
+.Pa .lightbts/config ,
+and is not committed when the instance is stored in git.
+.It Fl -no-push
+For
+.Nm lbts sync ,
+only receive changes.
 .It Fl -json
 Write the output of
 .Nm lbts list ,
@@ -98,7 +116,7 @@ Print version information and exit.
 .Bl -tag -width indent
 .It close Ar id
 Close a ticket.
-.It config Ar variable Op Ar value
+.It config Oo Fl -local Oc Ar variable Op Ar value
 Get or set a configuration option.
 .It create Ar title
 Create a new ticket.
@@ -123,7 +141,7 @@ is specified, show the manual page for the given command.
 Otherwise, print the synopsis and a list of the supported commands.
 .It import Op Ar file ...
 Import one or more messages into the database.
-.It init Op Ar directory
+.It init Oo Fl -git Oc Op Ar directory
 Initialize a LightBTS instance.
 .It link Ar id1 Ar type Ar id2
 Add a link of the given type between two tickets.
@@ -165,6 +183,8 @@ Change the severity of a ticket.
 Show ticket or message details.
 .It tags Ar id Oo +|- Oc Ar tag ...
 Add tags to or remove tags from a ticket.
+.It sync Op Fl -no-push
+Synchronize the tickets with other clones of the git repository.
 .It tree Oo Ar id Oc Op Ar selector ...
 Show a ticket and the tickets it depends on, recursively.
 .It unlink Ar id1 Ar type Ar id2

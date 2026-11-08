@@ -7,6 +7,7 @@
 .Nd create an empty LightBTS instance or reinitialize an existing owner
 .Sh SYNOPSIS
 .Nm lbts init
+.Op Fl -git
 .Op Ar directory
 .Sh DESCRIPTION
 This command creates an empty LightBTS instance - basically a
@@ -28,9 +29,29 @@ for the base directory of the LightBTS instance.
 .Pp
 Running
 .Nm lbts init
-inside an existing LightBTS instance is safe; 
-it will not overwrite things that are already there.
+where an instance already exists fails, without changing anything,
+unless
+.Fl -git
+is used to move the instance into git.
 .Sh OPTIONS
+.Bl -tag -width indent
+.It Fl -git
+Store the instance in the git repository that contains the directory,
+in a branch named
+.Ql lightbts
+that is checked out as a worktree in
+.Pa .lightbts
+in the top directory of the repository.
+If the repository already has that branch, locally or as
+.Ql origin/lightbts ,
+it is checked out, and the index is built from its messages.
+If
+.Pa .lightbts
+is an instance that is not stored in git yet, its messages and configuration are moved into a new branch.
+See
+.Xr lbts-sync 1 .
+.El
+.Pp
 If a
 .Ar directory
 is specified on the command line,

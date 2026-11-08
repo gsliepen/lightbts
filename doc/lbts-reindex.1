@@ -37,6 +37,15 @@ The web interface, which only reads the index,
 warns about changed field definitions instead,
 and refuses to use an index of an older version.
 .Pp
+If there is no index, it is built automatically, for example in a new clone of a git repository.
+After changing the messages in other ways, like with
+.Ql git pull
+in
+.Pa .lightbts
+instead of
+.Nm lbts sync ,
+run this command.
+.Pp
 If the index is damaged, or has a version that this version of LightBTS does not support,
 remove the file
 .Pa .lightbts/index

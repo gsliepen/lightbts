@@ -1,0 +1,53 @@
+.Dd 2026-11-08
+.Dt LBTS-SYNC 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts sync
+.Nd synchronize the tickets with other clones of a git repository
+.Sh SYNOPSIS
+.Nm lbts sync
+.Op Fl -no-push
+.Sh DESCRIPTION
+For an instance that is stored in git, see
+.Xr lbts-init 1 ,
+this command sends the changes to the tickets to the remote repository,
+and receives the changes that others made:
+.Bl -enum
+.It
+It commits any changes in
+.Pa .lightbts
+that were not committed yet,
+for example because committing failed when a message was imported.
+.It
+It pulls from the upstream of the
+.Ql lightbts
+branch with
+.Ql git pull --rebase .
+Messages never conflict, since each one is a new file.
+If the shared configuration conflicts, the command stops,
+and the conflict has to be resolved in
+.Pa .lightbts
+with git.
+.It
+It adds the new messages to the index.
+Tickets that were created elsewhere get the next free numbers in this instance,
+so numbers can differ between clones; IDs are the same everywhere.
+.It
+It pushes the
+.Ql lightbts
+branch.
+If the branch has no upstream yet, it is pushed to
+.Ql origin ,
+and becomes the upstream.
+.El
+.Sh OPTIONS
+.Bl -tag -width indent
+.It Fl -no-push
+Only commit and receive changes, don't push them.
+.El
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-init 1 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

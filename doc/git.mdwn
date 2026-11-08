@@ -1,0 +1,107 @@
+Storing LightBTS in git
+-----------------------
+
+A LightBTS instance can be stored in the git repository of the project it
+tracks, so that the tickets are shared with everyone who clones the
+repository, and can be synchronized with `git push` and `git pull`.
+
+## Why not just commit .lightbts?
+
+Committing the `.lightbts` directory in the project's own branches would mix
+the tickets with the history of the code:
+
+- Each branch would have its own version of the tickets. A ticket created on
+  a feature branch would only exist on that branch, and switching branches
+  would make tickets appear and disappear.
+- Merging branches would merge tickets, at times that have nothing to do with
+  the tickets.
+- Every change to a ticket would be a commit in the history of the code.
+
+Tickets are not tied to the code that way: they are opened and closed at other
+times than the commits that relate to them, and they are about all branches.
+
+## The lightbts branch
+
+Instead, the tickets are stored in a branch named `lightbts`, which shares no
+history with the other branches of the repository: it is an orphan branch.
+This branch is checked out as a second worktree in `.lightbts`, in the
+directory of the main worktree. The main worktree ignores `.lightbts`, through
+`.git/info/exclude`, so the project's own `.gitignore` doesn't need to know
+about it.
+
+The branch is a normal branch, so `git push origin lightbts` and
+`git fetch` work without extra configuration, and clones get it by default.
+
+## What is tracked
+
+The branch contains:
+
+- `messages/`, with all messages. These are the source of truth.
+- `config`, the shared configuration: the field definitions, the project name,
+  the web interface settings.
+- `.gitignore`, which ignores everything else.
+
+These are not tracked:
+
+- `index`, which is rebuilt from the messages.
+- `hooks/`. Hooks are programs, and running programs that anyone who can push
+  to the branch can change would let them run code on the machines of everyone
+  who pulls from it.
+- `templates/`, which are local customizations of the web interface.
+- `config.local`, the local configuration, for settings that differ per clone,
+  like the SMTP server or the pager. Its variables override those in `config`.
+  `lbts config --local` writes to it.
+
+## Merging never conflicts
+
+Each message is stored in a file named after the hash of its Message-ID, and
+messages never change once they are imported. So when two clones add messages,
+git merges them without conflicts: each clone only adds new files. Only the
+shared configuration can conflict, if two clones change it at the same time.
+
+## Ticket identity
+
+Ticket numbers are assigned in the order tickets are created, but only in one
+instance: two clones that create a ticket at the same time give it the same
+number. Tickets are therefore identified by an ID, the hash of the Message-ID
+of their first message, which is the same everywhere. Messages written by
+LightBTS refer to other tickets by their ID, and commands accept a prefix of it.
+Numbers remain a local convenience: after a sync, tickets that were created
+elsewhere get the next free numbers in that clone.
+
+## Commands
+
+`lbts init --git`, run anywhere in a git repository, sets this up in the top
+directory of the repository:
+
+- If the branch `lightbts` exists, locally or as `origin/lightbts`, it is
+  checked out in `.lightbts`, and the index is built from its messages. This is
+  what a new clone of a repository with tickets needs.
+- If `.lightbts` already exists, but is not a worktree, the instance is
+  converted: its messages and configuration are moved into a new orphan branch,
+  and its local files are kept.
+- Otherwise, a new instance is created on a new orphan branch.
+
+With the variable `core.git` set to `true`, which `lbts init --git` does,
+LightBTS commits every message it imports to the `lightbts` branch, and
+`lbts config` commits changes to the shared configuration. A commit that fails,
+for example because git doesn't know the name of the user, is reported, and
+the next `lbts sync` commits it.
+
+`lbts sync` synchronizes with the upstream of the `lightbts` branch:
+
+1. It commits any changes that were not committed yet.
+2. It runs `git pull --rebase`, so the history stays linear. If that fails,
+   because of a conflict in the configuration, it stops, and the conflict has
+   to be resolved in `.lightbts` with git.
+3. It adds the new messages to the index.
+4. It runs `git push`, unless `--no-push` is given. If the branch has no
+   upstream yet, it pushes to `origin` and sets the upstream.
+
+## Caveats
+
+- `git clean -ffdx` in the main worktree removes `.lightbts`, including
+  messages that were not pushed yet. A single `-f` doesn't, since `.lightbts`
+  is a worktree of its own.
+- Since the index is not tracked, a clone that only uses `git pull` in
+  `.lightbts`, instead of `lbts sync`, has to run `lbts reindex` afterwards.

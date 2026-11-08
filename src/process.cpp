@@ -11,6 +11,7 @@
 #include <spawn.h>
 #include <string_view>
 #include <sys/wait.h>
+#include <unistd.h>
 #include <system_error>
 
 extern char **environ;
@@ -41,6 +42,24 @@ static std::vector<char *> to_argv(std::vector<std::string> &strings) {
 	return pointers;
 }
 
+/// Closes a file descriptor when it goes out of scope.
+class FileDescriptor {
+	int fd = -1;
+
+	public:
+	FileDescriptor() = default;
+	~FileDescriptor() { reset(); }
+	FileDescriptor(const FileDescriptor &) = delete;
+	FileDescriptor &operator=(const FileDescriptor &) = delete;
+
+	int get() const { return fd; }
+	void reset(int new_fd = -1) {
+		if (fd >= 0)
+			close(fd);
+		fd = new_fd;
+	}
+};
+
 class SpawnFileActions {
 	posix_spawn_file_actions_t actions;
 
@@ -66,9 +85,34 @@ int run_process(const std::vector<std::string> &arguments, const ProcessOptions 
 		posix_spawn_file_actions_addopen(actions.get(), 1, "/dev/null", O_WRONLY, 0);
 	}
 
+	// Both ends of the pipe are closed in the child when it starts the program, except for its stdout.
+	FileDescriptor read_end;
+	FileDescriptor write_end;
+	if (options.output) {
+		int ends[2];
+		if (pipe2(ends, O_CLOEXEC) != 0)
+			throw std::system_error(errno, std::generic_category(), "Could not create a pipe");
+		read_end.reset(ends[0]);
+		write_end.reset(ends[1]);
+		posix_spawn_file_actions_adddup2(actions.get(), write_end.get(), 1);
+	}
+
 	pid_t pid;
 	if (int error = posix_spawnp(&pid, argv[0], actions.get(), nullptr, argv.data(), envp.data()))
 		throw std::system_error(error, std::generic_category(), "Could not run " + arguments.front());
+
+	if (options.output) {
+		write_end.reset();
+		options.output->clear();
+		char buffer[4096];
+		ssize_t length;
+		while ((length = read(read_end.get(), buffer, sizeof buffer)) != 0) {
+			if (length > 0)
+				options.output->append(buffer, length);
+			else if (errno != EINTR)
+				break;
+		}
+	}
 
 	int status;
 	while (waitpid(pid, &status, 0) == -1)

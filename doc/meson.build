@@ -26,6 +26,7 @@ install_man(
 	'lbts-set.1',
 	'lbts-severity.1',
 	'lbts-show.1',
+	'lbts-sync.1',
 	'lbts-tree.1',
 	'lbts-tags.1',
 	'lbts-unlink.1',

@@ -9,18 +9,23 @@ directory you want, simply by calling:
 
 From that point on, you can create, modify and close tickets using the command
 line interface from that directory, or any of its subdirectories. If you know
-git, you will feel instantly familiar with this way of working. However,
-LightBTS itself does not require git in any way. To learn about all the
-commands that the command line interface supports, just type:
+git, you will feel instantly familiar with this way of working. LightBTS
+doesn't require git, but if your project uses it, `lbts init --git` stores the
+tickets in a separate branch of its repository, and `lbts sync` shares them
+with everyone who clones it. To learn about all the commands that the command
+line interface supports, just type:
 
     lbts help
 
 ## Features
 
-* Command-line interface
+* Command-line interface, with JSON output for scripts
 * Read-only web interface, stand-alone or via FastCGI or CGI
+* Configurable fields and statuses, see `lbts-fields(5)`
+* Full-text search
+* Roadmaps and other trees of linked tickets, with `lbts tree`
+* Storage in a separate branch of a git repository
 * Many features from the Debian BTS are supported
-* More to come
 
 ## Web interface
 
@@ -53,6 +58,9 @@ The web interface additionally needs:
 - libfcgi
 - kainjow-mustache
 - htmx (optional, it is embedded into `lbts-web`)
+
+Storing tickets in git with `lbts init --git` needs git 2.42 or later at run
+time. The SQLite library must have the FTS5 extension, as Debian's has.
 
 If possible, use your operating system's package manager to install the
 dependencies. For example, on Debian and its derivatives, you can get all of
