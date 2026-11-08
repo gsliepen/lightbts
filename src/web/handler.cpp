@@ -393,21 +393,21 @@ km::data message_data(Instance &bts, const std::string &message_id, std::size_t 
 	return data;
 }
 
-Response show_ticket(const Context &context, std::string_view number) {
-	std::int64_t id;
-	auto [end, error] = std::from_chars(number.data(), number.data() + number.size(), id);
-	if (error != std::errc() || end != number.data() + number.size())
-		throw NotFound("No such ticket");
-
-	auto ticket = context.bts.find_ticket(id);
-	if (!ticket)
-		throw NotFound(std::format("There is no ticket with number {}", id));
+/// Shows a ticket by its number or a prefix of its ID.
+Response show_ticket(const Context &context, std::string_view reference) {
+	std::optional<Ticket> ticket;
+	try {
+		ticket = context.bts.get_ticket(context.bts.find_ticket_number(reference));
+	} catch (const std::runtime_error &error) {
+		throw NotFound(error.what());
+	}
 
 	auto details = context.bts.get_details(*ticket);
 	auto &definitions = context.bts.get_fields();
 
 	km::data data;
 	data.set("id", std::to_string(ticket->id));
+	data.set("hash", context.bts.short_id(*ticket));
 	data.set("title", ticket->title);
 	set_if_not_empty(data, "submitter", details.submitter);
 	set_if_not_empty(data, "found", join(details.found_versions));

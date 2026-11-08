@@ -89,6 +89,10 @@ int main() {
 	CHECK(ticket.body.contains("href=\"/ticket/2\""));
 	CHECK(ticket.body.contains("message?id=1%40test"));
 	CHECK(get(handler, "/ticket/2").body.contains("Blocked by"));
+	auto first_id = Instance(dir, Instance::Mode::read_only).get_ticket(1).hash;
+	CHECK(ticket.body.contains(std::format("<span class=\"ticket-id\">{}</span>", first_id.substr(0, 7))));
+	CHECK(get(handler, "/ticket/" + first_id.substr(0, 8)).body.contains("The first bug."));
+	CHECK(get(handler, "/ticket/ffffffff").status == 404);
 	CHECK(get(handler, "/ticket/99").status == 404);
 	CHECK(get(handler, "/ticket/abc").status == 404);
 	CHECK(get(handler, "/ticket/").status == 404);

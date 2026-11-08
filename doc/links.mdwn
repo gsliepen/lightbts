@@ -6,6 +6,12 @@ A link can have a type.
 There can be only one link from A to B,
 but B to A is seen as a distict link.
 
+## Referring to tickets
+
+A link pseudo-header can refer to the other ticket by its number, like `Blocks: 12`, or by a prefix of at least 4 characters of its ID, like `Blocks: a3f9c2d1e0b4c5d6`.
+The ID is a hash of the Message-ID of the ticket's first message, and is the same in every copy of the tickets, while numbers are only valid in one instance.
+`lbts link` therefore writes the first 16 characters of the ID.
+
 ## Link types
 
 Relates:

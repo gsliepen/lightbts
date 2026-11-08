@@ -76,12 +76,10 @@ without mixing them with the project's history:
 - `lbts init` could set this up, and detect an existing branch in a cloned
   repository.
 
-Open problem: ticket numbers are assigned locally, so two clones can create
-different tickets with the same number. Tickets should be identified by the
-Message-ID of their first message, with numbers as a local convenience. How to
-keep numbers stable when synchronizing needs to be decided before people
-start relying on them, for example by recording number assignments in
-messages, and resolving conflicts deterministically.
+Ticket numbers are assigned locally, so two clones can give different tickets
+the same number. Tickets are therefore identified by an ID, a hash of the
+Message-ID of their first message, and messages refer to other tickets by
+their ID. Numbers are a local convenience.
 
 ## 3. Public issue tracker
 

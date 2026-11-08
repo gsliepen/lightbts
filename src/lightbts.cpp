@@ -6,7 +6,9 @@
 
 #include "lightbts.hpp"
 
+#include <algorithm>
 #include <blake2.h>
+#include <cctype>
 #include <chrono>
 #include <climits>
 #include <cstdlib>
@@ -42,7 +44,7 @@ std::string unquote_message_id(std::string_view message_id) {
 namespace {
 
 constexpr int application_id = 0x4c425453;
-constexpr int index_version = 5;
+constexpr int index_version = 6;
 
 std::string hash_message_id(std::string_view message_id) {
 	auto unquoted = unquote_message_id(message_id);
@@ -136,8 +138,20 @@ std::string read_file(const fs::path &path) {
 	return contents.str();
 }
 
+/// Converts a row of the columns id, hash and title of the bugs table.
 Ticket ticket_from_row(SQLite3::row row) {
-	return {.id = row.get_int64(0), .title = row.get_string(1)};
+	return {.id = row.get_int64(0), .hash = row.get_string(1), .title = row.get_string(2)};
+}
+
+/// The shortest length of IDs that is unique, but at least 7 characters.
+std::size_t unique_prefix_length(std::vector<std::string> hashes) {
+	std::ranges::sort(hashes);
+	std::size_t length = 7;
+	for (std::size_t i = 1; i < hashes.size(); i++) {
+		auto [a, b] = std::ranges::mismatch(hashes[i - 1], hashes[i]);
+		length = std::max(length, static_cast<std::size_t>(a - hashes[i - 1].begin()) + 1);
+	}
+	return length;
 }
 
 std::string placeholders(std::size_t count) {
@@ -316,7 +330,7 @@ bool Instance::is_index_outdated() {
 }
 
 void Instance::create_schema() {
-	db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, submitter TEXT, date INTEGER)");
+	db.execute("CREATE TABLE bugs (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL UNIQUE, title TEXT, submitter TEXT, date INTEGER)");
 	db.execute("CREATE TABLE fields (bug INTEGER, name TEXT, value TEXT, PRIMARY KEY(bug, name, value), FOREIGN KEY(bug) REFERENCES bugs(id))");
 	db.execute("CREATE INDEX fields_name_value_index ON fields (name, value)");
 	db.execute("CREATE TABLE links (a INTEGER, b INTEGER, type INTEGER, PRIMARY KEY(a, b), FOREIGN KEY(a) REFERENCES bugs(id), FOREIGN KEY(b) REFERENCES bugs(id))");
@@ -516,7 +530,7 @@ std::vector<Ticket> Instance::list(const Filter &filter) {
 	for (auto &[field, values]: equal_values)
 		conditions.push_back(has_any_value(field, values));
 
-	std::string sql = "SELECT id, title FROM bugs WHERE 1";
+	std::string sql = "SELECT id, hash, title FROM bugs WHERE 1";
 	for (auto &condition: conditions)
 		sql += " AND " + condition.sql;
 	sql += " ORDER BY id";
@@ -542,7 +556,7 @@ void Instance::load_fields(Ticket &ticket) {
 }
 
 std::optional<Ticket> Instance::find_ticket(std::int64_t id) {
-	auto result = db.execute("SELECT id, title FROM bugs WHERE id = ?", id);
+	auto result = db.execute("SELECT id, hash, title FROM bugs WHERE id = ?", id);
 	if (!result)
 		return std::nullopt;
 	auto ticket = ticket_from_row(*result.begin());
@@ -556,18 +570,54 @@ Ticket Instance::get_ticket(std::int64_t id) {
 	throw std::runtime_error(std::format("No ticket with number {}", id));
 }
 
-Ticket Instance::get_ticket(std::string_view id) {
-	if (id.contains('@')) {
-		auto result = db.execute("SELECT bug FROM messages WHERE msgid = ?", unquote_message_id(id));
+Ticket Instance::get_ticket(std::string_view reference) {
+	if (reference.contains('@')) {
+		auto result = db.execute("SELECT bug FROM messages WHERE msgid = ?", unquote_message_id(reference));
 		if (!result)
-			throw std::runtime_error(std::format("No message with ID {}", id));
+			throw std::runtime_error(std::format("No message with ID {}", reference));
 		return get_ticket(result.get_int64(0));
 	}
 
-	auto number = parse_integer(id.starts_with('#') ? id.substr(1) : id);
-	if (!number)
-		throw std::runtime_error(std::format("Invalid ticket number {}", id));
-	return get_ticket(*number);
+	return get_ticket(find_ticket_number(reference));
+}
+
+std::int64_t Instance::find_ticket_number(std::string_view reference) {
+	auto text = trim(reference);
+	if (text.starts_with('#'))
+		text.remove_prefix(1);
+
+	bool is_decimal = !text.empty() && std::ranges::all_of(text, [](unsigned char c) { return std::isdigit(c); });
+	if (is_decimal) {
+		if (auto number = parse_integer(text); number && ticket_exists(*number))
+			return *number;
+		if (text.size() < 7)
+			throw std::runtime_error(std::format("No ticket with number {}", text));
+	}
+
+	bool is_hexadecimal = text.size() >= 4 && std::ranges::all_of(text, [](unsigned char c) { return std::isxdigit(c); });
+	if (!is_hexadecimal)
+		throw std::runtime_error(std::format("Invalid ticket number or ID \"{}\"", reference));
+
+	auto prefix = to_lower(text);
+	std::vector<std::int64_t> matches;
+	for (auto &&row: db.execute("SELECT id FROM bugs WHERE substr(hash, 1, ?) = ? LIMIT 2", static_cast<std::int64_t>(prefix.size()), prefix))
+		matches.push_back(row.get_int64(0));
+
+	if (matches.empty())
+		throw std::runtime_error(std::format("No ticket with {} {}", is_decimal ? "number or ID" : "ID", text));
+	if (matches.size() > 1)
+		throw std::runtime_error(std::format("The ticket ID {} is ambiguous", text));
+	return matches.front();
+}
+
+std::string Instance::short_id(const Ticket &ticket) {
+	if (!id_length) {
+		std::vector<std::string> hashes;
+		for (auto &&row: db.execute("SELECT hash FROM bugs"))
+			hashes.push_back(row.get_string(0));
+		id_length = unique_prefix_length(std::move(hashes));
+	}
+	return ticket.hash.substr(0, *id_length);
 }
 
 TicketDetails Instance::get_details(const Ticket &ticket) {
@@ -726,9 +776,16 @@ void Instance::apply_set_field(std::int64_t ticket, const FieldDefinition &field
 
 void Instance::apply_links(std::int64_t ticket, LinkType type, std::string_view targets, bool add, std::vector<std::string> &warnings) {
 	for (auto &target: split(targets)) {
-		auto number = parse_integer(target.starts_with('#') ? std::string_view(target).substr(1) : target);
-		if (!number || *number == ticket || !ticket_exists(*number)) {
-			warnings.push_back(std::format("Invalid ticket number \"{}\" for {} link", target, name(type)));
+		std::optional<std::int64_t> number;
+		try {
+			number = find_ticket_number(target);
+		} catch (const std::runtime_error &error) {
+			warnings.push_back(std::format("Invalid ticket \"{}\" for {} link: {}", target, name(type), error.what()));
+			continue;
+		}
+
+		if (*number == ticket) {
+			warnings.push_back(std::format("A ticket can't have a {} link to itself", name(type)));
 			continue;
 		}
 
@@ -1157,10 +1214,12 @@ void Instance::index_message(const Message &message, std::int64_t received, std:
 		result.kind = ImportResult::Kind::appended;
 	} else {
 		auto title = message.get_header_value("Subject");
+		auto hash = hash_message_id(result.message_id);
 		if (new_ticket_number)
-			db.execute("INSERT INTO bugs (id, title, submitter, date) VALUES (?, ?, ?, ?)", *new_ticket_number, title, from, received);
+			db.execute("INSERT INTO bugs (id, hash, title, submitter, date) VALUES (?, ?, ?, ?, ?)", *new_ticket_number, hash, title, from, received);
 		else
-			db.execute("INSERT INTO bugs (title, submitter, date) VALUES (?, ?, ?)", title, from, received);
+			db.execute("INSERT INTO bugs (hash, title, submitter, date) VALUES (?, ?, ?, ?)", hash, title, from, received);
+		id_length.reset();
 		result.ticket = db.last_insert_rowid();
 		result.kind = ImportResult::Kind::created;
 

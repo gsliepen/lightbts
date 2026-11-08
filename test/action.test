@@ -92,8 +92,8 @@ $lbts show 2 | grep -q "^This bug is blocked by bug#1: Primary ticket$"
 fails $lbts link 1 blocks 2 3
 
 # Links to unknown tickets are reported
-$lbts link 1 relates 99 2> error
-grep -q 'Invalid ticket number "99"' error
+fails $lbts link 1 relates 99 2> error
+grep -q 'No ticket with number 99' error
 
 # Unlink
 fails $lbts unlink

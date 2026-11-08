@@ -17,7 +17,7 @@ echo "This is a long text.\n\n\n\n\n\n\n\n\n\n\nEnd of long text." | $lbts creat
 
 # Test output of show command
 $lbts show 1 > show
-grep -q "^Bug#1: First bug$" show
+grep -q "^Bug#1 ([0-9a-f]\{7\}): First bug$" show
 grep -q "^Status: open$" show
 grep -q "^Severity: normal$" show
 grep -q "This is the first bug.$" show
@@ -34,7 +34,7 @@ cmp show show2
 
 # Verbose show
 $lbts show -v 1 > show
-grep -q "^Bug#1: First bug$" show
+grep -q "^Bug#1 ([0-9a-f]\{7\}): First bug$" show
 grep -q "^Status: open$" show
 grep -q "^Severity: normal$" show
 grep -q "^Message-ID: <$msgid>$" show

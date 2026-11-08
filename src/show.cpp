@@ -21,7 +21,7 @@ std::string join(const auto &range) {
 void show_ticket_header(LightBTS::Instance &bts, FILE *out, const LightBTS::Ticket &ticket) {
 	auto details = bts.get_details(ticket);
 
-	std::print(out, "Bug#{}: {}\n", ticket.id, ticket.title);
+	std::print(out, "Bug#{} ({}): {}\n", ticket.id, bts.short_id(ticket), ticket.title);
 	for (auto &field: bts.get_fields().fields) {
 		auto values = ticket.fields.find(field.name);
 		if (values == ticket.fields.end())

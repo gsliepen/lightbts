@@ -132,6 +132,23 @@ are shortcuts for set and unset, and only work if the corresponding field exists
 Errors are reported on stderr, and result in exit code 1.
 Problems with pseudo-headers, such as an invalid severity, are reported as warnings,
 but the message is still recorded.
+.Sh TICKETS
+Each ticket has a number and an ID.
+Numbers are assigned in the order tickets are created,
+but only in the instance where they are created:
+another copy of the same tickets, for example in another clone of a git repository,
+can number them differently.
+The ID is the same everywhere: it is the BLAKE2b hash of the Message-ID of the ticket's first message,
+which is also the name of the file of that message.
+It is shown as its shortest unique prefix, but at least 7 characters.
+.Pp
+Commands accept a ticket number, optionally preceded by
+.Ql # ,
+a prefix of at least 4 characters of an ID,
+or the Message-ID of any message of the ticket.
+Messages that
+.Nm
+writes refer to other tickets by their ID.
 .Sh ENVIRONMENT VARIABLES
 .Bl -tag -width indent
 .It Ev EDITOR

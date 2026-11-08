@@ -59,7 +59,8 @@ std::string unquote_message_id(std::string_view message_id);
 using FieldValues = std::map<std::string, std::vector<std::string>, std::less<>>;
 
 struct Ticket {
-	std::int64_t id = 0;
+	std::int64_t id = 0;   ///< The number of the ticket, which is only valid in this instance.
+	std::string hash;      ///< The ID of the ticket, a hash of the Message-ID of its first message, the same everywhere.
 	std::string title;
 	FieldValues fields;
 
@@ -153,9 +154,18 @@ class Instance {
 	std::optional<Ticket> find_ticket(std::int64_t id);
 	/// \throws std::runtime_error if there is no such ticket.
 	Ticket get_ticket(std::int64_t id);
-	/// Gets a ticket by number, or by the Message-ID of one of its messages if the text contains an @.
+	/// Gets a ticket by its number, a prefix of its ID, or the Message-ID of one of its messages if the text contains an @.
 	/// \throws std::runtime_error if there is no such ticket.
-	Ticket get_ticket(std::string_view id);
+	Ticket get_ticket(std::string_view reference);
+	/// Finds the number of a ticket by its number, optionally preceded by #, or by a prefix of at least 4 characters of its ID.
+	/// Decimal numbers of at least 7 digits are also tried as an ID, if there is no ticket with that number.
+	/// \throws std::runtime_error if there is no such ticket, or the prefix is ambiguous.
+	std::int64_t find_ticket_number(std::string_view reference);
+
+	/// The ID of a ticket as it is shown: the shortest prefix of the hash that is unique in this instance, but at least 7 characters.
+	std::string short_id(const Ticket &ticket);
+	/// The ID of a ticket as it is written in messages that refer to it.
+	static std::string reference_id(const Ticket &ticket) { return ticket.hash.substr(0, 16); }
 	TicketDetails get_details(const Ticket &ticket);
 
 	/// Gets all values of a field that are used by any ticket.
@@ -190,6 +200,7 @@ class Instance {
 	bool no_hooks;
 
 	SQLite3::database db;
+	std::optional<std::size_t> id_length; ///< Cached length of short IDs.
 	Config config;
 	std::expected<FieldDefinitions, std::string> fields;
 

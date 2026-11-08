@@ -67,7 +67,7 @@ int do_list(const Options &options, const Arguments &args) {
 		widths.push_back(column_width(*column, tickets));
 
 	for (auto &ticket: tickets) {
-		std::string line = std::format("{:>6}", ticket.id);
+		std::string line = std::format("{:>6} {}", ticket.id, bts.short_id(ticket));
 		for (std::size_t i = 0; i < columns.size(); i++)
 			line += std::format(" {:{}}", columns[i]->format(ticket.get(columns[i]->name)), widths[i]);
 		std::print(pager, "{}  {}\n", line, ticket.title);

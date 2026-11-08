@@ -61,6 +61,7 @@ int do_reply(const Options &options, const Arguments &args) {
 		return 1;
 	}
 
-	std::println(std::cerr, "Thank you for reporting additional information for bug number {}", result.ticket);
+	auto ticket = bts.get_ticket(result.ticket);
+	std::println(std::cerr, "Thank you for reporting additional information for bug number {} ({})", ticket.id, bts.short_id(ticket));
 	return 0;
 }

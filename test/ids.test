@@ -1,0 +1,88 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+$lbts init
+
+# Tickets have an ID, a hash of the Message-ID of their first message
+$lbts import << IMPORT
+From: Someone <someone@example.org>
+Subject: First bug
+Message-ID: <collide232@test>
+
+The first bug.
+IMPORT
+$lbts import << IMPORT
+From: Someone <someone@example.org>
+Subject: Second bug
+Message-ID: <collide437@test>
+
+The second bug, whose ID starts with the same four characters.
+IMPORT
+echo "Third." | $lbts create Third bug 2> output
+grep -q "^Thank you for reporting a bug, which has been assigned number 3 and ID [0-9a-f]\{7\}$" output
+
+$lbts list > list
+grep -q "^     1 b8c717f open   normal     First bug$" list
+grep -q "^     2 b8c73ff open   normal     Second bug$" list
+$lbts show 1 | grep -q "^Bug#1 (b8c717f): First bug$"
+third=$($lbts list | awk '$1 == 3 {print $2}')
+
+# Tickets can be found by number, or a prefix of their ID of at least four characters
+$lbts show b8c717 | grep -q "^Bug#1 "
+$lbts show B8C717FF01E3 | grep -q "^Bug#1 "
+$lbts show "#2" | grep -q "^Bug#2 "
+$lbts show "$third" | grep -q "^Bug#3 "
+fails $lbts show b8c7 2> error
+grep -q "The ticket ID b8c7 is ambiguous" error
+fails $lbts show b8c 2> error
+grep -q 'Invalid ticket number or ID "b8c"' error
+fails $lbts show ffffffff 2> error
+grep -q "No ticket with ID ffffffff" error
+fails $lbts show 4 2> error
+grep -q "No ticket with number 4" error
+
+# Links are written with the ID of the other ticket
+$lbts link 1 blocks 2
+grep -rq "^Blocks: b8c73ff7301c" .lightbts/messages
+$lbts show 2 | grep -q "^This bug is blocked by bug#1: First bug$"
+
+# Links in imported messages can use IDs and numbers
+$lbts import << IMPORT
+From: Someone <someone@example.org>
+Subject: Re: Third bug
+Message-ID: <reply@test>
+In-Reply-To: <$($lbts show 3 | tail -1)>
+
+Relates: b8c717
+Depends: 2
+
+A reply.
+IMPORT
+$lbts show 3 | grep -q "^This bug relates to bug#1: First bug$"
+$lbts show 3 | grep -q "^This bug depends on bug#2: Second bug$"
+
+# Invalid references are warnings
+$lbts import 2> error << IMPORT
+From: Someone <someone@example.org>
+Subject: Re: Third bug
+Message-ID: <reply2@test>
+In-Reply-To: <reply@test>
+
+Relates: b8c7
+Blocks: 3
+
+Another reply.
+IMPORT
+grep -q 'Invalid ticket "b8c7" for relates link: The ticket ID b8c7 is ambiguous' error
+grep -q "A ticket can't have a blocks link to itself" error
+
+# IDs and links survive rebuilding the index
+rm .lightbts/index
+$lbts reindex 2> /dev/null
+$lbts show 1 | grep -q "^Bug#1 (b8c717f): First bug$"
+$lbts show 3 | grep -q "^This bug relates to bug#1: First bug$"
+$lbts fsck

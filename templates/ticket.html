@@ -1,4 +1,4 @@
-<h2><span class="id">#{{id}}</span> {{title}}</h2>
+<h2><span class="id">#{{id}}</span> {{title}} <span class="ticket-id">{{hash}}</span></h2>
 <dl class="details">
 {{#fields}}
 	<dt>{{label}}</dt><dd class="{{classes}}">{{#values}}{{#url}}<a{{#is_set}} class="tag"{{/is_set}} href="{{url}}">{{text}}</a>{{/url}}{{^url}}{{#progress}}<progress max="{{max}}" value="{{value}}">{{text}}</progress> {{/progress}}{{text}}{{/url}} {{/values}}</dd>

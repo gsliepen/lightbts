@@ -85,7 +85,7 @@ test "$($lbts list closed | awk '{print $1}')" = "3"
 test "$($lbts list wontfix | awk '{print $1}')" = "3"
 test "$($lbts list status=in-progress | awk '{print $1}')" = "2"
 test "$($lbts list all | wc -l)" = "3"
-$lbts list all | grep -q "^     2 in-progress normal     Second bug$"
+$lbts list all | grep -q "^     2 [0-9a-f]\{7\} in-progress normal     Second bug$"
 
 # Invalid values are reported, and the action is still recorded
 $lbts set 1 status bogus 2> output
@@ -180,7 +180,7 @@ $lbts show imported@test -v | grep -q "^Component: core$"
 
 # The columns of lbts list
 $lbts config cli.columns priority, status
-$lbts list all | grep -q "^     4 low    new          Fourth bug$"
+$lbts list all | grep -q "^     4 [0-9a-f]\{7\} low    new          Fourth bug$"
 $lbts config cli.columns bogus
 fails $lbts list
 $lbts config cli.columns ""

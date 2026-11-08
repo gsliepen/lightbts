@@ -20,7 +20,7 @@ snapshot() {
 
 # Prints the number of the ticket a message belongs to.
 ticket_of() {
-	$lbts show -v "$1" | sed -n '1s/^Bug#\([0-9]*\):.*/\1/p'
+	$lbts show -v "$1" | sed -n '1s/^Bug#\([0-9]*\) .*/\1/p'
 }
 
 # Create tickets with replies and actions, all within a short time, so that
@@ -64,7 +64,7 @@ snapshot after
 cmp before after
 $lbts reindex
 echo "Fifth." | $lbts create Fifth bug 2> output
-grep -q "assigned number 5$" output
+grep -q "assigned number 5 " output
 
 # A reply received before the message it replies to is added to its ticket
 $lbts import << EOF

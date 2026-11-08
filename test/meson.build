@@ -1,4 +1,4 @@
-shell_tests = ['basic', 'config', 'fields', 'create', 'import', 'reply', 'list', 'show', 'action', 'hooks', 'reindex', 'fsck']
+shell_tests = ['basic', 'config', 'fields', 'ids', 'create', 'import', 'reply', 'list', 'show', 'action', 'hooks', 'reindex', 'fsck']
 
 foreach name: shell_tests
 	test(name, files(name + '.test'), depends: lbts, workdir: meson.project_build_root())

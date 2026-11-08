@@ -11,6 +11,7 @@
 
 #include "commands.hpp"
 #include "compose.hpp"
+#include "strings.hpp"
 
 namespace {
 
@@ -55,7 +56,7 @@ int do_action(const Options &options, LightBTS::Instance &bts, const std::string
 		return 1;
 	}
 
-	std::println(std::cerr, "Action recorded for bug number {}", ticket.id);
+	std::println(std::cerr, "Action recorded for bug number {} ({})", ticket.id, bts.short_id(ticket));
 	return 0;
 }
 
@@ -143,7 +144,11 @@ int do_link_action(const Options &options, const Arguments &args, std::string_vi
 		return 1;
 	}
 
-	return do_action(options, args[0], pseudo_header(std::string(prefix) + args[1], args[2]));
+	// Refer to the other ticket by its ID, since numbers differ between instances.
+	auto bts = options.open_instance();
+	auto target = bts.get_ticket(args[2]);
+	auto key = LightBTS::capitalize(std::string(prefix) + args[1]);
+	return do_action(options, bts, args[0], pseudo_header(key, LightBTS::Instance::reference_id(target)));
 }
 
 }

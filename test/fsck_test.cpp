@@ -130,7 +130,7 @@ int main() {
 		CHECK(bts.list().size() == 2);
 		CHECK(bts.fsck().ok());
 	}
-	CHECK(SQLite3::database((dir / ".lightbts" / "index").string()).execute("PRAGMA user_version").get_int(0) == 5);
+	CHECK(SQLite3::database((dir / ".lightbts" / "index").string()).execute("PRAGMA user_version").get_int(0) > 4);
 	CHECK(!SQLite3::database((dir / ".lightbts" / "index").string()).execute("SELECT 1 FROM sqlite_master WHERE name = 'tags'"));
 
 	fs::remove_all(dir);

@@ -36,6 +36,7 @@ int do_create(const Options &options, const Arguments &args) {
 		return 1;
 	}
 
-	std::println(std::cerr, "Thank you for reporting a bug, which has been assigned number {}", result.ticket);
+	auto ticket = bts.get_ticket(result.ticket);
+	std::println(std::cerr, "Thank you for reporting a bug, which has been assigned number {} and ID {}", ticket.id, bts.short_id(ticket));
 	return 0;
 }

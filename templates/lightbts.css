@@ -115,6 +115,13 @@ h2 .id {
 	color: var(--muted);
 }
 
+h2 .ticket-id {
+	color: var(--muted);
+	font-family: monospace;
+	font-size: 0.8em;
+	font-weight: normal;
+}
+
 dl.details {
 	display: grid;
 	grid-template-columns: max-content 1fr;
