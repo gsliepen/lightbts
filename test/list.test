@@ -26,7 +26,7 @@ test -z "$(lbts list closed)"
 echo "Status: closed" | $lbts create Fourth bug
 $lbts list > list
 test "$(wc -l < list)" = "3"
-! grep -q "Fourth bug" list
+fails grep -q "Fourth bug" list
 $lbts list closed > list
 test "$(wc -l < list)" = "1"
 grep -q "Fourth bug" list

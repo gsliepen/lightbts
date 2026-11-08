@@ -6,7 +6,7 @@
 $lbts init
 
 # Create without arguments should fail
-! $lbts create
+fails $lbts create
 
 # Create a simple bug
 echo "This is the first bug." | $lbts create First bug

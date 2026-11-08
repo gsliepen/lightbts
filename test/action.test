@@ -9,58 +9,58 @@ exec 0<&-
 $lbts init
 
 # Reply without arguments should fail
-! $lbts reply
+fails $lbts reply
 
 # Create a simple bug
 echo "This is the first bug." | $lbts create First bug
 
 # Unknown tickets give an error message, not a crash
-! $lbts close 2 2> error
+fails $lbts close 2 2> error
 grep -q "No ticket with number 2" error
-! $lbts close abc 2> error
+fails $lbts close abc 2> error
 grep -q "Invalid ticket number" error
 
 # Close
-! $lbts close
+fails $lbts close
 $lbts close 1
 test -z "$($lbts list open)"
 test -n "$($lbts list closed)"
 
 # Reopen
-! $lbts reopen
+fails $lbts reopen
 $lbts reopen 1
 test -n "$($lbts list open)"
 test -z "$($lbts list closed)"
 
 # Retitle
-! $lbts retitle
-! $lbts retitle 1
+fails $lbts retitle
+fails $lbts retitle 1
 $lbts retitle 1 Primary ticket
 $lbts list | grep -q "Primary ticket"
 
 # Found
-! $lbts found
-! $lbts found 1
+fails $lbts found
+fails $lbts found 1
 $lbts found 1 1.0
 $lbts show 1 | grep -q "^Found in: 1.0$"
 
 # Notfound
-! $lbts notfound
-! $lbts notfound 1
+fails $lbts notfound
+fails $lbts notfound 1
 $lbts notfound 1 1.0
-! $lbts show 1 | grep -q "^Found in:"
+$lbts show 1 | fails grep -q "^Found in:"
 
 # fixed
-! $lbts fixed
-! $lbts fixed 1
+fails $lbts fixed
+fails $lbts fixed 1
 $lbts fixed 1 1.0
 $lbts show 1 | grep -q "^Fixed in: 1.0$"
 
 # Notfixed
-! $lbts notfixed
-! $lbts notfixed 1
+fails $lbts notfixed
+fails $lbts notfixed 1
 $lbts notfixed 1 1.0
-! $lbts show 1 | grep -q "^Fixed in:"
+$lbts show 1 | fails grep -q "^Fixed in:"
 
 # Versions get the status of the ticket
 $lbts close -V 2.0 1
@@ -69,11 +69,11 @@ $lbts reopen -V 2.1 1
 $lbts show 1 | grep -q "^Found in: 2.1$"
 
 # Severity
-! $lbts severity
-! $lbts severity 1
+fails $lbts severity
+fails $lbts severity 1
 $lbts severity 1 minor 
 $lbts show 1 | grep -q "^Severity: minor$"
-! $lbts severity 1 minor setback
+fails $lbts severity 1 minor setback
 
 # An invalid severity is reported, but the action is still recorded
 $lbts severity 1 extreme 2> error
@@ -81,32 +81,32 @@ grep -q 'Invalid severity "extreme"' error
 $lbts show 1 | grep -q "^Severity: minor$"
 
 # Link
-! $lbts link
-! $lbts link 1
-! $lbts link 1 blocks
-! $lbts link 1 nonsense 2
+fails $lbts link
+fails $lbts link 1
+fails $lbts link 1 blocks
+fails $lbts link 1 nonsense 2
 echo "This is the second bug." | $lbts create Second bug
 $lbts link 1 blocks 2
 $lbts show 1 | grep -q "^This bug blocks bug#2: Second bug$"
 $lbts show 2 | grep -q "^This bug is blocked by bug#1: Primary ticket$"
-! $lbts link 1 blocks 2 3
+fails $lbts link 1 blocks 2 3
 
 # Links to unknown tickets are reported
 $lbts link 1 relates 99 2> error
 grep -q 'Invalid ticket number "99"' error
 
 # Unlink
-! $lbts unlink
-! $lbts unlink 1
-! $lbts unlink 1 blocks
+fails $lbts unlink
+fails $lbts unlink 1
+fails $lbts unlink 1 blocks
 $lbts unlink 1 blocks 2
-! $lbts show 1 | grep -q "^This bug blocks"
-! $lbts show 2 | grep -q "blocked by"
-! $lbts unlink 1 blocks 2 3
+$lbts show 1 | fails grep -q "^This bug blocks"
+$lbts show 2 | fails grep -q "blocked by"
+fails $lbts unlink 1 blocks 2 3
 
 # Tags
-! $lbts tags
-! $lbts tags 1
+fails $lbts tags
+fails $lbts tags 1
 $lbts tags 1 foo
 $lbts show 1 | grep -q "^Tags: foo$"
 $lbts tag 1 bar - foo +baz quux
@@ -119,20 +119,20 @@ $lbts tags 1 =only
 $lbts show 1 | grep -q "^Tags: only$"
 
 # Owner
-! $lbts owner
-! $lbts owner 1
+fails $lbts owner
+fails $lbts owner 1
 $lbts owner 1 Firstname Lastname
 $lbts show 1 | grep -q "^Owner: Firstname Lastname$"
 
 # Noowner
-! $lbts noowner
+fails $lbts noowner
 $lbts noowner 1
-! $lbts show 1 | grep -q "^Owner:"
-! $lbts noowner Firstname Lastname
+$lbts show 1 | fails grep -q "^Owner:"
+fails $lbts noowner Firstname Lastname
 
 # Deadline
-! $lbts deadline
-! $lbts deadline 1
+fails $lbts deadline
+fails $lbts deadline 1
 $lbts deadline 1 1970-01-01
 $lbts show 1 | grep -q "^Deadline: 1970-01-01$"
 $lbts deadline 1 tomorrow 2> error
@@ -140,17 +140,17 @@ grep -q "Invalid deadline" error
 $lbts show 1 | grep -q "^Deadline: 1970-01-01$"
 
 # Milestone
-! $lbts milestone
-! $lbts milestone 1
+fails $lbts milestone
+fails $lbts milestone 1
 $lbts milestone 1 alpha
 $lbts show 1 | grep -q "^Milestone: alpha$"
 
 # Progress
-! $lbts progress
-! $lbts progress 1
+fails $lbts progress
+fails $lbts progress 1
 $lbts progress 1 99%
 $lbts show 1 | grep -q "^Progress: 99%$"
-! $lbts progress 1 1% 2% 3%
+fails $lbts progress 1 1% 2% 3%
 
 # Add message
 $lbts close 1 -m "That's all folks!"

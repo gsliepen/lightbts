@@ -6,7 +6,7 @@
 $lbts init
 
 # Reply without arguments should fail
-! $lbts reply
+fails $lbts reply
 
 # Create a simple bug
 echo "This is the first bug." | $lbts create First bug
@@ -47,7 +47,7 @@ head -3 1 | grep -q "^Severity: important$"
 test "$(tail -1 1)" = "Changing severity."
 
 # Assert that we don't have tags
-! grep -q "^Tags: " 1
+fails grep -q "^Tags: " 1
 test "$($lbts list foo | wc -l)" = "0"
 
 # Create a reply with several tags

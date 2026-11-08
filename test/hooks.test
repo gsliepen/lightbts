@@ -25,7 +25,7 @@ echo "Hello." | $lbts create First bug
 test "$(cat .lightbts/post-index.log)" = "1 $PWD $PWD/.lightbts"
 
 # Rejected messages must not be imported, and the command must fail
-! $lbts create -m "Buy now" Cheap spam
+fails $lbts create -m "Buy now" Cheap spam
 test "$($lbts list | wc -l)" = "1"
 test "$(find .lightbts/messages -type f | wc -l)" = "1"
 

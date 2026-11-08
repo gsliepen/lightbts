@@ -20,7 +20,7 @@ head -1 cgi | grep -q '^Status: 404'
 
 # HEAD requests get no body
 GATEWAY_INTERFACE=CGI/1.1 REQUEST_METHOD=HEAD PATH_INFO=/ticket/1 $lbts_web > cgi
-! grep -q 'first bug' cgi
+fails grep -q 'first bug' cgi
 
 # Stand-alone HTTP on a free port, skip if curl is not available
 command -v curl >/dev/null || exit 77
@@ -37,10 +37,10 @@ url=$(sed -n 's/^Listening on //p' http.log)
 test -n "$url"
 
 curl -sf "$url" | grep -q 'First bug'
-! curl -sf "$url" | grep -q 'Second bug'
+curl -sf "$url" | fails grep -q 'Second bug'
 curl -sf "${url}ticket/1" | grep -q 'This is the first bug.'
 test "$(curl -s -o /dev/null -w '%{http_code}' "${url}ticket/99")" = 404
 curl -sf -H 'HX-Request: true' -H 'HX-Target: ticket-rows' "${url}?status=closed" > rows
 grep -q 'Second bug' rows
-! grep -q '<html' rows
+fails grep -q '<html' rows
 curl -sf "${url}static/lightbts.css" > /dev/null

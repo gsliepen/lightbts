@@ -25,7 +25,7 @@ grep -q "^No problems found.$" output
 # A message file that is missing
 rm "$(message_file 'Third bug')"
 $lbts list all > list-before
-! $lbts fsck > problems 2> output
+fails $lbts fsck > problems 2> output
 grep -q "^Index: Message .* is in the index, but there is no file for it$" problems
 grep -q "^Run lbts reindex" output
 
@@ -39,7 +39,7 @@ mkdir other
 file=$(cd other && find .lightbts/messages -type f)
 mkdir -p "$(dirname ".lightbts/messages/${file#.lightbts/messages/}")"
 cp "other/$file" ".lightbts/messages/${file#.lightbts/messages/}"
-! $lbts fsck > problems
+fails $lbts fsck > problems
 grep -q "^Index: Message .* is missing from the index$" problems
 grep -q "^Index: Ticket 4 is missing from the index$" problems
 
@@ -47,7 +47,7 @@ grep -q "^Index: Ticket 4 is missing from the index$" problems
 file=$(message_file 'Second bug')
 sed 's/^Severity: minor$/Severity: grave/' "$file" > edited
 mv edited "$file"
-! $lbts fsck > problems
+fails $lbts fsck > problems
 grep -q "^Index: Ticket 2: severity is minor in the index, but grave according to the messages$" problems
 
 # Reindexing fixes the index
@@ -58,11 +58,11 @@ $lbts show 2 | grep -q "^Severity: grave$"
 
 # Broken message files can't be fixed by reindexing
 echo "Not a message" > .lightbts/messages/broken
-! $lbts fsck > problems 2> output
+fails $lbts fsck > problems 2> output
 grep -q "^Message file: .*broken" problems
 grep -q "fixed or removed by hand" output
 rm .lightbts/messages/broken
 $lbts fsck
 
 # Extra arguments are refused
-! $lbts fsck now
+fails $lbts fsck now

@@ -100,7 +100,7 @@ $lbts reindex 2> output
 grep -q "^Indexed 17 messages in 5 tickets.$" output
 sed '/^Received: by localhost (LightBTS)/d' "$file" > edited
 mv edited "$file"
-! grep -q "^Received:" "$file"
+fails grep -q "^Received:" "$file"
 $lbts reindex 2> output
 grep -q "^Indexed 17 messages in 5 tickets.$" output
 
@@ -108,20 +108,20 @@ grep -q "^Indexed 17 messages in 5 tickets.$" output
 sed '/^Date:/d' "$file" > edited
 cp "$file" with-date
 mv edited "$file"
-! $lbts reindex 2> output
+fails $lbts reindex 2> output
 grep -q "unknown date" output
 mv with-date "$file"
 
 # Broken files are reported, and the other messages are still indexed
 echo "Not a message" > .lightbts/messages/broken
-! $lbts reindex 2> output
+fails $lbts reindex 2> output
 grep -q "^Error: .*broken" output
 grep -q "^Indexed 17 messages in 5 tickets.$" output
 rm .lightbts/messages/broken
 
 # Files stored under the wrong name are reported
 cp "$file" .lightbts/messages/misplaced
-! $lbts reindex 2> output
+fails $lbts reindex 2> output
 grep -q "^Error: .*misplaced: should be stored as" output
 rm .lightbts/messages/misplaced
 
@@ -141,4 +141,4 @@ $lbts reindex
 test ! -e .lightbts/hook-was-run
 
 # Extra arguments are refused
-! $lbts reindex now
+fails $lbts reindex now

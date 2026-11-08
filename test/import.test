@@ -101,13 +101,13 @@ Message-ID: <5@test>
 
 This is the fifth bug.
 EOF2
-! $lbts import nonexistent msg5
+fails $lbts import nonexistent msg5
 $lbts list | grep -q "Fifth bug"
 printf 'Not a header line\n\nBody\n' > broken
-! $lbts import broken
+fails $lbts import broken
 
 # Messages with an X-LightBTS-Control header are refused
-! $lbts import << EOF2
+fails $lbts import << EOF2
 From: test suite
 Subject: Control
 Message-ID: <control@test>

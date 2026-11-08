@@ -14,3 +14,12 @@ cd test/$scriptname.dir
 # Exit on errors, log all commands being executed
 
 set -ex
+
+# Runs a command that must fail. Unlike "! command", this also works with set -e.
+
+fails() {
+	if "$@"; then
+		echo "Unexpected success: $*" >&2
+		exit 1
+	fi
+}
