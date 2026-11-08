@@ -11,6 +11,7 @@
 .Op Fl -batch
 .Op Fl -data-dir Ar path
 .Op Fl -help
+.Op Fl -json
 .Op Fl -no-email
 .Op Fl -no-hooks
 .Op Fl -version
@@ -30,6 +31,14 @@ This can also be controlled by setting the
 environment variable.
 .It Fl h, -help
 Print the synopsis and a list of the supported commands, then exit.
+.It Fl -json
+Write the output of
+.Nm lbts list ,
+.Nm lbts show
+and
+.Nm lbts fields
+as JSON, see
+.Sx JSON OUTPUT .
 .It Fl v, -verbose
 Show more details, for example the full text of all messages in
 .Nm lbts show .
@@ -71,6 +80,8 @@ Record the version where a problem is fixed.
 Record the version where a problem is found.
 .It fsck
 Check the messages and the index for problems.
+.It get Ar id Ar field
+Print the values of a field of a ticket, one per line.
 .It help Op Ar command
 If a
 .Ar command
@@ -149,6 +160,68 @@ or the Message-ID of any message of the ticket.
 Messages that
 .Nm
 writes refer to other tickets by their ID.
+.Sh JSON OUTPUT
+With
+.Fl -json ,
+.Nm lbts list
+writes an array of tickets.
+Each ticket is an object with the members
+.Va id
+(the full ID),
+.Va short_id ,
+.Va number ,
+.Va title
+and
+.Va fields .
+The fields are an object with the values of the fields that are set:
+an array for set fields, an integer for number fields, and a string otherwise.
+If
+.Nm lbts list
+lists the values of a field, it writes an array of these values instead.
+.Pp
+.Nm lbts show
+writes a single ticket, with the additional members
+.Va submitter ,
+.Va date
+(in ISO 8601 format, in UTC),
+.Va versions
+(with the arrays
+.Va found
+and
+.Va fixed ) ,
+.Va links
+and
+.Va linked_from
+(arrays of objects with the link
+.Va type
+and the
+.Va id ,
+.Va short_id ,
+.Va number
+and
+.Va title
+of the other ticket),
+and
+.Va messages
+(an array of objects with the members
+.Va message_id ,
+.Va from ,
+.Va to ,
+.Va subject
+and
+.Va date ,
+and with
+.Fl v
+also
+.Va text ) .
+For a Message-ID, it writes that message, with its text, and the ticket it belongs to as
+.Va ticket .
+.Pp
+.Nm lbts fields
+writes an array of field definitions, with the same names as the variables in
+.Xr lbts-fields 5 .
+.Pp
+Strings that are not valid UTF-8 have the invalid bytes replaced by U+FFFD.
 .Sh ENVIRONMENT VARIABLES
 .Bl -tag -width indent
 .It Ev EDITOR

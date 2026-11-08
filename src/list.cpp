@@ -11,6 +11,7 @@
 
 #include "commands.hpp"
 #include "pager.hpp"
+#include "ticket-json.hpp"
 
 namespace {
 
@@ -56,8 +57,19 @@ int do_list(const Options &options, const Arguments &args) {
 		for (auto &ticket: tickets)
 			if (auto found = ticket.fields.find(listed_field->name); found != ticket.fields.end())
 				values.insert(found->second.begin(), found->second.end());
-		for (auto &value: values)
-			std::print(pager, "{}\n", listed_field->format(value));
+		if (options.json)
+			std::print(pager, "{}\n", LightBTS::Json::array_of(values).dump());
+		else
+			for (auto &value: values)
+				std::print(pager, "{}\n", listed_field->format(value));
+		return 0;
+	}
+
+	if (options.json) {
+		LightBTS::Json json = LightBTS::Json::Array{};
+		for (auto &ticket: tickets)
+			json.push_back(LightBTS::ticket_to_json(bts, ticket));
+		std::print(pager, "{}\n", json.dump());
 		return 0;
 	}
 

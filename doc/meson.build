@@ -6,6 +6,7 @@ install_man(
 	'lbts-fields.1',
 	'lbts-fixed.1',
 	'lbts-found.1',
+	'lbts-get.1',
 	'lbts-fsck.1',
 	'lbts-help.1',
 	'lbts-import.1',

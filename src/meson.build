@@ -32,6 +32,7 @@ lightbts_core = static_library('lightbts-core',
 	'lightbts.cpp',
 	'process.cpp',
 	'pseudoheaders.cpp',
+	'ticket-json.cpp',
 	templates,
 	dependencies: [blake2, mimesis, sqlite3],
 )

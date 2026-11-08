@@ -35,3 +35,4 @@ int do_list(const Options &options, const Arguments &args);
 int do_reindex(const Options &options, const Arguments &args);
 int do_reply(const Options &options, const Arguments &args);
 int do_show(const Options &options, const Arguments &args);
+int do_get(const Options &options, const Arguments &args);

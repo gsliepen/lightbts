@@ -21,6 +21,7 @@ struct Options {
 	bool no_hooks = false;
 	bool no_email = false;
 	bool batch = false;
+	bool json = false;
 
 	std::filesystem::path data_dir;
 	std::optional<std::string> message;

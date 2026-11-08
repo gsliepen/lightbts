@@ -1,0 +1,35 @@
+.Dd 2026-11-08
+.Dt LBTS-GET 1
+.\" Manual page created by:
+.\" Guus Sliepen <guus@lightbts.info>
+.Sh NAME
+.Nm lbts get
+.Nd print a field of a ticket
+.Sh SYNOPSIS
+.Nm lbts get
+.Ar id
+.Ar field
+.Sh DESCRIPTION
+The command prints the values of a field of a ticket, one per line,
+in the form they are stored in the index:
+values of enum and set fields in lower case, and numbers without their unit.
+Besides the fields described in
+.Xr lbts-fields 5 ,
+the
+.Ar field
+can be
+.Ql title ,
+.Ql id
+for the full ID of the ticket, or
+.Ql number .
+.Sh EXIT STATUS
+The command exits with status 1 if the field is not set, or if there is no such ticket or field.
+.Sh EXAMPLES
+.Bd -literal -offset indent
+if [ "$(lbts get 42 status)" = closed ]; then ...
+.Ed
+.Sh SEE ALSO
+.Xr lbts 1 ,
+.Xr lbts-fields 5 .
+.Sh AUTHOR
+.An "Guus Sliepen" Aq guus@lightbts.info

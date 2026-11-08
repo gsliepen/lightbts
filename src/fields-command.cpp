@@ -10,6 +10,7 @@
 
 #include "commands.hpp"
 #include "pager.hpp"
+#include "ticket-json.hpp"
 
 namespace {
 
@@ -33,6 +34,11 @@ int do_fields(const Options &options, const Arguments &args) {
 	auto bts = options.open_instance();
 	auto &definitions = bts.get_fields();
 	Pager pager(options, bts.get_config("cli", "pager"));
+
+	if (options.json) {
+		std::print(pager, "{}\n", LightBTS::field_definitions_to_json(definitions).dump());
+		return 0;
+	}
 
 	bool first = true;
 	for (auto &field: definitions.fields) {

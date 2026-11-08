@@ -10,6 +10,7 @@
 
 #include "commands.hpp"
 #include "pager.hpp"
+#include "ticket-json.hpp"
 #include "strings.hpp"
 
 namespace {
@@ -59,6 +60,13 @@ int show_message(const Options &options, const std::string &id) {
 	auto message = bts.get_message(id);
 	Pager pager(options, bts.get_config("cli", "pager"));
 
+	if (options.json) {
+		auto json = LightBTS::message_to_json(message, LightBTS::unquote_message_id(id), true);
+		json.set("ticket", LightBTS::ticket_to_json(bts, bts.get_ticket(id)));
+		std::print(pager, "{}\n", json.dump());
+		return 0;
+	}
+
 	if (options.verbose)
 		show_ticket_header(bts, pager, bts.get_ticket(id));
 
@@ -70,6 +78,11 @@ int show_ticket(const Options &options, const std::string &id) {
 	auto bts = options.open_instance();
 	auto ticket = bts.get_ticket(id);
 	Pager pager(options, bts.get_config("cli", "pager"));
+
+	if (options.json) {
+		std::print(pager, "{}\n", LightBTS::details_to_json(bts, bts.get_details(ticket), options.verbose).dump());
+		return 0;
+	}
 
 	show_ticket_header(bts, pager, ticket);
 
@@ -106,4 +119,32 @@ int do_show(const Options &options, const Arguments &args) {
 		return show_message(options, args[0]);
 	else
 		return show_ticket(options, args[0]);
+}
+
+int do_get(const Options &options, const Arguments &args) {
+	if (args.size() != 2) {
+		std::println(std::cerr, "Expected a ticket and the name of a field.");
+		return 1;
+	}
+
+	auto bts = options.open_instance();
+	auto ticket = bts.get_ticket(args[0]);
+	auto &name = args[1];
+
+	if (name == "title") {
+		std::println("{}", ticket.title);
+	} else if (name == "id") {
+		std::println("{}", ticket.hash);
+	} else if (name == "number") {
+		std::println("{}", ticket.id);
+	} else {
+		auto &field = bts.get_fields().get(name);
+		auto values = ticket.fields.find(field.name);
+		if (values == ticket.fields.end())
+			return 1;
+		for (auto &value: values->second)
+			std::println("{}", value);
+	}
+
+	return 0;
 }

@@ -1,0 +1,76 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+# The output is checked with Python's JSON parser
+command -v python3 >/dev/null || exit 77
+
+# Prints the result of a Python expression, in which _ is the JSON value read from stdin.
+json() {
+	python3 -I -c "import json, sys; _ = json.load(sys.stdin); print(json.dumps(eval(sys.argv[1])))" "$1"
+}
+
+$lbts init
+$lbts create -T foo -T bar -m "The first bug, with \"quotes\" and a caf$(printf '\303\251')." First bug 2> /dev/null
+echo "Second." | $lbts create -S minor Second bug 2> /dev/null
+$lbts progress 1 40 2> /dev/null
+$lbts link 1 blocks 2 2> /dev/null
+$lbts close -V 1.0 2 2> /dev/null
+
+# lbts list
+$lbts list --json all > list
+test "$(json "_[0]['number']" < list)" = "1"
+test "$(json "_[0]['title']" < list)" = '"First bug"'
+test "$(json "_[0]['fields']['tags']" < list)" = '["bar", "foo"]'
+test "$(json "_[0]['fields']['progress']" < list)" = "40"
+test "$(json "_[1]['fields']['status']" < list)" = '"closed"'
+test "$(json "_[1]['fields']['severity']" < list)" = '"minor"'
+test "$(json "len(_[0]['id'])" < list)" = "48"
+id=$(json "_[0]['id']" < list | tr -d '"')
+short_id=$(json "_[0]['short_id']" < list | tr -d '"')
+test "${id#$short_id}" != "$id"
+test "$($lbts list --json | json "len(_)")" = "1"
+test "$($lbts list --json all tags)" = "$(printf '[\n  "bar",\n  "foo"\n]')"
+test "$($lbts list --json closed)" = "$($lbts list --json all status=closed)"
+test "$($lbts list --json bogus-tag)" = "[]"
+
+# lbts show
+$lbts show --json 1 > show
+test "$(json "_['title']" < show)" = '"First bug"'
+test "$(json "_['links'][0]['type']" < show)" = '"blocks"'
+test "$(json "_['links'][0]['number']" < show)" = "2"
+test "$(json "_['linked_from']" < show)" = "[]"
+test "$(json "len(_['messages'])" < show)" = "3"
+test "$(json "'text' in _['messages'][0]" < show)" = "false"
+json "_['date']" < show | grep -q '^"[0-9-]*T[0-9:]*Z"$'
+$lbts show --json -v 1 | json "_['messages'][0]['text']" | grep -q 'with \\"quotes\\" and a caf\\u00e9'
+$lbts show --json 2 > show
+test "$(json "_['versions']['fixed']" < show)" = '["1.0"]'
+test "$(json "_['linked_from'][0]['id']" < show)" = "\"$id\""
+
+message_id=$($lbts show --json 1 | json "_['messages'][0]['message_id']" | tr -d '"')
+$lbts show --json "$message_id" > message
+test "$(json "_['message_id']" < message)" = "\"$message_id\""
+test "$(json "_['ticket']['number']" < message)" = "1"
+json "_['text']" < message | grep -q "The first bug"
+
+# lbts fields
+$lbts fields --json > fields
+test "$(json "_[0]['name']" < fields)" = '"status"'
+test "$(json "_[0]['categories']['done']" < fields)" = '["closed"]'
+test "$(json "_[1]['ordered']" < fields)" = "true"
+test "$(json "_[6]['max']" < fields)" = "100"
+
+# lbts get
+test "$($lbts get 1 title)" = "First bug"
+test "$($lbts get 1 id)" = "$id"
+test "$($lbts get "$short_id" number)" = "1"
+test "$($lbts get 1 status)" = "open"
+test "$($lbts get 1 progress)" = "40"
+test "$($lbts get 1 tag)" = "$(printf 'bar\nfoo')"
+fails $lbts get 1 owner
+fails $lbts get 1 nonexistent
+fails $lbts get 1
