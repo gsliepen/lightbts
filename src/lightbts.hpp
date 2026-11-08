@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <mimesis.hpp>
 #include <optional>
@@ -19,6 +20,7 @@
 #include <vector>
 
 #include "config.hpp"
+#include "fields.hpp"
 #include "sqlite3.hpp"
 
 namespace LightBTS {
@@ -140,6 +142,7 @@ struct FsckResult {
 
 struct InstanceOptions {
 	bool no_hooks = false;
+	bool check_fields = true; ///< Whether to refuse to open an instance whose field definitions are invalid.
 };
 
 /// A LightBTS instance: the .lightbts directory with its configuration, messages and index.
@@ -163,6 +166,9 @@ class Instance {
 	std::string get_config(const std::string &section, const std::string &variable) const;
 	void set_config(const std::string &section, const std::string &variable, const std::string &value);
 	void save_config() const;
+
+	/// \throws std::runtime_error if the field definitions in the configuration are invalid.
+	const FieldDefinitions &get_fields() const;
 
 	/// Gets a template from the instance's template directory, or the built-in one if there is no such file.
 	std::string get_template(std::string_view name) const;
@@ -211,8 +217,10 @@ class Instance {
 
 	SQLite3::database db;
 	Config config;
+	std::expected<FieldDefinitions, std::string> fields;
 
 	void set_default_config();
+	void load_fields();
 	void install_templates() const;
 	void init_index(Mode mode);
 	void create_schema();

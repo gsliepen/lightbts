@@ -1,0 +1,53 @@
+#!/bin/sh
+
+. "${0%/*}/testlib.sh"
+
+# Batch mode
+exec 0<&-
+
+$lbts init
+
+# The default fields are written into the configuration
+test "$($lbts config field.status.type)" = "enum"
+test "$($lbts config field.status.values)" = "open, closed"
+test "$($lbts config field.status.done)" = "closed"
+test "$($lbts config field.severity.default)" = "normal"
+test "$($lbts config field.tags.aliases)" = "tag"
+test "$($lbts config field.progress.max)" = "100"
+grep -q "^\[field.status\]$" .lightbts/config
+
+# Sections keep their order
+test "$(grep '^\[' .lightbts/config | head -1)" = "[core]"
+test "$(grep '^\[field' .lightbts/config | head -1)" = "[field.status]"
+
+# Add a field
+$lbts config field.priority.type enum 2> output
+grep -q "^Warning: Invalid definition of field \"priority\": an enum field needs values$" output
+$lbts config field.priority.values low, normal, high 2> output
+test ! -s output
+test "$($lbts config field.priority.values)" = "low, normal, high"
+$lbts list
+
+# Invalid definitions make the other commands fail, but can still be fixed
+$lbts config field.priority.default highest 2> output
+grep -q "^Warning: .*the default \"highest\" is not one of the values$" output
+fails $lbts list 2> output
+grep -q "error: Invalid definition of field \"priority\"" output
+test "$($lbts config field.priority.default)" = "highest"
+$lbts config field.priority.default high 2> output
+test ! -s output
+$lbts list
+
+# The status field is required
+sed '/^\[field.status\]$/,/^$/d' .lightbts/config > config
+mv config .lightbts/config
+fails grep -q "field.status" .lightbts/config
+fails $lbts list 2> output
+grep -q "error: The status field is not defined$" output
+
+# Without any field sections, as in instances made by older versions, the default fields are used
+grep -v "^\[field\." .lightbts/config | grep -v "^	\(type\|values\|default\|done\|close\|reopen\|ordered\|aliases\|min\|max\|unit\) =" > config
+mv config .lightbts/config
+fails grep -q "field" .lightbts/config
+$lbts list
+echo "A bug." | $lbts create A bug

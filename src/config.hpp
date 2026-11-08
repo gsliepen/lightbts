@@ -7,24 +7,37 @@
 */
 
 #include <filesystem>
-#include <map>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace LightBTS {
 
 /// An INI-style configuration file with sections and variables.
+/// Sections and variables keep the order in which they were read or added.
 class Config {
-	std::map<std::string, std::map<std::string, std::string>, std::less<>> sections;
-
 	public:
+	struct Section {
+		std::string name;
+		std::vector<std::pair<std::string, std::string>> variables;
+	};
+
 	void load(const std::filesystem::path &path);
 	void save(const std::filesystem::path &path) const;
 
-	bool exists(const std::string &section, const std::string &variable) const;
-	std::string get(const std::string &section, const std::string &variable, const std::string &fallback = {}) const;
-	bool get_bool(const std::string &section, const std::string &variable, bool fallback) const;
-	void set(const std::string &section, const std::string &variable, const std::string &value);
-	void set_bool(const std::string &section, const std::string &variable, bool value);
+	bool exists(std::string_view section, std::string_view variable) const;
+	std::string get(std::string_view section, std::string_view variable, std::string_view fallback = {}) const;
+	bool get_bool(std::string_view section, std::string_view variable, bool fallback) const;
+	void set(std::string_view section, std::string_view variable, std::string_view value);
+	void set_bool(std::string_view section, std::string_view variable, bool value);
+
+	const std::vector<Section> &get_sections() const { return sections; }
+
+	private:
+	std::vector<Section> sections;
+
+	const std::string *find(std::string_view section, std::string_view variable) const;
 };
 
 }

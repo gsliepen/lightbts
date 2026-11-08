@@ -28,6 +28,7 @@ templates = custom_target('gen-templates',
 
 lightbts_core = static_library('lightbts-core',
 	'config.cpp',
+	'fields.cpp',
 	'lightbts.cpp',
 	'process.cpp',
 	'pseudoheaders.cpp',

@@ -203,6 +203,10 @@ Instance::Instance(const fs::path &start_dir, Mode mode, InstanceOptions options
 	else
 		config.load(base_dir / "config");
 
+	load_fields();
+	if (options.check_fields)
+		get_fields();
+
 	// Relative paths are relative to the .lightbts directory, absolute paths replace it.
 	dbfile = base_dir / config.get("core", "index", "index");
 	maildir = base_dir / config.get("core", "messages", "messages");
@@ -242,6 +246,22 @@ void Instance::set_default_config() {
 
 	config.set("web", "root", "");
 	config.set("web", "static-root", "");
+
+	add_default_fields(config);
+}
+
+void Instance::load_fields() {
+	try {
+		fields = parse_field_definitions(config);
+	} catch (const std::runtime_error &error) {
+		fields = std::unexpected(error.what());
+	}
+}
+
+const FieldDefinitions &Instance::get_fields() const {
+	if (!fields)
+		throw std::runtime_error(fields.error());
+	return *fields;
 }
 
 void Instance::install_templates() const {
@@ -338,6 +358,7 @@ std::string Instance::get_config(const std::string &section, const std::string &
 
 void Instance::set_config(const std::string &section, const std::string &variable, const std::string &value) {
 	config.set(section, variable, value);
+	load_fields();
 }
 
 void Instance::save_config() const {

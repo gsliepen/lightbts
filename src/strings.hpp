@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -29,6 +30,16 @@ inline std::string to_lower(std::string_view text) {
 	std::string result(text);
 	std::ranges::transform(result, result.begin(), [](unsigned char c) { return std::tolower(c); });
 	return result;
+}
+
+/// Parses true, yes, 1, false, no or 0, ignoring case.
+inline std::optional<bool> parse_bool(std::string_view text) {
+	auto lower = to_lower(text);
+	if (lower == "true" || lower == "yes" || lower == "1")
+		return true;
+	if (lower == "false" || lower == "no" || lower == "0")
+		return false;
+	return std::nullopt;
 }
 
 /// Splits text at any of the separator characters, skipping empty tokens.

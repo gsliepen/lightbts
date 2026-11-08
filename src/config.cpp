@@ -6,6 +6,7 @@
 
 #include "config.hpp"
 
+#include <algorithm>
 #include <format>
 #include <fstream>
 #include <print>
@@ -43,7 +44,7 @@ void Config::load(const std::filesystem::path &path) {
 		if (variable.empty())
 			continue;
 
-		sections[section][std::string(variable)] = trim(text.substr(equals + 1));
+		set(section, variable, trim(text.substr(equals + 1)));
 	}
 
 	if (file.bad())
@@ -57,6 +58,8 @@ void Config::save(const std::filesystem::path &path) const {
 	{
 		std::ofstream file(temporary);
 		for (auto &[section, variables]: sections) {
+			if (&section != &sections.front().name)
+				std::println(file);
 			std::println(file, "[{}]", section);
 			for (auto &[variable, value]: variables)
 				std::println(file, "\t{} = {}", variable, value);
@@ -69,36 +72,50 @@ void Config::save(const std::filesystem::path &path) const {
 	std::filesystem::rename(temporary, path);
 }
 
-bool Config::exists(const std::string &section, const std::string &variable) const {
-	auto it = sections.find(section);
-	return it != sections.end() && it->second.contains(variable);
+const std::string *Config::find(std::string_view section, std::string_view variable) const {
+	auto found_section = std::ranges::find(sections, section, &Section::name);
+	if (found_section == sections.end())
+		return nullptr;
+	auto &variables = found_section->variables;
+	auto found_variable = std::ranges::find(variables, variable, &std::pair<std::string, std::string>::first);
+	if (found_variable == variables.end())
+		return nullptr;
+	return &found_variable->second;
 }
 
-std::string Config::get(const std::string &section, const std::string &variable, const std::string &fallback) const {
-	if (auto it = sections.find(section); it != sections.end())
-		if (auto value = it->second.find(variable); value != it->second.end())
-			return value->second;
-	return fallback;
+bool Config::exists(std::string_view section, std::string_view variable) const {
+	return find(section, variable);
 }
 
-bool Config::get_bool(const std::string &section, const std::string &variable, bool fallback) const {
+std::string Config::get(std::string_view section, std::string_view variable, std::string_view fallback) const {
+	auto value = find(section, variable);
+	return std::string(value ? *value : fallback);
+}
+
+bool Config::get_bool(std::string_view section, std::string_view variable, bool fallback) const {
 	if (!exists(section, variable))
 		return fallback;
 
-	auto value = to_lower(get(section, variable));
-	if (value == "true" || value == "yes" || value == "1")
-		return true;
-	if (value == "false" || value == "no" || value == "0")
-		return false;
+	if (auto value = parse_bool(get(section, variable)))
+		return *value;
 	throw std::runtime_error(std::format("Invalid value for boolean variable {}.{}", section, variable));
 }
 
-void Config::set(const std::string &section, const std::string &variable, const std::string &value) {
-	sections[section][variable] = value;
+void Config::set(std::string_view section, std::string_view variable, std::string_view value) {
+	auto found_section = std::ranges::find(sections, section, &Section::name);
+	if (found_section == sections.end())
+		found_section = sections.insert(sections.end(), {std::string(section), {}});
+
+	auto &variables = found_section->variables;
+	auto found_variable = std::ranges::find(variables, variable, &std::pair<std::string, std::string>::first);
+	if (found_variable == variables.end())
+		variables.emplace_back(variable, value);
+	else
+		found_variable->second = value;
 }
 
-void Config::set_bool(const std::string &section, const std::string &variable, bool value) {
-	sections[section][variable] = value ? "true" : "false";
+void Config::set_bool(std::string_view section, std::string_view variable, bool value) {
+	set(section, variable, value ? "true" : "false");
 }
 
 }

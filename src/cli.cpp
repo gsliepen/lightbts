@@ -141,7 +141,7 @@ int do_config(const Options &options, const Arguments &args) {
 		return 1;
 	}
 
-	auto dot = args[0].find('.');
+	auto dot = args[0].rfind('.');
 	if (dot == std::string::npos) {
 		std::println(std::cerr, "Invalid option name");
 		return 1;
@@ -150,12 +150,18 @@ int do_config(const Options &options, const Arguments &args) {
 	auto section = args[0].substr(0, dot);
 	auto variable = args[0].substr(dot + 1);
 
-	auto bts = options.open_instance();
+	// Invalid field definitions must not prevent fixing them.
+	LightBTS::Instance bts(options.data_dir, LightBTS::Instance::Mode::open, {.no_hooks = options.no_hooks, .check_fields = false});
 
 	if (args.size() > 1) {
 		auto value = args | std::views::drop(1) | std::views::join_with(' ') | std::ranges::to<std::string>();
 		bts.set_config(section, variable, value);
 		bts.save_config();
+		try {
+			bts.get_fields();
+		} catch (const std::runtime_error &error) {
+			std::println(std::cerr, "Warning: {}", error.what());
+		}
 		return 0;
 	}
 
